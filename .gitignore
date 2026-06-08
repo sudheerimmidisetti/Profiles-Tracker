@@ -1,13 +1,30 @@
-*.log
-.DS_Store
-.env
-dist/
-logs/
-node_modules/
+# ── Secrets ───────────────────────────────────────────
+backend/.env
 frontend/student/.env.production
 frontend/admin/.env.production
-*.env.production
-Tracker_aesthic/
-cpt-rack-saa-s-dashboard/
+*.env.local
+
+# ── Dependencies ──────────────────────────────────────
+node_modules/
+backend/node_modules/
+frontend/student/node_modules/
+frontend/admin/node_modules/
+
+# ── Build outputs ─────────────────────────────────────
 frontend/student/dist/
 frontend/admin/dist/
+
+# ── Logs ──────────────────────────────────────────────
+backend/logs/
+logs/
+
+# ── Reference design folders (not for deploy) ─────────
+Tracker_aesthic/
+cpt-rack-saa-s-dashboard/
+
+# ── OS / Editor ───────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

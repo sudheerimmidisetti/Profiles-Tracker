@@ -1,35 +1,22 @@
 {
-  "name": "coding-tracker-backend",
+  "name": "cptrack",
   "version": "1.0.0",
-  "description": "College Coding Tracker — Track LeetCode, Codeforces, CodeChef, HackerRank profiles",
-  "main": "src/server.js",
+  "description": "CPTrack — College Coding Profile Tracker (backend + frontend monorepo)",
+  "private": true,
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
-    "migrate": "node src/migrations/runMigration.js"
-  },
-  "dependencies": {
-    "axios": "^1.6.8",
-    "cheerio": "^1.0.0-rc.12",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.18.3",
-    "express-rate-limit": "^7.2.0",
-    "helmet": "^7.1.0",
-    "ioredis": "^5.3.2",
-    "jsonwebtoken": "^9.0.2",
-    "morgan": "^1.10.0",
-    "node-cron": "^3.0.3",
-    "nodemailer": "^6.9.12",
-    "pg": "^8.11.3",
-    "uuid": "^9.0.1",
-    "winston": "^3.12.0",
-    "zod": "^3.22.4"
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:student\" \"npm run dev:admin\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:student": "cd frontend/student && npm run dev",
+    "dev:admin": "cd frontend/admin && npm run dev",
+    "dev:mock": "cd backend && node mock-college-db.js",
+    "build": "npm run build:student && npm run build:admin",
+    "build:student": "cd frontend/student && npm run build",
+    "build:admin": "cd frontend/admin && npm run build",
+    "migrate": "cd backend && npm run migrate",
+    "start": "cd backend && npm start",
+    "install:all": "cd backend && npm install && cd ../frontend/student && npm install && cd ../admin && npm install"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "concurrently": "^8.2.2"
   }
 }

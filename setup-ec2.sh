@@ -2,10 +2,7 @@
 # ==============================================================
 # CPTrack EC2 Setup Script — Cloudflare Edition
 # Ubuntu 22.04 | Domain: api.dealance.app (via Cloudflare proxy)
-#
-# DIFFERENCE from standard: No Certbot needed.
-# Cloudflare handles public SSL. EC2 uses self-signed cert for
-# the Cloudflare → EC2 encrypted tunnel (SSL mode: Full).
+# Monorepo structure: backend/ + frontend/
 #
 # Usage:
 #   chmod +x setup-ec2.sh && ./setup-ec2.sh
@@ -117,34 +114,45 @@ NGINX
 sudo ln -sf /etc/nginx/sites-available/cptrack /etc/nginx/sites-enabled/
 sudo rm -f  /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
-echo "✅ Nginx configured"
-
-# ── 8. PM2 ────────────────────────────────────────────────────
+# ── 7. PM2 ────────────────────────────────────────────────────
 sudo npm install -g pm2
 echo "✅ PM2 $(pm2 --version)"
 
-# ── 9. Clone app ──────────────────────────────────────────────
+# ── 8. Clone app ─────────────────────────────────────────────────────────────
 cd /home/ubuntu
 git clone https://github.com/YOUR_USERNAME/cptrack.git
-cd cptrack
+cd cptrack/backend                   # ← backend is in the backend/ folder
 npm install --production
 
-# ── 10. Run DB migration ──────────────────────────────────────
+echo ""
+echo "✅ Dependencies installed"
+echo ""
+
+# ── 9. Run DB migration ─────────────────────────────────────────────────
 PGPASSWORD="${DB_PASS}" psql \
   -U cptrack -d coding_tracker -h localhost \
   -f src/migrations/001_initial_schema.sql
 echo "✅ DB schema created"
+
+# ── 10. Copy Nginx config ─────────────────────────────────────────────────
+cd /home/ubuntu/cptrack               # back to repo root for nginx.conf
+sudo cp nginx.conf /etc/nginx/sites-available/cptrack
+sudo ln -sf /etc/nginx/sites-available/cptrack /etc/nginx/sites-enabled/
+sudo rm -f  /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+echo "✅ Nginx configured"
 
 echo ""
 echo "========================================================"
 echo "✅ Setup complete!"
 echo ""
 echo "NEXT STEPS:"
-echo "1.  cp .env.production.example .env && nano .env"
-echo "2.  Fill in JWT_SECRET, ADMIN_SECRET, SMTP creds"
-echo "3.  pm2 start src/server.js --name cptrack-api"
-echo "4.  pm2 startup && pm2 save"
-echo "5.  Test: curl https://api.dealance.app/health"
+echo "1.  cd /home/ubuntu/cptrack/backend"
+echo "2.  cp .env.example .env && nano .env"
+echo "3.  Fill in JWT_SECRET, ADMIN_SECRET, SMTP creds"
+echo "4.  pm2 start src/server.js --name cptrack-api"
+echo "5.  pm2 startup && pm2 save"
+echo "6.  Test: curl https://api.dealance.app/health"
 echo ""
 echo "Cloudflare settings:"
 echo "  SSL/TLS → Full  (not Full Strict)"
