@@ -1,0 +1,22 @@
+# ── Terraform State ───────────────────────────────────────────
+# These contain real infrastructure state and secrets — NEVER commit
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+*.tfstate
+*.tfstate.*
+
+# ── Secret Variables ──────────────────────────────────────────
+# Actual values with DB passwords, API tokens, JWT secrets
+terraform.tfvars
+*.auto.tfvars
+
+# ── Generated Files ───────────────────────────────────────────
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc

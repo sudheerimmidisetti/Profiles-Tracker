@@ -1,0 +1,50 @@
+# ── terraform.tfvars ─────────────────────────────────────────────────────────
+# Copy this file: cp terraform.tfvars.example terraform.tfvars
+# Fill in real values. This file is GITIGNORED — never commit it.
+# ─────────────────────────────────────────────────────────────────────────────
+
+aws_region  = "ap-south-1"
+environment = "production"
+app_name    = "cptrack"
+
+# ── Network ──────────────────────────────────────────────────────────────────
+vpc_cidr             = "10.0.0.0/16"
+public_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs = ["10.0.3.0/24", "10.0.4.0/24"]
+
+# ── EC2 / ASG ────────────────────────────────────────────────────────────────
+ec2_instance_type = "t3.small"
+ec2_key_name      = "cptrack-key"   # Must exist in AWS → EC2 → Key Pairs
+asg_min           = 1
+asg_desired       = 2
+asg_max           = 6
+
+# ── RDS ──────────────────────────────────────────────────────────────────────
+db_instance_class = "db.t3.micro"
+db_name           = "coding_tracker"
+db_username       = "cptrack"
+db_password       = "CHANGE_ME_strong_password_32chars"
+db_multi_az       = true
+
+# ── Redis ─────────────────────────────────────────────────────────────────────
+redis_node_type  = "cache.t3.micro"
+redis_auth_token = "CHANGE_ME_redis_auth_token_32chars"
+
+# ── App Secrets ───────────────────────────────────────────────────────────────
+jwt_secret            = "CHANGE_ME_min_64_char_hex_string_here_1234567890abcdef1234567890abcdef"
+admin_secret          = "CHANGE_ME_admin_secret_here"
+smtp_user             = "AKIAIOSFODNN7EXAMPLE"   # From AWS SES SMTP credentials
+smtp_password         = "CHANGE_ME_ses_smtp_password"
+college_email_domains = "@acet.ac.in,@aec.edu.in,@adityauniversity.in"
+
+# ── Cloudflare ────────────────────────────────────────────────────────────────
+# Get from: https://dash.cloudflare.com/profile/api-tokens
+# Token needs: Zone:Read + DNS:Edit permissions for dealance.app
+cloudflare_api_token = "CHANGE_ME_cloudflare_api_token"
+
+# Get from: Cloudflare Dashboard → dealance.app → Overview → Zone ID (right sidebar)
+cloudflare_zone_id   = "CHANGE_ME_zone_id_from_cloudflare"
+
+domain        = "dealance.app"
+api_subdomain = "api"
+github_repo   = "PrasannaReddy0583/profiles_tracker"
