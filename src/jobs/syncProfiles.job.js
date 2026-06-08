@@ -291,4 +291,5 @@ function startSyncJob() {
   cron.schedule(CRON_SCHEDULE, syncAllStudents, { timezone: 'Asia/Kolkata' });
 }
 
-module.exports = { startSyncJob, syncAllStudents };
+// Export syncStudent so other modules can trigger single-student syncs
+module.exports = { startSyncJob, syncAllStudents, syncStudent };

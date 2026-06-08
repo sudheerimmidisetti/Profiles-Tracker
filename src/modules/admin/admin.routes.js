@@ -11,5 +11,6 @@ router.use(adminAuth);
 router.get('/students',              ctrl.listStudents);    // List all with optional filters
 router.put('/blocklist/:email',      ctrl.blockStudent);    // Block a student (cheater)
 router.put('/unblocklist/:email',    ctrl.unblockStudent);  // Reinstate a student
+router.post('/sync',                 ctrl.triggerSync);     // POST manually trigger full data sync
 
 module.exports = router;

@@ -9,6 +9,9 @@ const codeforcesScraper = require('../../scrapers/codeforces.scraper');
 const codechefScraper   = require('../../scrapers/codechef.scraper');
 const hackerrankScraper = require('../../scrapers/hackerrank.scraper');
 
+// Trigger immediate data sync after verification so dashboard loads right away
+const { syncStudent } = require('../../jobs/syncProfiles.job');
+
 const VERIFY_TTL = 86400; // 24 hours
 
 // ─────────────────────────────────────────────────────────────
@@ -215,6 +218,20 @@ async function confirmVerification(email) {
   await query('UPDATE students SET is_verified = TRUE WHERE email = $1', [email]);
 
   logger.info(`✅ [Verify] Student ${email} successfully verified all handles`);
+
+  // 🔄 Trigger immediate background sync so dashboard shows data right away
+  // (don't await — fire-and-forget so API responds instantly)
+  const handleMap = {};
+  if (leetcode)   handleMap.leetcode   = leetcode;
+  if (codeforces) handleMap.codeforces = codeforces;
+  if (codechef)   handleMap.codechef   = codechef;
+  if (hackerrank) handleMap.hackerrank = hackerrank;
+
+  setImmediate(() => {
+    syncStudent(email, handleMap)
+      .then(() => logger.info(`🟢 [Verify] Background sync complete for ${email}`))
+      .catch((err) => logger.warn(`⚠️ [Verify] Background sync failed for ${email}: ${err.message}`));
+  });
 
   return {
     success: true,

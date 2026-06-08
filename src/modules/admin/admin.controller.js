@@ -1,5 +1,7 @@
 // src/modules/admin/admin.controller.js
 const adminService = require('./admin.service');
+const { syncAllStudents } = require('../../jobs/syncProfiles.job');
+const logger = require('../../utils/logger');
 
 // GET /api/admin/students?page=1&limit=50&verified=true&blocklisted=false
 async function listStudents(req, res, next) {
@@ -36,4 +38,15 @@ async function unblockStudent(req, res, next) {
   }
 }
 
-module.exports = { listStudents, blockStudent, unblockStudent };
+// POST /api/admin/sync  — manually trigger a full data sync (fire-and-forget)
+async function triggerSync(req, res) {
+  logger.info('[Admin] Manual sync triggered');
+  setImmediate(() => {
+    syncAllStudents()
+      .then(() => logger.info('[Admin] Manual sync complete'))
+      .catch((err) => logger.error(`[Admin] Manual sync error: ${err.message}`));
+  });
+  res.status(202).json({ success: true, message: 'Sync started in background. Check server logs for progress.' });
+}
+
+module.exports = { listStudents, blockStudent, unblockStudent, triggerSync };
