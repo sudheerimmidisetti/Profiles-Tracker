@@ -1,8 +1,12 @@
-// src/jobs/syncProfiles.job.js
+// backend/src/jobs/syncProfiles.job.js
 // Nightly cron: scrapes all 4 platforms for every verified, non-blocklisted student
 // and upserts platform tables + inserts daily snapshots for analytics charts.
+//
+// ⚠️  MULTI-INSTANCE SAFE: Uses Redis distributed lock so only ONE EC2 instance
+// runs the sync when deployed behind an Auto Scaling Group.
 const cron   = require('node-cron');
 const { query, getClient } = require('../config/db');
+const redis  = require('../config/redis');   // ← for distributed lock
 const logger = require('../utils/logger');
 
 const leetcodeScraper  = require('../scrapers/leetcode.scraper');
@@ -10,8 +14,12 @@ const codeforcesScraper = require('../scrapers/codeforces.scraper');
 const codechefScraper  = require('../scrapers/codechef.scraper');
 const hackerrankScraper = require('../scrapers/hackerrank.scraper');
 
-// Run every night at 2:00 AM
+// Run every night at 2:00 AM IST
 const CRON_SCHEDULE = process.env.SYNC_CRON || '0 2 * * *';
+
+// Distributed lock constants
+const LOCK_KEY = 'cron:sync:nightly:lock';
+const LOCK_TTL = 7200; // 2 hours max (prevents stale lock if instance crashes mid-sync)
 
 // ─────────────────────────────────────────────────────────────
 // Main sync runner
@@ -284,11 +292,38 @@ async function upsertHackerrank(email, d) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Distributed-lock wrapper — only ONE instance runs the nightly sync
+// even when multiple EC2s are in the Auto Scaling Group.
+// Uses Redis SET NX (set if not exists):
+//   - First instance to call: acquires lock, runs sync, releases lock
+//   - All other instances:    lock already set, log and skip
+// ─────────────────────────────────────────────────────────────
+async function syncAllStudentsWithLock() {
+  // SET NX = set only if the key doesn't exist  →  atomic, safe across instances
+  const acquired = await redis.set(LOCK_KEY, process.env.HOSTNAME || 'instance', 'EX', LOCK_TTL, 'NX');
+
+  if (!acquired) {
+    logger.info('[SyncJob] ⏭️  Another instance holds the sync lock — skipping this run.');
+    return;
+  }
+
+  try {
+    logger.info('[SyncJob] � udd10 Distributed lock acquired — starting sync...');
+    await syncAllStudents();
+  } finally {
+    // Always release even if sync throws
+    await redis.del(LOCK_KEY);
+    logger.info('[SyncJob] � udd13 Lock released.');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Register and start the cron job
 // ─────────────────────────────────────────────────────────────
 function startSyncJob() {
   logger.info(`[SyncJob] Scheduled: "${CRON_SCHEDULE}" (${new Date().toLocaleString()})`);
-  cron.schedule(CRON_SCHEDULE, syncAllStudents, { timezone: 'Asia/Kolkata' });
+  // Use locked version for multi-instance safety
+  cron.schedule(CRON_SCHEDULE, syncAllStudentsWithLock, { timezone: 'Asia/Kolkata' });
 }
 
 // Export syncStudent so other modules can trigger single-student syncs
