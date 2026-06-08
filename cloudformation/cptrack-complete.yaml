@@ -1,0 +1,1058 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  CPTrack — Complete Single-Stack CloudFormation Template.
+  Everything in one file: VPC, Security Groups, RDS, Redis,
+  Secrets Manager, IAM, ALB, Auto Scaling Group.
+  Upload this ONE file directly to the CloudFormation console.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# METADATA — Console grouping / labels
+# ═══════════════════════════════════════════════════════════════════════════════
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: "🌐 Network" }
+        Parameters: [VpcCidr, PublicSubnet1Cidr, PublicSubnet2Cidr, PrivateSubnet1Cidr, PrivateSubnet2Cidr]
+      - Label: { default: "💻 EC2 / Auto Scaling" }
+        Parameters: [InstanceType, KeyPairName, AsgMin, AsgDesired, AsgMax]
+      - Label: { default: "🗄️  Database — RDS PostgreSQL" }
+        Parameters: [DBInstanceClass, DBName, DBUsername, DBPassword, DBMultiAZ]
+      - Label: { default: "⚡ Cache — ElastiCache Redis" }
+        Parameters: [RedisNodeType, RedisAuthToken]
+      - Label: { default: "🔐 Application Secrets" }
+        Parameters: [JwtSecret, AdminSecret, SmtpUser, SmtpPassword, CollegeEmailDomains]
+      - Label: { default: "☁️  Domain / Cloudflare" }
+        Parameters: [DomainName, ApiSubdomain]
+      - Label: { default: "📦 GitHub" }
+        Parameters: [GitHubRepo, Environment]
+    ParameterLabels:
+      DBPassword:   { default: "DB Password (min 16 chars)" }
+      JwtSecret:    { default: "JWT Secret (min 64 chars hex)" }
+      AdminSecret:  { default: "Admin Dashboard Secret (min 12 chars)" }
+      KeyPairName:  { default: "EC2 Key Pair name (must exist in this region)" }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PARAMETERS
+# ═══════════════════════════════════════════════════════════════════════════════
+Parameters:
+
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging]
+
+  # ── Network ──────────────────────────────────────────────────────────────────
+  VpcCidr:
+    Type: String
+    Default: "10.0.0.0/16"
+
+  PublicSubnet1Cidr:
+    Type: String
+    Default: "10.0.1.0/24"
+    Description: Public AZ-a — ALB + EC2
+
+  PublicSubnet2Cidr:
+    Type: String
+    Default: "10.0.2.0/24"
+    Description: Public AZ-b — ALB + EC2
+
+  PrivateSubnet1Cidr:
+    Type: String
+    Default: "10.0.3.0/24"
+    Description: Private AZ-a — RDS + Redis (no internet)
+
+  PrivateSubnet2Cidr:
+    Type: String
+    Default: "10.0.4.0/24"
+    Description: Private AZ-b — RDS + Redis (no internet)
+
+  # ── EC2 ──────────────────────────────────────────────────────────────────────
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues: [t3.micro, t3.small, t3.medium, t3.large]
+
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+
+  AsgMin:
+    Type: Number
+    Default: 1
+
+  AsgDesired:
+    Type: Number
+    Default: 2
+    Description: "2 = active-active (one EC2 per AZ)"
+
+  AsgMax:
+    Type: Number
+    Default: 6
+
+  # ── RDS ──────────────────────────────────────────────────────────────────────
+  DBInstanceClass:
+    Type: String
+    Default: db.t3.micro
+    AllowedValues: [db.t3.micro, db.t3.small, db.t3.medium]
+
+  DBName:
+    Type: String
+    Default: coding_tracker
+
+  DBUsername:
+    Type: String
+    Default: cptrack
+
+  DBPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    MaxLength: 128
+    ConstraintDescription: Minimum 16 characters
+
+  DBMultiAZ:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: "true = standby replica in second AZ (recommended for production)"
+
+  # ── Redis ─────────────────────────────────────────────────────────────────────
+  RedisNodeType:
+    Type: String
+    Default: cache.t3.micro
+    AllowedValues: [cache.t3.micro, cache.t3.small, cache.t3.medium]
+
+  RedisAuthToken:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    MaxLength: 128
+    Description: Redis AUTH password (min 16 chars)
+
+  # ── App Secrets ───────────────────────────────────────────────────────────────
+  JwtSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 64
+    Description: "JWT signing secret. Generate: openssl rand -hex 64"
+
+  AdminSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 12
+    Description: "Admin dashboard secret. Generate: openssl rand -hex 16"
+
+  SmtpUser:
+    Type: String
+    NoEcho: true
+    Description: AWS SES SMTP username
+
+  SmtpPassword:
+    Type: String
+    NoEcho: true
+    Description: AWS SES SMTP password
+
+  CollegeEmailDomains:
+    Type: String
+    Default: "@acet.ac.in,@aec.edu.in,@adityauniversity.in"
+    Description: Comma-separated list of allowed college email domains
+
+  # ── Domain ────────────────────────────────────────────────────────────────────
+  DomainName:
+    Type: String
+    Default: dealance.app
+
+  ApiSubdomain:
+    Type: String
+    Default: api
+
+  # ── GitHub ────────────────────────────────────────────────────────────────────
+  GitHubRepo:
+    Type: String
+    Default: PrasannaReddy0583/profiles_tracker
+    Description: GitHub repo to clone on each new EC2 instance (owner/repo)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONDITIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+Conditions:
+  MultiAZEnabled: !Equals [!Ref DBMultiAZ, "true"]
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MAPPINGS — Ubuntu 22.04 LTS AMIs per region
+# ═══════════════════════════════════════════════════════════════════════════════
+Mappings:
+  UbuntuAmi:
+    ap-south-1:     { AMI: ami-0dee22c13ea7a9a67 }  # Mumbai
+    us-east-1:      { AMI: ami-0c7217cdde317cfec }  # N. Virginia
+    eu-west-1:      { AMI: ami-0905a3c97561e0b69 }  # Ireland
+    ap-southeast-1: { AMI: ami-078c1149d8ad719a7 }  # Singapore
+    ap-northeast-1: { AMI: ami-07c589821f2b353aa }  # Tokyo
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RESOURCES
+# ═══════════════════════════════════════════════════════════════════════════════
+Resources:
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 1: NETWORK
+# VPC · Public Subnets · Private Subnets · Internet Gateway · NAT Gateways
+# ─────────────────────────────────────────────────────────────────────────────
+
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock:          !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport:   true
+      Tags:
+        - { Key: Name, Value: !Sub "cptrack-vpc-${Environment}" }
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - { Key: Name, Value: !Sub "cptrack-igw-${Environment}" }
+
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:             !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  # ── Public Subnets ──────────────────────────────────────────────────────────
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:               !Ref Vpc
+      CidrBlock:           !Ref PublicSubnet1Cidr
+      AvailabilityZone:    !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - { Key: Name, Value: !Sub "cptrack-public-1-${Environment}" }
+        - { Key: Tier, Value: Public }
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:               !Ref Vpc
+      CidrBlock:           !Ref PublicSubnet2Cidr
+      AvailabilityZone:    !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - { Key: Name, Value: !Sub "cptrack-public-2-${Environment}" }
+        - { Key: Tier, Value: Public }
+
+  # ── Private Subnets (no public IPs — RDS + Redis) ───────────────────────────
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:               !Ref Vpc
+      CidrBlock:           !Ref PrivateSubnet1Cidr
+      AvailabilityZone:    !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - { Key: Name, Value: !Sub "cptrack-private-1-${Environment}" }
+        - { Key: Tier, Value: Private }
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:               !Ref Vpc
+      CidrBlock:           !Ref PrivateSubnet2Cidr
+      AvailabilityZone:    !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - { Key: Name, Value: !Sub "cptrack-private-2-${Environment}" }
+        - { Key: Tier, Value: Private }
+
+  # ── NAT Gateways (EC2 → internet for scraping, via private → public subnet) ──
+  NatEip1:
+    Type: AWS::EC2::EIP
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags: [{ Key: Name, Value: !Sub "cptrack-nat-eip-1-${Environment}" }]
+
+  NatEip2:
+    Type: AWS::EC2::EIP
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags: [{ Key: Name, Value: !Sub "cptrack-nat-eip-2-${Environment}" }]
+
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEip1.AllocationId
+      SubnetId:     !Ref PublicSubnet1
+      Tags: [{ Key: Name, Value: !Sub "cptrack-nat-1-${Environment}" }]
+
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEip2.AllocationId
+      SubnetId:     !Ref PublicSubnet2
+      Tags: [{ Key: Name, Value: !Sub "cptrack-nat-2-${Environment}" }]
+
+  # ── Route Tables ─────────────────────────────────────────────────────────────
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags: [{ Key: Name, Value: !Sub "cptrack-rtb-public-${Environment}" }]
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      RouteTableId:         !Ref PublicRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId:            !Ref InternetGateway
+
+  PubSubnet1RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:     !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PubSubnet2RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:     !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags: [{ Key: Name, Value: !Sub "cptrack-rtb-private-1-${Environment}" }]
+
+  PrivateRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:         !Ref PrivateRouteTable1
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId:         !Ref NatGateway1
+
+  PrivSubnet1RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:     !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable1
+
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags: [{ Key: Name, Value: !Sub "cptrack-rtb-private-2-${Environment}" }]
+
+  PrivateRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:         !Ref PrivateRouteTable2
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId:         !Ref NatGateway2
+
+  PrivSubnet2RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:     !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable2
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 2: SECURITY GROUPS
+# ALB (Cloudflare IPs only) · EC2 · RDS · Redis
+# ─────────────────────────────────────────────────────────────────────────────
+
+  # ── ALB SG: only Cloudflare's published IPv4 ranges ─────────────────────────
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName:        !Sub "cptrack-sg-alb-${Environment}"
+      GroupDescription: "ALB: HTTPS+HTTP from Cloudflare IPs only — all others blocked"
+      VpcId:            !Ref Vpc
+      SecurityGroupIngress:
+        # HTTPS :443
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "103.21.244.0/22",  Description: CF }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "103.22.200.0/22",  Description: CF }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "103.31.4.0/22",    Description: CF }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "104.16.0.0/13",    Description: CF }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "104.24.0.0/14",    Description: CF }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "108.162.192.0/18", Description: CF }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "131.0.72.0/22",    Description: CF }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "141.101.64.0/18",  Description: CF }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "162.158.0.0/15",   Description: CF }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "172.64.0.0/13",    Description: CF }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "173.245.48.0/20",  Description: CF }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "188.114.96.0/20",  Description: CF }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "190.93.240.0/20",  Description: CF }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "197.234.240.0/22", Description: CF }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "198.41.128.0/17",  Description: CF }
+        # HTTP :80 (redirect to HTTPS)
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "103.21.244.0/22",  Description: CF-HTTP }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "103.22.200.0/22",  Description: CF-HTTP }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "103.31.4.0/22",    Description: CF-HTTP }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "104.16.0.0/13",    Description: CF-HTTP }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "104.24.0.0/14",    Description: CF-HTTP }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "108.162.192.0/18", Description: CF-HTTP }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "141.101.64.0/18",  Description: CF-HTTP }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "162.158.0.0/15",   Description: CF-HTTP }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "172.64.0.0/13",    Description: CF-HTTP }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "173.245.48.0/20",  Description: CF-HTTP }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "188.114.96.0/20",  Description: CF-HTTP }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "190.93.240.0/20",  Description: CF-HTTP }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "197.234.240.0/22", Description: CF-HTTP }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "198.41.128.0/17",  Description: CF-HTTP }
+      SecurityGroupEgress:
+        - { IpProtocol: "-1", CidrIp: "0.0.0.0/0", Description: All-outbound }
+      Tags:
+        - { Key: Name, Value: !Sub "cptrack-sg-alb-${Environment}" }
+
+  # ── EC2 SG: inbound from ALB :3000 and SSH ───────────────────────────────────
+  Ec2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName:        !Sub "cptrack-sg-ec2-${Environment}"
+      GroupDescription: "EC2: Node.js from ALB only + SSH"
+      VpcId:            !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol:            tcp
+          FromPort:              3000
+          ToPort:                3000
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+          Description:           "Node.js API — ALB only"
+        - IpProtocol: tcp   # Change CidrIp to YOUR_IP/32 in production
+          FromPort:   22
+          ToPort:     22
+          CidrIp:     "0.0.0.0/0"
+          Description: "SSH — restrict to your IP in production"
+      SecurityGroupEgress:
+        - { IpProtocol: "-1", CidrIp: "0.0.0.0/0", Description: "All outbound via NAT" }
+      Tags:
+        - { Key: Name, Value: !Sub "cptrack-sg-ec2-${Environment}" }
+
+  # ── RDS SG: PostgreSQL only from EC2 ─────────────────────────────────────────
+  RdsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName:        !Sub "cptrack-sg-rds-${Environment}"
+      GroupDescription: "RDS: PostgreSQL from EC2 SG only — no internet"
+      VpcId:            !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol:            tcp
+          FromPort:              5432
+          ToPort:                5432
+          SourceSecurityGroupId: !Ref Ec2SecurityGroup
+          Description:           "PostgreSQL from EC2 only"
+      Tags:
+        - { Key: Name, Value: !Sub "cptrack-sg-rds-${Environment}" }
+
+  # ── Redis SG: TLS Redis only from EC2 ────────────────────────────────────────
+  RedisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName:        !Sub "cptrack-sg-redis-${Environment}"
+      GroupDescription: "Redis TLS :6380 from EC2 SG only — no internet"
+      VpcId:            !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol:            tcp
+          FromPort:              6380
+          ToPort:                6380
+          SourceSecurityGroupId: !Ref Ec2SecurityGroup
+          Description:           "Redis TLS from EC2 only"
+      Tags:
+        - { Key: Name, Value: !Sub "cptrack-sg-redis-${Environment}" }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 3: DATABASE — RDS PostgreSQL + ElastiCache Redis + Secrets Manager
+# All in private subnets. No public access. Encrypted at rest and in transit.
+# ─────────────────────────────────────────────────────────────────────────────
+
+  # ── RDS Subnet Group ──────────────────────────────────────────────────────────
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupName:        !Sub "cptrack-db-subnet-${Environment}"
+      DBSubnetGroupDescription: "Private subnets for RDS — no internet"
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      Tags:
+        - { Key: Name, Value: !Sub "cptrack-db-subnet-${Environment}" }
+
+  # ── RDS Parameter Group (slow query logging) ──────────────────────────────────
+  DbParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      DBParameterGroupName: !Sub "cptrack-pg15-${Environment}"
+      Description:          "CPTrack PG15 — slow query logging + pg_stat_statements"
+      Family:               postgres15
+      Parameters:
+        log_connections:            "1"
+        log_disconnections:         "1"
+        log_min_duration_statement: "1000"
+        shared_preload_libraries:   "pg_stat_statements"
+      Tags:
+        - { Key: Name, Value: !Sub "cptrack-pg15-${Environment}" }
+
+  # ── RDS Enhanced Monitoring Role ──────────────────────────────────────────────
+  RdsMonitoringRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "cptrack-rds-monitoring-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: monitoring.rds.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole
+
+  # ── RDS PostgreSQL 15 ─────────────────────────────────────────────────────────
+  RdsInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier:    !Sub "cptrack-db-${Environment}"
+      Engine:                  postgres
+      EngineVersion:           "15.6"
+      DBInstanceClass:         !Ref DBInstanceClass
+      AllocatedStorage:        "20"
+      MaxAllocatedStorage:     100
+      StorageType:             gp3
+      StorageEncrypted:        true          # AES-256 at rest
+      DBName:                  !Ref DBName
+      MasterUsername:          !Ref DBUsername
+      MasterUserPassword:      !Ref DBPassword
+      Port:                    "5432"
+      DBSubnetGroupName:       !Ref DbSubnetGroup
+      VPCSecurityGroups:       [!Ref RdsSecurityGroup]
+      PubliclyAccessible:      false         # NO public IP — private only
+      MultiAZ:                 !If [MultiAZEnabled, true, false]
+      BackupRetentionPeriod:   7
+      PreferredBackupWindow:   "20:30-21:00"      # UTC = 2 AM IST
+      PreferredMaintenanceWindow: "sun:21:00-sun:22:00"
+      CopyTagsToSnapshot:      true
+      DeleteAutomatedBackups:  false
+      DeletionProtection:      true
+      EnablePerformanceInsights:          true
+      PerformanceInsightsRetentionPeriod: 7
+      MonitoringInterval:      60
+      MonitoringRoleArn:       !GetAtt RdsMonitoringRole.Arn
+      DBParameterGroupName:    !Ref DbParameterGroup
+      Tags:
+        - { Key: Name,        Value: !Sub "cptrack-postgres-${Environment}" }
+        - { Key: Environment, Value: !Ref Environment }
+
+  # ── ElastiCache Subnet Group ──────────────────────────────────────────────────
+  RedisSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      CacheSubnetGroupName: !Sub "cptrack-redis-subnet-${Environment}"
+      Description:          "Private subnets for Redis — no internet"
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+
+  # ── Redis Parameter Group ──────────────────────────────────────────────────────
+  RedisParameterGroup:
+    Type: AWS::ElastiCache::ParameterGroup
+    Properties:
+      CacheParameterGroupFamily: redis7
+      Description: "CPTrack Redis 7 — LRU eviction"
+      Properties:
+        maxmemory-policy: "allkeys-lru"
+
+  # ── ElastiCache Redis 7 — TLS, AUTH, replica for HA ──────────────────────────
+  RedisCluster:
+    Type: AWS::ElastiCache::ReplicationGroup
+    Properties:
+      ReplicationGroupId:          !Sub "cptrack-redis-${Environment}"
+      ReplicationGroupDescription: "CPTrack — JWT sessions + distributed sync lock"
+      Engine:                      redis
+      EngineVersion:               "7.1.0"
+      CacheNodeType:               !Ref RedisNodeType
+      Port:                        6380          # TLS port
+      NumCacheClusters:            2             # 1 primary + 1 replica
+      AutomaticFailoverEnabled:    true
+      MultiAZEnabled:              true
+      CacheSubnetGroupName:        !Ref RedisSubnetGroup
+      SecurityGroupIds:            [!Ref RedisSecurityGroup]
+      AtRestEncryptionEnabled:     true          # AES-256 at rest
+      TransitEncryptionEnabled:    true          # TLS in transit
+      AuthToken:                   !Ref RedisAuthToken
+      CacheParameterGroupName:     !Ref RedisParameterGroup
+      PreferredMaintenanceWindow:  "sun:22:00-sun:23:00"
+      SnapshotRetentionLimit:      3
+      SnapshotWindow:              "20:00-21:00"
+      Tags:
+        - { Key: Name,        Value: !Sub "cptrack-redis-${Environment}" }
+        - { Key: Environment, Value: !Ref Environment }
+
+  # ── Secrets Manager — all credentials in one JSON secret ─────────────────────
+  # EC2 instances fetch this at boot via IAM role. No .env files on servers.
+  AppSecret:
+    Type: AWS::SecretsManager::Secret
+    DependsOn:
+      - RdsInstance
+      - RedisCluster
+    Properties:
+      Name:        "cptrack/production"
+      Description: "CPTrack app secrets — fetched by EC2 at startup (no .env files)"
+      SecretString: !Sub
+        - |
+          {
+            "DATABASE_URL": "postgresql://${DBUsername}:${DBPassword}@${RdsEndpoint}:5432/${DBName}",
+            "REDIS_URL": "rediss://default:${RedisAuthToken}@${RedisEndpoint}:6380",
+            "JWT_SECRET": "${JwtSecret}",
+            "ADMIN_SECRET": "${AdminSecret}",
+            "SMTP_HOST": "email-smtp.${AWS::Region}.amazonaws.com",
+            "SMTP_PORT": "587",
+            "SMTP_SECURE": "false",
+            "SMTP_USER": "${SmtpUser}",
+            "SMTP_PASS": "${SmtpPassword}",
+            "FROM_EMAIL": "noreply@${DomainName}",
+            "COLLEGE_EMAIL_DOMAINS": "${CollegeEmailDomains}",
+            "CORS_ORIGIN": "https://tracker.${DomainName},https://admin.${DomainName}",
+            "NODE_ENV": "production",
+            "PORT": "3000"
+          }
+        - RdsEndpoint:   !GetAtt RdsInstance.Endpoint.Address
+          RedisEndpoint: !GetAtt RedisCluster.PrimaryEndPoint.Address
+      Tags:
+        - { Key: Environment, Value: !Ref Environment }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 4: IAM
+# EC2 role with least-privilege: read the specific secret + CloudWatch + SSM
+# ─────────────────────────────────────────────────────────────────────────────
+
+  Ec2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "cptrack-ec2-role-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      Tags:
+        - { Key: Name, Value: !Sub "cptrack-ec2-role-${Environment}" }
+
+  # Read ONLY the cptrack/production secret (not all secrets in the account)
+  SecretsPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "cptrack-ec2-read-secret-${Environment}"
+      Roles: [!Ref Ec2Role]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+              - secretsmanager:DescribeSecret
+            Resource: !Ref AppSecret
+          - Effect: Allow
+            Action: kms:Decrypt
+            Resource: "*"
+            Condition:
+              StringEquals:
+                "kms:ViaService": !Sub "secretsmanager.${AWS::Region}.amazonaws.com"
+
+  # CloudWatch Agent — ship PM2 logs from EC2 to CloudWatch Logs
+  CloudWatchPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "cptrack-ec2-cloudwatch-${Environment}"
+      Roles: [!Ref Ec2Role]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - logs:DescribeLogStreams
+              - cloudwatch:PutMetricData
+              - ec2:DescribeVolumes
+              - ec2:DescribeTags
+            Resource: "*"
+
+  # SSM Session Manager — browser-based SSH without opening port 22
+  SsmPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "cptrack-ec2-ssm-${Environment}"
+      Roles: [!Ref Ec2Role]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - ssm:UpdateInstanceInformation
+              - ssmmessages:CreateControlChannel
+              - ssmmessages:CreateDataChannel
+              - ssmmessages:OpenControlChannel
+              - ssmmessages:OpenDataChannel
+              - s3:GetEncryptionConfiguration
+            Resource: "*"
+
+  Ec2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "cptrack-ec2-profile-${Environment}"
+      Roles: [!Ref Ec2Role]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 5: COMPUTE
+# ALB · Launch Template · Auto Scaling Group · Scaling Policies · CW Alarms
+# ─────────────────────────────────────────────────────────────────────────────
+
+  # ── Application Load Balancer ─────────────────────────────────────────────────
+  Alb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name:           !Sub "cptrack-alb-${Environment}"
+      Type:           application
+      Scheme:         internet-facing
+      SecurityGroups: [!Ref AlbSecurityGroup]
+      Subnets:        [!Ref PublicSubnet1, !Ref PublicSubnet2]
+      LoadBalancerAttributes:
+        - { Key: deletion_protection.enabled,       Value: "true" }
+        - { Key: routing.http2.enabled,             Value: "true" }
+        - { Key: idle_timeout.timeout_seconds,      Value: "60" }
+      Tags:
+        - { Key: Name, Value: !Sub "cptrack-alb-${Environment}" }
+
+  # ── Target Group (/health check on port 3000) ─────────────────────────────────
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name:            !Sub "cptrack-tg-${Environment}"
+      Port:            3000
+      Protocol:        HTTP
+      VpcId:           !Ref Vpc
+      TargetType:      instance
+      HealthCheckPath:                /health
+      HealthCheckProtocol:            HTTP
+      HealthCheckPort:                "3000"
+      HealthCheckIntervalSeconds:     15
+      HealthCheckTimeoutSeconds:      5
+      HealthyThresholdCount:          2
+      UnhealthyThresholdCount:        2
+      Matcher:         { HttpCode: "200" }
+      TargetGroupAttributes:
+        - { Key: deregistration_delay.timeout_seconds, Value: "30" }
+        - { Key: stickiness.enabled,                   Value: "false" }
+      Tags:
+        - { Key: Name, Value: !Sub "cptrack-tg-${Environment}" }
+
+  # ── Listener: HTTP :80 → redirect → HTTPS :443 ───────────────────────────────
+  HttpListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port:            80
+      Protocol:        HTTP
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            Port:       "443"
+            Protocol:   HTTPS
+            StatusCode: HTTP_301
+
+  # ── Listener: HTTPS :443 → forward → Target Group ────────────────────────────
+  # NOTE: Using HTTP protocol on port 443 because Cloudflare proxies the traffic.
+  # Cloudflare terminates public TLS; Cloudflare → ALB is via Cloudflare's network.
+  # Set Cloudflare SSL mode to "Full" (not Full Strict).
+  # For Full Strict: request an ACM cert for api.dealance.app and change
+  # Protocol below to HTTPS, adding a Certificates block with the cert ARN.
+  HttpsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port:            443
+      Protocol:        HTTP
+      DefaultActions:
+        - Type:           forward
+          TargetGroupArn: !Ref TargetGroup
+
+  # ── Launch Template ───────────────────────────────────────────────────────────
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub "cptrack-lt-${Environment}"
+      LaunchTemplateData:
+        ImageId:      !FindInMap [UbuntuAmi, !Ref "AWS::Region", AMI]
+        InstanceType: !Ref InstanceType
+        KeyName:      !Ref KeyPairName
+        IamInstanceProfile:
+          Arn: !GetAtt Ec2InstanceProfile.Arn
+        SecurityGroupIds: [!Ref Ec2SecurityGroup]
+        BlockDeviceMappings:
+          - DeviceName: /dev/sda1
+            Ebs:
+              VolumeSize:          20
+              VolumeType:          gp3
+              Encrypted:           true
+              DeleteOnTermination: true
+        MetadataOptions:
+          HttpEndpoint:            enabled
+          HttpTokens:              required   # IMDSv2 only
+          HttpPutResponseHopLimit: 1
+        Monitoring:
+          Enabled: true
+        # ── User Data: runs on every new instance from ASG ─────────────────────
+        UserData:
+          Fn::Base64:
+            !Sub |
+              #!/bin/bash
+              set -euo pipefail
+              exec > >(tee /var/log/user-data.log | logger -t user-data) 2>&1
+
+              echo "=== CPTrack Bootstrap: $(date) ==="
+              export DEBIAN_FRONTEND=noninteractive
+
+              # System packages
+              apt-get update -y
+              apt-get install -y curl git jq awscli
+
+              # Node.js 20 LTS
+              curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+              apt-get install -y nodejs
+              echo "Node $(node -v)"
+
+              # PM2
+              npm install -g pm2
+
+              # Clone app
+              cd /home/ubuntu
+              git clone https://github.com/${GitHubRepo}.git cptrack
+              cd cptrack/backend
+              npm install --production
+              echo "✅ App installed"
+
+              # Fetch all secrets from Secrets Manager (no .env on disk)
+              SECRET_JSON=$(aws secretsmanager get-secret-value \
+                --region ${AWS::Region} \
+                --secret-id "cptrack/production" \
+                --query SecretString \
+                --output text)
+
+              # Write .env from secret JSON
+              echo "$SECRET_JSON" | jq -r 'to_entries[] | "\(.key)=\(.value)"' \
+                > /home/ubuntu/cptrack/backend/.env
+              chmod 600 /home/ubuntu/cptrack/backend/.env
+              chown ubuntu:ubuntu /home/ubuntu/cptrack/backend/.env
+              echo "✅ Secrets loaded from Secrets Manager"
+
+              # DB migration (idempotent — safe on every instance)
+              cd /home/ubuntu/cptrack/backend
+              node src/migrations/runMigration.js \
+                && echo "✅ Migration applied" \
+                || echo "⚠️  Migration already applied — continuing"
+
+              # Start via PM2
+              NODE_ENV=production pm2 start src/server.js \
+                --name "cptrack-api" \
+                --instances 1 \
+                --max-memory-restart 512M \
+                --exp-backoff-restart-delay=100
+
+              # PM2 survive reboots
+              env PATH=$PATH:/usr/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu \
+                | tail -1 | bash
+              pm2 save
+              echo "✅ PM2 running"
+
+              # CloudWatch Agent (ship PM2 logs)
+              wget -q https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
+              dpkg -i amazon-cloudwatch-agent.deb
+
+              cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json << 'CWA'
+              {
+                "logs": {
+                  "logs_collected": {
+                    "files": {
+                      "collect_list": [
+                        {
+                          "file_path": "/home/ubuntu/.pm2/logs/cptrack-api-out.log",
+                          "log_group_name": "/cptrack/api/stdout",
+                          "log_stream_name": "{instance_id}"
+                        },
+                        {
+                          "file_path": "/home/ubuntu/.pm2/logs/cptrack-api-error.log",
+                          "log_group_name": "/cptrack/api/stderr",
+                          "log_stream_name": "{instance_id}"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+              CWA
+
+              systemctl start amazon-cloudwatch-agent
+              systemctl enable amazon-cloudwatch-agent
+              echo "=== Bootstrap done: $(date) ==="
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - { Key: Name,        Value: !Sub "cptrack-api-${Environment}" }
+              - { Key: Environment, Value: !Ref Environment }
+
+  # ── Auto Scaling Group ────────────────────────────────────────────────────────
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: HttpsListener
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: 1    # Always keep ≥1 healthy during deploy
+        MaxBatchSize:          1    # Replace 1 instance at a time
+        PauseTime:             PT2M
+        WaitOnResourceSignals: false
+    Properties:
+      AutoScalingGroupName: !Sub "cptrack-asg-${Environment}"
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version:          !GetAtt LaunchTemplate.LatestVersionNumber
+      MinSize:         !Sub "${AsgMin}"
+      DesiredCapacity: !Sub "${AsgDesired}"
+      MaxSize:         !Sub "${AsgMax}"
+      VPCZoneIdentifier: [!Ref PublicSubnet1, !Ref PublicSubnet2]
+      TargetGroupARNs:   [!Ref TargetGroup]
+      HealthCheckType:         ELB
+      HealthCheckGracePeriod:  120
+      TerminationPolicies:
+        - OldestLaunchTemplate
+        - OldestInstance
+      Tags:
+        - { Key: Name,        Value: !Sub "cptrack-api-${Environment}", PropagateAtLaunch: true }
+        - { Key: Environment, Value: !Ref Environment,                  PropagateAtLaunch: true }
+
+  # ── Scaling: Target Tracking at 60% CPU ──────────────────────────────────────
+  CpuTargetTracking:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType:           TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue:    60.0
+        DisableScaleIn: false
+
+  # ── Scale OUT: CPU > 80% for 2 min → add 2 instances ─────────────────────────
+  ScaleOutPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType:           StepScaling
+      AdjustmentType:       ChangeInCapacity
+      StepAdjustments:
+        - { MetricIntervalLowerBound: 0,  MetricIntervalUpperBound: 20, ScalingAdjustment: 2 }
+        - { MetricIntervalLowerBound: 20, ScalingAdjustment: 3 }
+
+  HighCpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName:          !Sub "cptrack-cpu-high-${Environment}"
+      AlarmDescription:   "CPU > 80% for 2 min → scale out"
+      MetricName:         CPUUtilization
+      Namespace:          AWS/EC2
+      Statistic:          Average
+      Period:             60
+      EvaluationPeriods:  2
+      Threshold:          80
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:       [!Ref ScaleOutPolicy]
+      Dimensions:
+        - { Name: AutoScalingGroupName, Value: !Ref AutoScalingGroup }
+
+  # ── Scale IN: CPU < 30% for 10 min → remove 1 instance ──────────────────────
+  ScaleInPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType:           StepScaling
+      AdjustmentType:       ChangeInCapacity
+      StepAdjustments:
+        - { MetricIntervalUpperBound: 0, ScalingAdjustment: -1 }
+
+  LowCpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName:          !Sub "cptrack-cpu-low-${Environment}"
+      AlarmDescription:   "CPU < 30% for 10 min → scale in"
+      MetricName:         CPUUtilization
+      Namespace:          AWS/EC2
+      Statistic:          Average
+      Period:             60
+      EvaluationPeriods:  10
+      Threshold:          30
+      ComparisonOperator: LessThanThreshold
+      AlarmActions:       [!Ref ScaleInPolicy]
+      Dimensions:
+        - { Name: AutoScalingGroupName, Value: !Ref AutoScalingGroup }
+
+  # ── 5xx error spike alarm ─────────────────────────────────────────────────────
+  Alb5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName:          !Sub "cptrack-5xx-${Environment}"
+      AlarmDescription:   "ALB 5xx errors > 10/min for 3 consecutive minutes"
+      MetricName:         HTTPCode_ELB_5XX_Count
+      Namespace:          AWS/ApplicationELB
+      Statistic:          Sum
+      Period:             60
+      EvaluationPeriods:  3
+      Threshold:          10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - { Name: LoadBalancer, Value: !GetAtt Alb.LoadBalancerFullName }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# OUTPUTS
+# ═══════════════════════════════════════════════════════════════════════════════
+Outputs:
+
+  AlbDnsName:
+    Description: "ALB DNS — add CNAME in Cloudflare: api → this value (proxied ON)"
+    Value: !GetAtt Alb.DNSName
+
+  ApiUrl:
+    Description: "Public API URL (after Cloudflare DNS is configured)"
+    Value: !Sub "https://${ApiSubdomain}.${DomainName}"
+
+  RdsEndpoint:
+    Description: "RDS PostgreSQL endpoint (private — reachable only from EC2)"
+    Value: !GetAtt RdsInstance.Endpoint.Address
+
+  RedisEndpoint:
+    Description: "ElastiCache Redis primary endpoint (private)"
+    Value: !GetAtt RedisCluster.PrimaryEndPoint.Address
+
+  SecretArn:
+    Description: "Secrets Manager ARN — EC2 fetches this at startup"
+    Value: !Ref AppSecret
+
+  AsgName:
+    Description: "Auto Scaling Group — use for rolling deploys after git push"
+    Value: !Ref AutoScalingGroup
+
+  DeployCommand:
+    Description: "Zero-downtime rolling deploy command (run after git push)"
+    Value: !Sub
+      - "aws autoscaling start-instance-refresh --region ${AWS::Region} --auto-scaling-group-name ${ASG} --preferences '{\"MinHealthyPercentage\":50,\"InstanceWarmup\":120}'"
+      - ASG: !Ref AutoScalingGroup
+
+  CloudflareDnsStep:
+    Description: "Cloudflare DNS step: add this CNAME record (proxied = ON)"
+    Value: !Sub
+      - "Name: api | Type: CNAME | Value: ${AlbDns} | Proxy: ON (orange cloud)"
+      - AlbDns: !GetAtt Alb.DNSName
