@@ -1,24 +1,55 @@
 // src/utils/mailer.js
 const nodemailer = require('nodemailer');
-const logger = require('./logger');
+const logger     = require('./logger');
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT || '587', 10),
-  secure: false, // STARTTLS
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS
-  }
-});
+// ─────────────────────────────────────────────────────────────
+// Detect if SMTP credentials are real or still placeholder/missing
+// ─────────────────────────────────────────────────────────────
+const SMTP_USER = process.env.SMTP_USER || '';
+const SMTP_PASS = process.env.SMTP_PASS || '';
+
+const smtpReady =
+  SMTP_USER &&
+  SMTP_PASS &&
+  !SMTP_USER.startsWith('REPLACE_') &&
+  !SMTP_PASS.startsWith('REPLACE_') &&
+  SMTP_USER !== 'test@ethereal.email';
+
+// Only build transporter if credentials look real
+const transporter = smtpReady
+  ? nodemailer.createTransport({
+      host:   process.env.SMTP_HOST || 'smtp.gmail.com',
+      port:   parseInt(process.env.SMTP_PORT || '587', 10),
+      secure: false, // STARTTLS
+      auth: { user: SMTP_USER, pass: SMTP_PASS }
+    })
+  : null;
+
+if (!smtpReady) {
+  logger.warn('⚠️  SMTP not configured — OTPs will be printed to this console (dev mode).');
+  logger.warn('    Set SMTP_USER and SMTP_PASS in .env to enable real email delivery.');
+}
 
 /**
- * Send OTP email for registration
+ * Send OTP email — falls back to console logging if SMTP is not configured.
  */
 async function sendOTPEmail(email, otp) {
+  // ── DEV FALLBACK: log OTP to terminal ──────────────────────
+  if (!transporter) {
+    logger.info('─────────────────────────────────────────────────');
+    logger.info(`📧  OTP for ${email}`);
+    logger.info(`    ┌────────────────┐`);
+    logger.info(`    │   OTP: ${otp}   │`);
+    logger.info(`    └────────────────┘`);
+    logger.info('    (SMTP not configured — copy this code manually)');
+    logger.info('─────────────────────────────────────────────────');
+    return; // success — no crash
+  }
+
+  // ── PRODUCTION: send real email ────────────────────────────
   await transporter.sendMail({
-    from: `"ACET Coding Tracker" <${process.env.FROM_EMAIL}>`,
-    to: email,
+    from:    `"CPTrack — ACET" <${process.env.FROM_EMAIL || SMTP_USER}>`,
+    to:      email,
     subject: 'Your OTP — ACET Coding Tracker',
     html: `
       <div style="font-family:Inter,Arial,sans-serif;max-width:520px;margin:auto;background:#0f172a;padding:40px;border-radius:16px;">
@@ -34,7 +65,8 @@ async function sendOTPEmail(email, otp) {
       </div>
     `
   });
-  logger.info(`OTP email sent to ${email}`);
+
+  logger.info(`✅  OTP email sent to ${email}`);
 }
 
 module.exports = { sendOTPEmail };

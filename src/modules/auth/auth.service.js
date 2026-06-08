@@ -12,16 +12,27 @@ const {
   hashToken
 } = require('../../utils/tokenGen');
 
-const COLLEGE_DOMAIN = process.env.COLLEGE_EMAIL_DOMAIN || '@acet.ac.in';
-const SHORT_TTL      = parseInt(process.env.JWT_SHORT_TTL,   10) || 300;
-const REFRESH_TTL    = parseInt(process.env.JWT_REFRESH_TTL, 10) || 259200;
+// Support multiple college email domains (comma-separated in .env)
+// e.g. COLLEGE_EMAIL_DOMAINS=@acet.ac.in,@aec.edu.in,@adityauniversity.in
+const COLLEGE_DOMAINS = (process.env.COLLEGE_EMAIL_DOMAINS || '@acet.ac.in')
+  .split(',')
+  .map((d) => d.trim().toLowerCase())
+  .filter(Boolean);
+
+const SHORT_TTL   = parseInt(process.env.JWT_SHORT_TTL,   10) || 300;
+const REFRESH_TTL = parseInt(process.env.JWT_REFRESH_TTL, 10) || 259200;
 
 // ─────────────────────────────────────────────────────────────
 // STEP 1: Register — validate college email & send OTP
 // ─────────────────────────────────────────────────────────────
 async function registerWithOTP(email) {
-  if (!email.toLowerCase().endsWith(COLLEGE_DOMAIN)) {
-    const err = new Error(`Only ${COLLEGE_DOMAIN} email addresses are allowed`);
+  const lowerEmail = email.toLowerCase();
+  const isAllowed  = COLLEGE_DOMAINS.some((domain) => lowerEmail.endsWith(domain));
+
+  if (!isAllowed) {
+    const err = new Error(
+      `Only these college email domains are allowed: ${COLLEGE_DOMAINS.join(', ')}`
+    );
     err.statusCode = 400;
     throw err;
   }

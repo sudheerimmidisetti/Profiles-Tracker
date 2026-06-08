@@ -50,13 +50,18 @@ async function getMyProfile(email) {
 }
 
 /**
- * Update mutable student fields (phone)
+ * Update mutable student fields: full_name, branch, phone
+ * (roll_number, college, email are immutable after registration)
  */
-async function updateSettings(email, { phone }) {
+async function updateSettings(email, { full_name, branch, phone }) {
   const res = await query(
-    `UPDATE students SET phone = COALESCE($2, phone)
-     WHERE email = $1 RETURNING email, full_name, phone`,
-    [email, phone || null]
+    `UPDATE students
+     SET full_name = COALESCE($2, full_name),
+         branch    = COALESCE($3, branch),
+         phone     = COALESCE($4, phone)
+     WHERE email = $1
+     RETURNING email, full_name, roll_number, college, branch, phone`,
+    [email, full_name || null, branch || null, phone || null]
   );
   return res.rows[0];
 }

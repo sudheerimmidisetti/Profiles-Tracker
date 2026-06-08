@@ -4,9 +4,9 @@ const redis = require('../../config/redis');
 const logger = require('../../utils/logger');
 const { generateVerificationCode } = require('../../utils/tokenGen');
 
-const leetcodeScraper  = require('../../scrapers/leetcode.scraper');
+const leetcodeScraper   = require('../../scrapers/leetcode.scraper');
 const codeforcesScraper = require('../../scrapers/codeforces.scraper');
-const codechefScraper  = require('../../scrapers/codechef.scraper');
+const codechefScraper   = require('../../scrapers/codechef.scraper');
 const hackerrankScraper = require('../../scrapers/hackerrank.scraper');
 
 const VERIFY_TTL = 86400; // 24 hours
@@ -41,7 +41,7 @@ async function submitHandlers(email, { leetcode, codeforces, codechef, hackerran
     }
   }
 
-  // 2. Generate the 8-char verification code
+  // 2. Generate the 8-char verification code (uppercase alphanumeric)
   const code = generateVerificationCode();
 
   // 3. Store everything in Redis under  verify:profile:<email>
@@ -53,8 +53,14 @@ async function submitHandlers(email, { leetcode, codeforces, codechef, hackerran
   return {
     code,
     message:
-      'Set this code as the FIRST NAME / DISPLAY NAME on all 4 platforms, ' +
-      'then call POST /api/handlers/confirm. Code expires in 24 hours.'
+      'Set this exact code as the FIRST NAME / DISPLAY NAME on each platform you submitted, ' +
+      'then call POST /api/handlers/confirm. Code expires in 24 hours.',
+    instructions: {
+      leetcode:   leetcode   ? `Go to leetcode.com → Profile → Edit → set Name field to "${code}"` : null,
+      codeforces: codeforces ? `Go to codeforces.com → Settings → set First name to "${code}"` : null,
+      codechef:   codechef   ? `Go to codechef.com → Edit Profile → set First Name to "${code}"` : null,
+      hackerrank: hackerrank ? `Go to hackerrank.com → Edit Profile → set Full Name to "${code}"` : null
+    }
   };
 }
 
@@ -65,7 +71,6 @@ async function getVerifyStatus(email) {
   const raw = await redis.get(`verify:profile:${email}`);
 
   if (!raw) {
-    // Check if already verified in DB
     const res = await query(
       'SELECT is_verified FROM students WHERE email = $1',
       [email]
@@ -85,15 +90,16 @@ async function getVerifyStatus(email) {
     isVerified: false,
     code,
     handles: { leetcode, codeforces, codechef, hackerrank },
-    message: `Change the FIRST NAME on all 4 platforms to "${code}" then call confirm.`
+    message: `Change the FIRST NAME / DISPLAY NAME on all your platforms to "${code}" then call confirm.`
   };
 }
 
 // ─────────────────────────────────────────────────────────────
 // STEP 3: Confirm verification
-//   → scrape first name from all 4 platforms
-//   → compare against code stored in Redis
-//   → if ALL match: flush Redis, save handles to DB, mark is_verified
+//   → scrape first/display name from each submitted platform
+//   → compare (trimmed, uppercase) against the code in Redis
+//   → distinguish: scraper failure (null) vs wrong name
+//   → if ALL provided handles pass: save to DB, mark verified
 // ─────────────────────────────────────────────────────────────
 async function confirmVerification(email) {
   const raw = await redis.get(`verify:profile:${email}`);
@@ -105,30 +111,84 @@ async function confirmVerification(email) {
 
   const { code, leetcode, codeforces, codechef, hackerrank } = JSON.parse(raw);
 
+  logger.info(`[Verify] Starting confirmation for ${email} — code: ${code}`);
+  logger.info(`[Verify] Handles: LC=${leetcode} CF=${codeforces} CC=${codechef} HR=${hackerrank}`);
+
   // Scrape display/first names from all 4 platforms in parallel
   const [lcName, cfName, ccName, hrName] = await Promise.all([
-    leetcode   ? leetcodeScraper.getDisplayName(leetcode)   : Promise.resolve(null),
-    codeforces ? codeforcesScraper.getDisplayName(codeforces) : Promise.resolve(null),
-    codechef   ? codechefScraper.getDisplayName(codechef)   : Promise.resolve(null),
-    hackerrank ? hackerrankScraper.getDisplayName(hackerrank) : Promise.resolve(null)
+    leetcode   ? leetcodeScraper.getDisplayName(leetcode)       : Promise.resolve(null),
+    codeforces ? codeforcesScraper.getDisplayName(codeforces)   : Promise.resolve(null),
+    codechef   ? codechefScraper.getDisplayName(codechef)       : Promise.resolve(null),
+    hackerrank ? hackerrankScraper.getDisplayName(hackerrank)   : Promise.resolve(null)
   ]);
 
-  // Check each platform (only if handle was provided)
+  logger.info(`[Verify] Fetched names — LC:"${lcName}" CF:"${cfName}" CC:"${ccName}" HR:"${hrName}"`);
+
+  // ── Normalise: trim whitespace, uppercase ──────────────────
+  const norm = (s) => (s ? s.trim().toUpperCase() : null);
+
+  // ── Build per-platform result ───────────────────────────────
+  // Three possible states:
+  //   passed  = true   → name matched
+  //   passed  = false  → name was fetched but didn't match
+  //   scraperError     → scraper returned null (network / profile private / unknown)
+  const buildResult = (handle, rawName) => {
+    if (!handle) return { handle: null, name: null, passed: true, scraperError: false }; // not submitted
+    const normalised = norm(rawName);
+    if (rawName === null) {
+      // Scraper returned null — could be network error OR profile truly has no name set
+      return {
+        handle,
+        name:         null,
+        passed:       false,
+        scraperError: true,
+        hint:         `Could not fetch name from this platform. Check that the handle "${handle}" is correct and the profile is public.`
+      };
+    }
+    return {
+      handle,
+      name:         rawName,
+      normalised,
+      // Compare the FIRST WORD only — platforms like HackerRank return "FirstName LastName"
+      // and the user only changes their first name field to the code
+      passed:       normalised.split(/\s+/)[0] === code,
+      scraperError: false,
+      hint:         normalised.split(/\s+/)[0] !== code
+        ? `Found "${rawName}" — first name (first word) must be exactly "${code}".
+           Make sure you set your FIRST NAME field to the code (not full name, not username).`
+        : undefined
+    };
+  };
+
   const results = {
-    leetcode:   { handle: leetcode,   name: lcName, passed: !leetcode   || lcName?.toUpperCase() === code },
-    codeforces: { handle: codeforces, name: cfName, passed: !codeforces || cfName?.toUpperCase() === code },
-    codechef:   { handle: codechef,   name: ccName, passed: !codechef   || ccName?.toUpperCase() === code },
-    hackerrank: { handle: hackerrank, name: hrName, passed: !hackerrank || hrName?.toUpperCase() === code }
+    leetcode:   buildResult(leetcode,   lcName),
+    codeforces: buildResult(codeforces, cfName),
+    codechef:   buildResult(codechef,   ccName),
+    hackerrank: buildResult(hackerrank, hrName)
   };
 
   const allPassed = Object.values(results).every((r) => r.passed);
 
   if (!allPassed) {
     const failed = Object.entries(results)
-      .filter(([, v]) => !v.passed)
-      .map(([k, v]) => ({ platform: k, handle: v.handle, found: v.name, expected: code }));
+      .filter(([, v]) => !v.passed && v.handle) // only platforms that were provided
+      .map(([platform, v]) => ({
+        platform,
+        handle:       v.handle,
+        found:        v.name,
+        expected:     code,
+        scraperError: v.scraperError,
+        hint:         v.hint
+      }));
 
-    return { success: false, message: 'Verification failed on some platforms', failed, results };
+    logger.warn(`[Verify] Failed for ${email}: ${JSON.stringify(failed)}`);
+
+    return {
+      success: false,
+      message: 'Verification failed on some platforms. See "failed" array for details.',
+      failed,
+      results
+    };
   }
 
   // ✅ All passed — flush Redis, save to DB, mark verified
@@ -154,7 +214,7 @@ async function confirmVerification(email) {
   // Mark student as verified
   await query('UPDATE students SET is_verified = TRUE WHERE email = $1', [email]);
 
-  logger.info(`Student ${email} successfully verified all handles`);
+  logger.info(`✅ [Verify] Student ${email} successfully verified all handles`);
 
   return {
     success: true,

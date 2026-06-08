@@ -12,17 +12,19 @@ const HEADERS = {
 
 // ─────────────────────────────────────────────────────────────
 // Get display name — used during VERIFICATION
-// HackerRank profile returns a "name" field which includes first + last name
+// NOTE: /rest/hackers/{user}/profile is broken (returns 404).
+// Use /rest/contests/master/hackers/{user}/profile instead.
 // ─────────────────────────────────────────────────────────────
 async function getDisplayName(username) {
   try {
     const { data } = await axios.get(
-      `${BASE}/hackers/${encodeURIComponent(username)}/profile`,
+      `${BASE}/contests/master/hackers/${encodeURIComponent(username)}/profile`,
       { headers: HEADERS, timeout: 10000 }
     );
     const name = data?.model?.name?.trim();
-    // Return only the first name (first word)
-    return name ? name.split(' ')[0].trim() : null;
+    // Return the FULL name for verification comparison
+    // (Verification code has no spaces, so name === code when user sets it correctly)
+    return name || null;
   } catch (err) {
     logger.warn(`HackerRank getDisplayName failed for ${username}: ${err.message}`);
     return null;
@@ -35,7 +37,7 @@ async function getDisplayName(username) {
 async function getFullProfile(username) {
   try {
     const { data } = await axios.get(
-      `${BASE}/hackers/${encodeURIComponent(username)}/profile`,
+      `${BASE}/contests/master/hackers/${encodeURIComponent(username)}/profile`,
       { headers: HEADERS, timeout: 10000 }
     );
 

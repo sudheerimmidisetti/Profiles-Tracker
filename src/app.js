@@ -19,7 +19,15 @@ const app = express();
 // Security & Utility Middleware
 // ─────────────────────────────────────────────────────────────
 app.use(helmet());
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*', credentials: true }));
+// Parse comma-separated CORS origins (e.g. "https://a.vercel.app,https://b.vercel.app")
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+  : null;  // null = allow all in dev
+
+app.use(cors({
+  origin: allowedOrigins || '*',
+  credentials: true
+}));
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
