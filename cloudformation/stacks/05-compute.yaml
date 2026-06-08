@@ -1,0 +1,405 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "CPTrack Stack 5/5 — Compute: ALB, Launch Template, Auto Scaling Group, CloudWatch scaling alarms"
+
+Parameters:
+  VpcId:              { Type: AWS::EC2::VPC::Id }
+  PublicSubnet1Id:    { Type: AWS::EC2::Subnet::Id }
+  PublicSubnet2Id:    { Type: AWS::EC2::Subnet::Id }
+  AlbSgId:            { Type: AWS::EC2::SecurityGroup::Id }
+  Ec2SgId:            { Type: AWS::EC2::SecurityGroup::Id }
+  InstanceProfileArn: { Type: String }
+  SecretName:         { Type: String }
+  InstanceType:       { Type: String,  Default: t3.small }
+  KeyPairName:        { Type: AWS::EC2::KeyPair::KeyName }
+  AsgMin:             { Type: Number,  Default: 1 }
+  AsgDesired:         { Type: Number,  Default: 2 }
+  AsgMax:             { Type: Number,  Default: 6 }
+  GitHubRepo:         { Type: String,  Default: PrasannaReddy0583/profiles_tracker }
+  Environment:        { Type: String,  Default: production }
+
+# ── Latest Ubuntu 22.04 LTS AMI (us automatically updated by AWS) ─────────────
+Mappings:
+  UbuntuAmiMap:
+    ap-south-1:    { AMI: ami-0dee22c13ea7a9a67 }  # Ubuntu 22.04 LTS (Mumbai) — update periodically
+    us-east-1:     { AMI: ami-0c7217cdde317cfec }
+    eu-west-1:     { AMI: ami-0905a3c97561e0b69 }
+    ap-southeast-1: { AMI: ami-078c1149d8ad719a7 }
+
+Resources:
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  # Application Load Balancer
+  # ═════════════════════════════════════════════════════════════════════════════
+
+  # ── ALB ───────────────────────────────────────────────────────────────────────
+  Alb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name:           !Sub "cptrack-alb-${Environment}"
+      Type:           application
+      Scheme:         internet-facing
+      SecurityGroups: [!Ref AlbSgId]
+      Subnets:        [!Ref PublicSubnet1Id, !Ref PublicSubnet2Id]
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: "true"
+        - Key: routing.http2.enabled
+          Value: "true"
+        - Key: idle_timeout.timeout_seconds
+          Value: "60"
+      Tags:
+        - Key: Name
+          Value: !Sub "cptrack-alb-${Environment}"
+
+  # ── Target Group ──────────────────────────────────────────────────────────────
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name:            !Sub "cptrack-tg-${Environment}"
+      Port:            3000
+      Protocol:        HTTP
+      VpcId:           !Ref VpcId
+      TargetType:      instance
+      HealthCheckPath:     /health
+      HealthCheckProtocol: HTTP
+      HealthCheckPort:     "3000"
+      HealthCheckIntervalSeconds:       15
+      HealthCheckTimeoutSeconds:        5
+      HealthyThresholdCount:            2
+      UnhealthyThresholdCount:          2
+      Matcher:         { HttpCode: "200" }
+      # Drain connections before removing instance from rotation (rolling deploys)
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "30"
+        - Key: stickiness.enabled
+          Value: "false"   # JWT = stateless, no stickiness needed
+      Tags:
+        - Key: Name
+          Value: !Sub "cptrack-tg-${Environment}"
+
+  # ── Listener: HTTP → HTTPS redirect ──────────────────────────────────────────
+  HttpListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port:            80
+      Protocol:        HTTP
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            Port:       "443"
+            Protocol:   HTTPS
+            StatusCode: HTTP_301
+
+  # ── Listener: HTTPS → Target Group ───────────────────────────────────────────
+  # NOTE: We use HTTP on port 443 here because Cloudflare → ALB traffic
+  # comes via Cloudflare's proxy with Cloudflare's own SSL cert.
+  # To use HTTPS (Full Strict mode with ACM cert), request an ACM cert
+  # for api.dealance.app via AWS Certificate Manager FIRST, then replace
+  # this HTTP listener with an HTTPS listener using that cert ARN.
+  #
+  # For now we use the simpler HTTP-only setup (Cloudflare handles public SSL).
+  # See docs/CLOUDFORMATION.md for ACM + Full Strict setup instructions.
+  HttpsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port:            443
+      Protocol:        HTTP   # Change to HTTPS + add Certificates when ACM cert ready
+      DefaultActions:
+        - Type:            forward
+          TargetGroupArn:  !Ref TargetGroup
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  # EC2 Launch Template
+  # ═════════════════════════════════════════════════════════════════════════════
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub "cptrack-lt-${Environment}"
+      LaunchTemplateData:
+        ImageId:      !FindInMap [UbuntuAmiMap, !Ref AWS::Region, AMI]
+        InstanceType: !Ref InstanceType
+        KeyName:      !Ref KeyPairName
+
+        # IAM profile for Secrets Manager + CloudWatch + SSM
+        IamInstanceProfile:
+          Arn: !Ref InstanceProfileArn
+
+        # Security group
+        SecurityGroupIds: [!Ref Ec2SgId]
+
+        # Encrypted root volume
+        BlockDeviceMappings:
+          - DeviceName: /dev/sda1
+            Ebs:
+              VolumeSize:          20
+              VolumeType:          gp3
+              Encrypted:           true
+              DeleteOnTermination: true
+
+        # IMDSv2 only (more secure — prevents SSRF attacks)
+        MetadataOptions:
+          HttpEndpoint:             enabled
+          HttpTokens:               required   # Forces IMDSv2
+          HttpPutResponseHopLimit:  1
+
+        # Detailed monitoring (1-minute CloudWatch intervals)
+        Monitoring:
+          Enabled: true
+
+        # User data — runs on every new instance from ASG
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -euo pipefail
+            exec > >(tee /var/log/user-data.log | logger -t user-data) 2>&1
+
+            echo "=== CPTrack EC2 Bootstrap: $(date) ==="
+
+            # ── System update ──────────────────────────────────────────────────
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -y
+            apt-get install -y curl git jq awscli
+
+            # ── Node.js 20 LTS ────────────────────────────────────────────────
+            curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+            apt-get install -y nodejs
+            echo "Node $(node -v), npm $(npm -v)"
+
+            # ── PM2 ──────────────────────────────────────────────────────────
+            npm install -g pm2
+
+            # ── Clone app ────────────────────────────────────────────────────
+            cd /home/ubuntu
+            git clone https://github.com/${GitHubRepo}.git cptrack
+            cd cptrack/backend
+            npm install --production
+            echo "✅ App cloned"
+
+            # ── Fetch secrets from Secrets Manager ───────────────────────────
+            SECRET_JSON=$(aws secretsmanager get-secret-value \
+              --region ${AWS::Region} \
+              --secret-id "${SecretName}" \
+              --query SecretString \
+              --output text)
+
+            # Write .env
+            echo "$SECRET_JSON" | jq -r 'to_entries[] | "\(.key)=\(.value)"' \
+              > /home/ubuntu/cptrack/backend/.env
+            chmod 600 /home/ubuntu/cptrack/backend/.env
+            echo "✅ Secrets written to .env"
+
+            # ── DB Migration (idempotent — safe to run on every instance) ────
+            cd /home/ubuntu/cptrack/backend
+            node src/migrations/runMigration.js \
+              || echo "⚠️ Migration already applied — continuing"
+
+            # ── Start via PM2 ────────────────────────────────────────────────
+            NODE_ENV=production pm2 start src/server.js \
+              --name "cptrack-api" \
+              --instances 1 \
+              --max-memory-restart 512M \
+              --exp-backoff-restart-delay=100
+
+            # Configure PM2 systemd startup
+            env PATH=$PATH:/usr/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu | tail -1 | bash
+            pm2 save
+            echo "✅ PM2 started"
+
+            # ── CloudWatch Agent ─────────────────────────────────────────────
+            wget -q https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
+            dpkg -i amazon-cloudwatch-agent.deb
+
+            cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json << 'CWCONFIG'
+            {
+              "logs": {
+                "logs_collected": {
+                  "files": {
+                    "collect_list": [
+                      {
+                        "file_path": "/home/ubuntu/.pm2/logs/cptrack-api-out.log",
+                        "log_group_name": "/cptrack/api/stdout",
+                        "log_stream_name": "{instance_id}"
+                      },
+                      {
+                        "file_path": "/home/ubuntu/.pm2/logs/cptrack-api-error.log",
+                        "log_group_name": "/cptrack/api/stderr",
+                        "log_stream_name": "{instance_id}"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+            CWCONFIG
+
+            systemctl start amazon-cloudwatch-agent
+            systemctl enable amazon-cloudwatch-agent
+            echo "=== Bootstrap complete: $(date) ==="
+
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub "cptrack-api-${Environment}"
+              - Key: Environment
+                Value: !Ref Environment
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  # Auto Scaling Group
+  # ═════════════════════════════════════════════════════════════════════════════
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: HttpsListener
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: 1         # Keep ≥1 healthy during rolling updates
+        MaxBatchSize:          1         # Replace 1 instance at a time
+        PauseTime:             PT2M      # Wait 2 min between batches
+        WaitOnResourceSignals: false
+    Properties:
+      AutoScalingGroupName: !Sub "cptrack-asg-${Environment}"
+      LaunchTemplate:
+        LaunchTemplateId:      !Ref LaunchTemplate
+        Version:               !GetAtt LaunchTemplate.LatestVersionNumber
+      MinSize:         !Sub "${AsgMin}"
+      DesiredCapacity: !Sub "${AsgDesired}"
+      MaxSize:         !Sub "${AsgMax}"
+
+      # Multi-AZ: both public subnets
+      VPCZoneIdentifier: [!Ref PublicSubnet1Id, !Ref PublicSubnet2Id]
+
+      # Register with ALB target group
+      TargetGroupARNs: [!Ref TargetGroup]
+
+      # ELB health checks (ALB /health endpoint)
+      HealthCheckType:         ELB
+      HealthCheckGracePeriod:  120   # Wait 2 min before health checking new instances
+
+      # Termination: replace oldest-template instances first (rolling deploy)
+      TerminationPolicies:
+        - OldestLaunchTemplate
+        - OldestInstance
+
+      Tags:
+        - Key: Name
+          Value: !Sub "cptrack-api-${Environment}"
+          PropagateAtLaunch: true
+        - Key: Environment
+          Value: !Ref Environment
+          PropagateAtLaunch: true
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  # Auto Scaling Policies
+  # ═════════════════════════════════════════════════════════════════════════════
+
+  # Target tracking: maintain 60% average CPU (AWS manages scale out AND in)
+  CpuTargetTrackingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType:           TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue:     60.0
+        DisableScaleIn:  false
+
+  # Step scale OUT — fast when CPU spikes above 80%
+  ScaleOutPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType:           StepScaling
+      AdjustmentType:       ChangeInCapacity
+      StepAdjustments:
+        - MetricIntervalLowerBound: 0
+          MetricIntervalUpperBound: 20
+          ScalingAdjustment:        2   # CPU 80-100%: add 2 instances
+        - MetricIntervalLowerBound: 20
+          ScalingAdjustment:        3   # CPU >100%: add 3 instances
+
+  # Step scale IN — slow (avoids thrashing)
+  ScaleInPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType:           StepScaling
+      AdjustmentType:       ChangeInCapacity
+      StepAdjustments:
+        - MetricIntervalUpperBound: 0
+          ScalingAdjustment:        -1   # CPU <30%: remove 1 instance
+
+  # ── CloudWatch Alarms ─────────────────────────────────────────────────────────
+
+  HighCpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName:          !Sub "cptrack-cpu-high-${Environment}"
+      AlarmDescription:   "Scale out: CPU > 80% for 2 minutes"
+      MetricName:         CPUUtilization
+      Namespace:          AWS/EC2
+      Statistic:          Average
+      Period:             60
+      EvaluationPeriods:  2
+      Threshold:          80
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:       [!Ref ScaleOutPolicy]
+      Dimensions:
+        - Name:  AutoScalingGroupName
+          Value: !Ref AutoScalingGroup
+
+  LowCpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName:          !Sub "cptrack-cpu-low-${Environment}"
+      AlarmDescription:   "Scale in: CPU < 30% for 10 minutes"
+      MetricName:         CPUUtilization
+      Namespace:          AWS/EC2
+      Statistic:          Average
+      Period:             60
+      EvaluationPeriods:  10
+      Threshold:          30
+      ComparisonOperator: LessThanThreshold
+      AlarmActions:       [!Ref ScaleInPolicy]
+      Dimensions:
+        - Name:  AutoScalingGroupName
+          Value: !Ref AutoScalingGroup
+
+  # ALB 5xx error alarm (triggers if Node.js crashes on multiple instances)
+  Alb5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName:         !Sub "cptrack-alb-5xx-${Environment}"
+      AlarmDescription:  "ALB 5xx rate > 10 per minute"
+      MetricName:        HTTPCode_ELB_5XX_Count
+      Namespace:         AWS/ApplicationELB
+      Statistic:         Sum
+      Period:            60
+      EvaluationPeriods: 3
+      Threshold:         10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name:  LoadBalancer
+          Value: !GetAtt Alb.LoadBalancerFullName
+
+Outputs:
+  AlbDnsName:
+    Description: "ALB DNS name — add CNAME in Cloudflare"
+    Value: !GetAtt Alb.DNSName
+    Export: { Name: !Sub "${AWS::StackName}-AlbDnsName" }
+
+  AlbArn:
+    Value: !Ref Alb
+    Export: { Name: !Sub "${AWS::StackName}-AlbArn" }
+
+  TargetGroupArn:
+    Value: !Ref TargetGroup
+    Export: { Name: !Sub "${AWS::StackName}-TargetGroupArn" }
+
+  AsgName:
+    Description: "ASG name — use for rolling deploys"
+    Value: !Ref AutoScalingGroup
+    Export: { Name: !Sub "${AWS::StackName}-AsgName" }

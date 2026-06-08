@@ -1,0 +1,102 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "CPTrack Stack 4/5 — IAM: EC2 instance role with Secrets Manager read, CloudWatch, and SSM access"
+
+Parameters:
+  SecretArn:   { Type: String }
+  Environment: { Type: String, Default: production }
+
+Resources:
+
+  # ── EC2 Instance Role ─────────────────────────────────────────────────────────
+  Ec2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "cptrack-ec2-role-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      Tags:
+        - Key: Name
+          Value: !Sub "cptrack-ec2-role-${Environment}"
+
+  # ── Policy: Read the specific Secrets Manager secret ─────────────────────────
+  SecretsPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "cptrack-ec2-read-secrets-${Environment}"
+      Roles: [!Ref Ec2Role]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+              - secretsmanager:DescribeSecret
+            Resource: !Ref SecretArn
+          # KMS decrypt (for encrypted secrets — uses AWS managed key)
+          - Effect: Allow
+            Action: kms:Decrypt
+            Resource: "*"
+            Condition:
+              StringEquals:
+                "kms:ViaService": !Sub "secretsmanager.${AWS::Region}.amazonaws.com"
+
+  # ── Managed Policy: CloudWatch Agent (ship PM2 logs to CloudWatch Logs) ──────
+  CloudWatchPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "cptrack-ec2-cloudwatch-${Environment}"
+      Roles: [!Ref Ec2Role]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - logs:DescribeLogStreams
+              - cloudwatch:PutMetricData
+              - ec2:DescribeVolumes
+              - ec2:DescribeTags
+            Resource: "*"
+
+  # ── AWS Systems Manager (SSH-free terminal access) ────────────────────────────
+  SsmPolicyAttachment:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "cptrack-ec2-ssm-${Environment}"
+      Roles: [!Ref Ec2Role]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - ssm:UpdateInstanceInformation
+              - ssmmessages:CreateControlChannel
+              - ssmmessages:CreateDataChannel
+              - ssmmessages:OpenControlChannel
+              - ssmmessages:OpenDataChannel
+              - s3:GetEncryptionConfiguration
+            Resource: "*"
+
+  # ── Instance Profile (attaches role to EC2 instances) ────────────────────────
+  Ec2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "cptrack-ec2-profile-${Environment}"
+      Roles: [!Ref Ec2Role]
+
+Outputs:
+  Ec2RoleArn:
+    Description: "EC2 IAM Role ARN"
+    Value: !GetAtt Ec2Role.Arn
+    Export: { Name: !Sub "${AWS::StackName}-Ec2RoleArn" }
+
+  InstanceProfileArn:
+    Description: "EC2 Instance Profile ARN — attached to Launch Template"
+    Value: !GetAtt Ec2InstanceProfile.Arn
+    Export: { Name: !Sub "${AWS::StackName}-InstanceProfileArn" }

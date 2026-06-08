@@ -1,0 +1,36 @@
+[
+  { "ParameterKey": "Environment",           "ParameterValue": "production" },
+
+  { "ParameterKey": "VpcCidr",               "ParameterValue": "10.0.0.0/16" },
+  { "ParameterKey": "PublicSubnet1Cidr",      "ParameterValue": "10.0.1.0/24" },
+  { "ParameterKey": "PublicSubnet2Cidr",      "ParameterValue": "10.0.2.0/24" },
+  { "ParameterKey": "PrivateSubnet1Cidr",     "ParameterValue": "10.0.3.0/24" },
+  { "ParameterKey": "PrivateSubnet2Cidr",     "ParameterValue": "10.0.4.0/24" },
+
+  { "ParameterKey": "InstanceType",          "ParameterValue": "t3.small" },
+  { "ParameterKey": "KeyPairName",           "ParameterValue": "CHANGE_ME_your_key_pair_name" },
+  { "ParameterKey": "AsgMin",                "ParameterValue": "1" },
+  { "ParameterKey": "AsgDesired",            "ParameterValue": "2" },
+  { "ParameterKey": "AsgMax",                "ParameterValue": "6" },
+
+  { "ParameterKey": "DBInstanceClass",       "ParameterValue": "db.t3.micro" },
+  { "ParameterKey": "DBName",                "ParameterValue": "coding_tracker" },
+  { "ParameterKey": "DBUsername",            "ParameterValue": "cptrack" },
+  { "ParameterKey": "DBPassword",            "ParameterValue": "CHANGE_ME_strong_password_min16chars" },
+  { "ParameterKey": "DBMultiAZ",             "ParameterValue": "true" },
+
+  { "ParameterKey": "RedisNodeType",         "ParameterValue": "cache.t3.micro" },
+  { "ParameterKey": "RedisAuthToken",        "ParameterValue": "CHANGE_ME_redis_auth_token_min16chars" },
+
+  { "ParameterKey": "JwtSecret",             "ParameterValue": "CHANGE_ME_min_64_char_hex_string_1234567890abcdef1234567890abcdef1234" },
+  { "ParameterKey": "AdminSecret",           "ParameterValue": "CHANGE_ME_admin_secret_here" },
+  { "ParameterKey": "SmtpUser",              "ParameterValue": "CHANGE_ME_ses_smtp_username" },
+  { "ParameterKey": "SmtpPassword",          "ParameterValue": "CHANGE_ME_ses_smtp_password" },
+  { "ParameterKey": "CollegeEmailDomains",   "ParameterValue": "@acet.ac.in,@aec.edu.in,@adityauniversity.in" },
+
+  { "ParameterKey": "DomainName",            "ParameterValue": "dealance.app" },
+  { "ParameterKey": "ApiSubdomain",          "ParameterValue": "api" },
+  { "ParameterKey": "GitHubRepo",            "ParameterValue": "PrasannaReddy0583/profiles_tracker" },
+
+  { "ParameterKey": "TemplatesBucketName",   "ParameterValue": "INJECTED_BY_DEPLOY_SCRIPT" }
+]

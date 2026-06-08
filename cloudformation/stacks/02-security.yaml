@@ -1,0 +1,137 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "CPTrack Stack 2/5 — Security Groups: ALB (Cloudflare IPs only), EC2, RDS, Redis"
+
+Parameters:
+  VpcId:       { Type: AWS::EC2::VPC::Id }
+  Environment: { Type: String, Default: production }
+
+Resources:
+
+  # ── ALB Security Group ────────────────────────────────────────────────────────
+  # ONLY accepts traffic from Cloudflare's published IPv4 ranges.
+  # Direct requests to the ALB DNS are dropped. Full list: cloudflare.com/ips
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName:        !Sub "cptrack-sg-alb-${Environment}"
+      GroupDescription: "ALB: inbound HTTPS/HTTP from Cloudflare IPv4 only"
+      VpcId:            !Ref VpcId
+      SecurityGroupIngress:
+        # ── Cloudflare IPv4 ranges (HTTPS :443) ──────────────────────────────
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "103.21.244.0/22",  Description: "Cloudflare" }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "103.22.200.0/22",  Description: "Cloudflare" }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "103.31.4.0/22",   Description: "Cloudflare" }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "104.16.0.0/13",   Description: "Cloudflare" }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "104.24.0.0/14",   Description: "Cloudflare" }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "108.162.192.0/18",Description: "Cloudflare" }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "131.0.72.0/22",   Description: "Cloudflare" }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "141.101.64.0/18", Description: "Cloudflare" }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "162.158.0.0/15",  Description: "Cloudflare" }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "172.64.0.0/13",   Description: "Cloudflare" }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "173.245.48.0/20", Description: "Cloudflare" }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "188.114.96.0/20", Description: "Cloudflare" }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "190.93.240.0/20", Description: "Cloudflare" }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "197.234.240.0/22",Description: "Cloudflare" }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: "198.41.128.0/17", Description: "Cloudflare" }
+        # ── Cloudflare IPv4 ranges (HTTP :80 → redirected to HTTPS) ──────────
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "103.21.244.0/22",  Description: "Cloudflare HTTP" }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "103.22.200.0/22",  Description: "Cloudflare HTTP" }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "103.31.4.0/22",    Description: "Cloudflare HTTP" }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "104.16.0.0/13",    Description: "Cloudflare HTTP" }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "104.24.0.0/14",    Description: "Cloudflare HTTP" }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "108.162.192.0/18", Description: "Cloudflare HTTP" }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "141.101.64.0/18",  Description: "Cloudflare HTTP" }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "162.158.0.0/15",   Description: "Cloudflare HTTP" }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "172.64.0.0/13",    Description: "Cloudflare HTTP" }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "173.245.48.0/20",  Description: "Cloudflare HTTP" }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "188.114.96.0/20",  Description: "Cloudflare HTTP" }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "190.93.240.0/20",  Description: "Cloudflare HTTP" }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "197.234.240.0/22", Description: "Cloudflare HTTP" }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: "198.41.128.0/17",  Description: "Cloudflare HTTP" }
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: "0.0.0.0/0"
+          Description: "All outbound to EC2 target group"
+      Tags:
+        - Key: Name
+          Value: !Sub "cptrack-sg-alb-${Environment}"
+
+  # ── EC2 Security Group ────────────────────────────────────────────────────────
+  Ec2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName:        !Sub "cptrack-sg-ec2-${Environment}"
+      GroupDescription: "EC2 API: inbound from ALB on :3000, SSH restricted"
+      VpcId:            !Ref VpcId
+      SecurityGroupIngress:
+        # Node.js from ALB only (reference by security group, not CIDR)
+        - IpProtocol:             tcp
+          FromPort:               3000
+          ToPort:                 3000
+          SourceSecurityGroupId:  !Ref AlbSecurityGroup
+          Description:            "Node.js API from ALB"
+        # SSH — ⚠️ CHANGE to YOUR_IP/32 in production. Or remove and use SSM.
+        - IpProtocol: tcp
+          FromPort:   22
+          ToPort:     22
+          CidrIp:     "0.0.0.0/0"
+          Description: "SSH — restrict to office IP in production"
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp:     "0.0.0.0/0"
+          Description: "All outbound — scraping + npm + git via NAT"
+      Tags:
+        - Key: Name
+          Value: !Sub "cptrack-sg-ec2-${Environment}"
+
+  # ── RDS Security Group ────────────────────────────────────────────────────────
+  RdsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName:        !Sub "cptrack-sg-rds-${Environment}"
+      GroupDescription: "RDS PostgreSQL: inbound only from EC2 security group"
+      VpcId:            !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol:             tcp
+          FromPort:               5432
+          ToPort:                 5432
+          SourceSecurityGroupId:  !Ref Ec2SecurityGroup
+          Description:            "PostgreSQL from EC2 only"
+      # No egress — databases never initiate connections
+      Tags:
+        - Key: Name
+          Value: !Sub "cptrack-sg-rds-${Environment}"
+
+  # ── Redis Security Group ──────────────────────────────────────────────────────
+  RedisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName:        !Sub "cptrack-sg-redis-${Environment}"
+      GroupDescription: "Redis TLS: inbound only from EC2 security group"
+      VpcId:            !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol:             tcp
+          FromPort:               6380
+          ToPort:                 6380
+          SourceSecurityGroupId:  !Ref Ec2SecurityGroup
+          Description:            "Redis TLS from EC2 only"
+      Tags:
+        - Key: Name
+          Value: !Sub "cptrack-sg-redis-${Environment}"
+
+Outputs:
+  AlbSgId:
+    Value: !Ref AlbSecurityGroup
+    Export: { Name: !Sub "${AWS::StackName}-AlbSgId" }
+
+  Ec2SgId:
+    Value: !Ref Ec2SecurityGroup
+    Export: { Name: !Sub "${AWS::StackName}-Ec2SgId" }
+
+  RdsSgId:
+    Value: !Ref RdsSecurityGroup
+    Export: { Name: !Sub "${AWS::StackName}-RdsSgId" }
+
+  RedisSgId:
+    Value: !Ref RedisSecurityGroup
+    Export: { Name: !Sub "${AWS::StackName}-RedisSgId" }

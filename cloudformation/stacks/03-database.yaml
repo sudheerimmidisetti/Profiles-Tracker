@@ -1,0 +1,251 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "CPTrack Stack 3/5 — Data: RDS PostgreSQL (Multi-AZ) + ElastiCache Redis + Secrets Manager"
+
+Parameters:
+  VpcId:           { Type: AWS::EC2::VPC::Id }
+  PrivateSubnet1Id: { Type: AWS::EC2::Subnet::Id }
+  PrivateSubnet2Id: { Type: AWS::EC2::Subnet::Id }
+  RdsSgId:         { Type: AWS::EC2::SecurityGroup::Id }
+  RedisSgId:       { Type: AWS::EC2::SecurityGroup::Id }
+  DBInstanceClass: { Type: String, Default: db.t3.micro }
+  DBName:          { Type: String, Default: coding_tracker }
+  DBUsername:      { Type: String, Default: cptrack }
+  DBPassword:      { Type: String, NoEcho: true }
+  DBMultiAZ:       { Type: String, Default: "true", AllowedValues: ["true","false"] }
+  RedisNodeType:   { Type: String, Default: cache.t3.micro }
+  RedisAuthToken:  { Type: String, NoEcho: true }
+  JwtSecret:       { Type: String, NoEcho: true }
+  AdminSecret:     { Type: String, NoEcho: true }
+  SmtpUser:        { Type: String, NoEcho: true }
+  SmtpPassword:    { Type: String, NoEcho: true }
+  CollegeEmailDomains: { Type: String }
+  DomainName:      { Type: String, Default: dealance.app }
+  Environment:     { Type: String, Default: production }
+
+Resources:
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  # RDS PostgreSQL
+  # ═════════════════════════════════════════════════════════════════════════════
+
+  # ── DB Subnet Group (private subnets — no internet access) ─────────────────
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupName:        !Sub "cptrack-db-subnet-${Environment}"
+      DBSubnetGroupDescription: "Private subnets for RDS — no internet exposure"
+      SubnetIds:
+        - !Ref PrivateSubnet1Id
+        - !Ref PrivateSubnet2Id
+      Tags:
+        - Key: Name
+          Value: !Sub "cptrack-db-subnet-${Environment}"
+
+  # ── Parameter Group (slow query logging + pg_stat_statements) ──────────────
+  DbParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      DBParameterGroupName: !Sub "cptrack-pg15-${Environment}"
+      Description:          "CPTrack PostgreSQL 15 — slow query logging enabled"
+      Family:               postgres15
+      Parameters:
+        log_connections:             "1"
+        log_disconnections:          "1"
+        log_min_duration_statement:  "1000"  # Log queries > 1s
+        shared_preload_libraries:    "pg_stat_statements"
+      Tags:
+        - Key: Name
+          Value: !Sub "cptrack-pg15-${Environment}"
+
+  # ── RDS Monitoring Role ────────────────────────────────────────────────────
+  RdsMonitoringRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "cptrack-rds-monitoring-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: monitoring.rds.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole
+
+  # ── RDS PostgreSQL Instance ────────────────────────────────────────────────
+  RdsInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot   # Takes a snapshot before deleting (safety net)
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub "cptrack-db-${Environment}"
+
+      # Engine
+      Engine:            postgres
+      EngineVersion:     "15.6"
+      DBInstanceClass:   !Ref DBInstanceClass
+      AllocatedStorage:  "20"
+      MaxAllocatedStorage: 100    # Auto-scale storage to 100 GB
+      StorageType:       gp3
+      StorageEncrypted:  true     # AES-256 at rest
+
+      # Database
+      DBName:          !Ref DBName
+      MasterUsername:  !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      Port:            "5432"
+
+      # Network — PRIVATE
+      DBSubnetGroupName:    !Ref DbSubnetGroup
+      VPCSecurityGroups:    [!Ref RdsSgId]
+      PubliclyAccessible:   false   # CRITICAL: no public IP
+
+      # High Availability
+      MultiAZ: !Equals [!Ref DBMultiAZ, "true"]
+
+      # Backups
+      BackupRetentionPeriod:  7
+      PreferredBackupWindow:  "20:30-21:00"        # UTC = 2 AM IST
+      PreferredMaintenanceWindow: "sun:21:00-sun:22:00"  # UTC Sunday
+      CopyTagsToSnapshot:     true
+      DeleteAutomatedBackups: false
+
+      # Protection
+      DeletionProtection: true
+
+      # Performance Insights
+      EnablePerformanceInsights:             true
+      PerformanceInsightsRetentionPeriod:    7
+
+      # Enhanced Monitoring
+      MonitoringInterval: 60
+      MonitoringRoleArn:  !GetAtt RdsMonitoringRole.Arn
+
+      # Parameters
+      DBParameterGroupName: !Ref DbParameterGroup
+
+      Tags:
+        - Key: Name
+          Value: !Sub "cptrack-postgres-${Environment}"
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  # ElastiCache Redis
+  # ═════════════════════════════════════════════════════════════════════════════
+
+  # ── Redis Subnet Group (private subnets) ───────────────────────────────────
+  RedisSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      CacheSubnetGroupName: !Sub "cptrack-redis-subnet-${Environment}"
+      Description:          "Private subnets for Redis — no internet access"
+      SubnetIds:
+        - !Ref PrivateSubnet1Id
+        - !Ref PrivateSubnet2Id
+
+  # ── Redis Parameter Group ──────────────────────────────────────────────────
+  RedisParameterGroup:
+    Type: AWS::ElastiCache::ParameterGroup
+    Properties:
+      CacheParameterGroupFamily: redis7
+      Description: "CPTrack Redis 7 parameter group"
+      Properties:
+        maxmemory-policy: "allkeys-lru"   # Evict LRU keys when memory full
+
+  # ── Redis Replication Group (primary + 1 replica across AZs) ─────────────
+  RedisCluster:
+    Type: AWS::ElastiCache::ReplicationGroup
+    Properties:
+      ReplicationGroupId:          !Sub "cptrack-redis-${Environment}"
+      ReplicationGroupDescription: "CPTrack Redis — JWT sessions + distributed sync lock"
+
+      # Engine
+      Engine:             redis
+      EngineVersion:      "7.1.0"
+      CacheNodeType:      !Ref RedisNodeType
+      Port:               6380     # TLS port
+
+      # Topology: 1 primary + 1 replica
+      NumCacheClusters:          2
+      AutomaticFailoverEnabled:  true   # promote replica if primary fails
+      MultiAZEnabled:            true   # replica in different AZ
+
+      # Network — private
+      CacheSubnetGroupName: !Ref RedisSubnetGroup
+      SecurityGroupIds:     [!Ref RedisSgId]
+
+      # Security
+      AtRestEncryptionEnabled:   true    # AES-256 at rest
+      TransitEncryptionEnabled:  true    # TLS in transit
+      AuthToken:                 !Ref RedisAuthToken
+
+      # Parameter group
+      CacheParameterGroupName: !Ref RedisParameterGroup
+
+      # Maintenance
+      PreferredMaintenanceWindow:    "sun:22:00-sun:23:00"   # UTC = 3:30 AM IST
+      SnapshotRetentionLimit:        3
+      SnapshotWindow:                "20:00-21:00"            # UTC = 1:30 AM IST
+
+      Tags:
+        - Key: Name
+          Value: !Sub "cptrack-redis-${Environment}"
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  # Secrets Manager — single source of truth for all app credentials
+  # EC2 fetches this JSON at startup via IAM role (no .env files on servers)
+  # ═════════════════════════════════════════════════════════════════════════════
+  AppSecret:
+    Type: AWS::SecretsManager::Secret
+    DependsOn:
+      - RdsInstance
+      - RedisCluster
+    Properties:
+      Name:        !Sub "cptrack/production"
+      Description: "CPTrack production secrets — fetched by EC2 at startup via IAM role"
+      SecretString: !Sub
+        - |
+          {
+            "DATABASE_URL": "postgresql://${DBUsername}:${DBPassword}@${RdsEndpoint}:5432/${DBName}",
+            "REDIS_URL": "rediss://default:${RedisAuthToken}@${RedisEndpoint}:6380",
+            "JWT_SECRET": "${JwtSecret}",
+            "ADMIN_SECRET": "${AdminSecret}",
+            "SMTP_HOST": "email-smtp.${AWS::Region}.amazonaws.com",
+            "SMTP_PORT": "587",
+            "SMTP_SECURE": "false",
+            "SMTP_USER": "${SmtpUser}",
+            "SMTP_PASS": "${SmtpPassword}",
+            "FROM_EMAIL": "noreply@${DomainName}",
+            "COLLEGE_EMAIL_DOMAINS": "${CollegeEmailDomains}",
+            "CORS_ORIGIN": "https://tracker.${DomainName},https://admin.${DomainName}",
+            "NODE_ENV": "production",
+            "PORT": "3000"
+          }
+        - RdsEndpoint:  !GetAtt RdsInstance.Endpoint.Address
+          RedisEndpoint: !GetAtt RedisCluster.PrimaryEndPoint.Address
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  RdsEndpoint:
+    Description: "RDS PostgreSQL endpoint (private)"
+    Value: !GetAtt RdsInstance.Endpoint.Address
+    Export: { Name: !Sub "${AWS::StackName}-RdsEndpoint" }
+
+  RedisEndpoint:
+    Description: "ElastiCache Redis primary endpoint (private)"
+    Value: !GetAtt RedisCluster.PrimaryEndPoint.Address
+    Export: { Name: !Sub "${AWS::StackName}-RedisEndpoint" }
+
+  SecretArn:
+    Description: "Secrets Manager ARN"
+    Value: !Ref AppSecret
+    Export: { Name: !Sub "${AWS::StackName}-SecretArn" }
+
+  SecretName:
+    Description: "Secrets Manager secret name"
+    Value: !Sub "cptrack/production"
+    Export: { Name: !Sub "${AWS::StackName}-SecretName" }

@@ -1,0 +1,337 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  CPTrack — Master (Root) CloudFormation Stack.
+  Orchestrates all nested stacks: Network → Security → Database → IAM → Compute.
+  Deploy this single template and it provisions the entire infrastructure.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# METADATA — Console UI grouping for parameters
+# ═══════════════════════════════════════════════════════════════════════════════
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: "🌐 Network" }
+        Parameters: [VpcCidr, PublicSubnet1Cidr, PublicSubnet2Cidr, PrivateSubnet1Cidr, PrivateSubnet2Cidr]
+      - Label: { default: "💻 EC2 / Auto Scaling" }
+        Parameters: [InstanceType, KeyPairName, AsgMin, AsgDesired, AsgMax]
+      - Label: { default: "🗄️  Database (RDS PostgreSQL)" }
+        Parameters: [DBInstanceClass, DBName, DBUsername, DBPassword, DBMultiAZ]
+      - Label: { default: "⚡ Cache (ElastiCache Redis)" }
+        Parameters: [RedisNodeType, RedisAuthToken]
+      - Label: { default: "🔐 Application Secrets" }
+        Parameters: [JwtSecret, AdminSecret, SmtpUser, SmtpPassword, CollegeEmailDomains]
+      - Label: { default: "☁️  Cloudflare / Domain" }
+        Parameters: [DomainName, ApiSubdomain]
+      - Label: { default: "📦 Deployment" }
+        Parameters: [GitHubRepo, TemplatesBucketName, Environment]
+    ParameterLabels:
+      DBPassword:    { default: "Database Password (min 16 chars)" }
+      JwtSecret:     { default: "JWT Secret (min 64 chars hex)" }
+      AdminSecret:   { default: "Admin Dashboard Secret" }
+      KeyPairName:   { default: "EC2 Key Pair Name" }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PARAMETERS
+# ═══════════════════════════════════════════════════════════════════════════════
+Parameters:
+
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging]
+    Description: Deployment environment
+
+  # ── Network ────────────────────────────────────────────────────────────────
+  VpcCidr:
+    Type: String
+    Default: "10.0.0.0/16"
+    AllowedPattern: "^(\\d{1,3}\\.){3}\\d{1,3}/\\d{1,2}$"
+    Description: CIDR block for the VPC
+
+  PublicSubnet1Cidr:
+    Type: String
+    Default: "10.0.1.0/24"
+    Description: Public subnet 1 (AZ-a) — ALB + EC2
+
+  PublicSubnet2Cidr:
+    Type: String
+    Default: "10.0.2.0/24"
+    Description: Public subnet 2 (AZ-b) — ALB + EC2
+
+  PrivateSubnet1Cidr:
+    Type: String
+    Default: "10.0.3.0/24"
+    Description: Private subnet 1 (AZ-a) — RDS + Redis
+
+  PrivateSubnet2Cidr:
+    Type: String
+    Default: "10.0.4.0/24"
+    Description: Private subnet 2 (AZ-b) — RDS + Redis
+
+  # ── EC2 / ASG ──────────────────────────────────────────────────────────────
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues: [t3.micro, t3.small, t3.medium, t3.large]
+    Description: EC2 instance type
+
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: EC2 key pair for SSH access (must exist in the region)
+
+  AsgMin:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    Description: ASG minimum instances
+
+  AsgDesired:
+    Type: Number
+    Default: 2
+    MinValue: 1
+    Description: ASG desired instances (active-active = 2 across 2 AZs)
+
+  AsgMax:
+    Type: Number
+    Default: 6
+    MinValue: 1
+    Description: ASG maximum instances
+
+  # ── RDS ────────────────────────────────────────────────────────────────────
+  DBInstanceClass:
+    Type: String
+    Default: db.t3.micro
+    AllowedValues: [db.t3.micro, db.t3.small, db.t3.medium]
+    Description: RDS instance class
+
+  DBName:
+    Type: String
+    Default: coding_tracker
+    Description: PostgreSQL database name
+
+  DBUsername:
+    Type: String
+    Default: cptrack
+    NoEcho: false
+    Description: PostgreSQL master username
+
+  DBPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    MaxLength: 128
+    Description: PostgreSQL master password (stored in Secrets Manager)
+    ConstraintDescription: Must be 16-128 characters
+
+  DBMultiAZ:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Enable Multi-AZ for RDS (recommended for production)
+
+  # ── ElastiCache ────────────────────────────────────────────────────────────
+  RedisNodeType:
+    Type: String
+    Default: cache.t3.micro
+    AllowedValues: [cache.t3.micro, cache.t3.small, cache.t3.medium]
+    Description: Redis node type
+
+  RedisAuthToken:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    MaxLength: 128
+    Description: Redis AUTH password (min 16 chars)
+
+  # ── App Secrets ────────────────────────────────────────────────────────────
+  JwtSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 64
+    Description: JWT signing secret (min 64 chars hex)
+
+  AdminSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 12
+    Description: Admin dashboard shared secret
+
+  SmtpUser:
+    Type: String
+    NoEcho: true
+    Description: AWS SES SMTP username (from SES SMTP credentials)
+
+  SmtpPassword:
+    Type: String
+    NoEcho: true
+    Description: AWS SES SMTP password
+
+  CollegeEmailDomains:
+    Type: String
+    Default: "@acet.ac.in,@aec.edu.in,@adityauniversity.in"
+    Description: Comma-separated allowed college email domains
+
+  # ── Domain ─────────────────────────────────────────────────────────────────
+  DomainName:
+    Type: String
+    Default: dealance.app
+    Description: Root domain (managed in Cloudflare)
+
+  ApiSubdomain:
+    Type: String
+    Default: api
+    Description: Subdomain for the backend API
+
+  # ── Deployment ─────────────────────────────────────────────────────────────
+  GitHubRepo:
+    Type: String
+    Default: PrasannaReddy0583/profiles_tracker
+    Description: GitHub repository (owner/repo)
+
+  TemplatesBucketName:
+    Type: String
+    Description: S3 bucket name where nested templates are uploaded (created by deploy.sh)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NESTED STACKS — deployed in dependency order
+# ═══════════════════════════════════════════════════════════════════════════════
+Resources:
+
+  # 1️⃣  Network (VPC, subnets, IGW, NAT, routes)
+  NetworkStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://${TemplatesBucketName}.s3.${AWS::Region}.amazonaws.com/stacks/01-network.yaml"
+      TimeoutInMinutes: 20
+      Parameters:
+        VpcCidr:           !Ref VpcCidr
+        PublicSubnet1Cidr: !Ref PublicSubnet1Cidr
+        PublicSubnet2Cidr: !Ref PublicSubnet2Cidr
+        PrivateSubnet1Cidr: !Ref PrivateSubnet1Cidr
+        PrivateSubnet2Cidr: !Ref PrivateSubnet2Cidr
+        Environment:       !Ref Environment
+      Tags:
+        - Key: Stack
+          Value: Network
+
+  # 2️⃣  Security Groups (depends on VPC from Network stack)
+  SecurityStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: NetworkStack
+    Properties:
+      TemplateURL: !Sub "https://${TemplatesBucketName}.s3.${AWS::Region}.amazonaws.com/stacks/02-security.yaml"
+      TimeoutInMinutes: 10
+      Parameters:
+        VpcId:       !GetAtt NetworkStack.Outputs.VpcId
+        Environment: !Ref Environment
+      Tags:
+        - Key: Stack
+          Value: Security
+
+  # 3️⃣  Database — RDS + ElastiCache + Secrets Manager
+  DatabaseStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: SecurityStack
+    Properties:
+      TemplateURL: !Sub "https://${TemplatesBucketName}.s3.${AWS::Region}.amazonaws.com/stacks/03-database.yaml"
+      TimeoutInMinutes: 40
+      Parameters:
+        VpcId:             !GetAtt NetworkStack.Outputs.VpcId
+        PrivateSubnet1Id:  !GetAtt NetworkStack.Outputs.PrivateSubnet1Id
+        PrivateSubnet2Id:  !GetAtt NetworkStack.Outputs.PrivateSubnet2Id
+        RdsSgId:           !GetAtt SecurityStack.Outputs.RdsSgId
+        RedisSgId:         !GetAtt SecurityStack.Outputs.RedisSgId
+        DBInstanceClass:   !Ref DBInstanceClass
+        DBName:            !Ref DBName
+        DBUsername:        !Ref DBUsername
+        DBPassword:        !Ref DBPassword
+        DBMultiAZ:         !Ref DBMultiAZ
+        RedisNodeType:     !Ref RedisNodeType
+        RedisAuthToken:    !Ref RedisAuthToken
+        JwtSecret:         !Ref JwtSecret
+        AdminSecret:       !Ref AdminSecret
+        SmtpUser:          !Ref SmtpUser
+        SmtpPassword:      !Ref SmtpPassword
+        CollegeEmailDomains: !Ref CollegeEmailDomains
+        DomainName:        !Ref DomainName
+        Environment:       !Ref Environment
+      Tags:
+        - Key: Stack
+          Value: Database
+
+  # 4️⃣  IAM Roles (depends on Secrets Manager ARN from Database stack)
+  IamStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: DatabaseStack
+    Properties:
+      TemplateURL: !Sub "https://${TemplatesBucketName}.s3.${AWS::Region}.amazonaws.com/stacks/04-iam.yaml"
+      TimeoutInMinutes: 10
+      Parameters:
+        SecretArn:   !GetAtt DatabaseStack.Outputs.SecretArn
+        Environment: !Ref Environment
+      Tags:
+        - Key: Stack
+          Value: IAM
+
+  # 5️⃣  Compute — ALB + Launch Template + Auto Scaling Group
+  ComputeStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: IamStack
+    Properties:
+      TemplateURL: !Sub "https://${TemplatesBucketName}.s3.${AWS::Region}.amazonaws.com/stacks/05-compute.yaml"
+      TimeoutInMinutes: 30
+      Parameters:
+        VpcId:              !GetAtt NetworkStack.Outputs.VpcId
+        PublicSubnet1Id:    !GetAtt NetworkStack.Outputs.PublicSubnet1Id
+        PublicSubnet2Id:    !GetAtt NetworkStack.Outputs.PublicSubnet2Id
+        AlbSgId:            !GetAtt SecurityStack.Outputs.AlbSgId
+        Ec2SgId:            !GetAtt SecurityStack.Outputs.Ec2SgId
+        InstanceProfileArn: !GetAtt IamStack.Outputs.InstanceProfileArn
+        SecretName:         !GetAtt DatabaseStack.Outputs.SecretName
+        InstanceType:       !Ref InstanceType
+        KeyPairName:        !Ref KeyPairName
+        AsgMin:             !Ref AsgMin
+        AsgDesired:         !Ref AsgDesired
+        AsgMax:             !Ref AsgMax
+        GitHubRepo:         !Ref GitHubRepo
+        Environment:        !Ref Environment
+      Tags:
+        - Key: Stack
+          Value: Compute
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# OUTPUTS — printed after deployment
+# ═══════════════════════════════════════════════════════════════════════════════
+Outputs:
+
+  AlbDnsName:
+    Description: "ALB DNS — add CNAME in Cloudflare: api.dealance.app → this value"
+    Value: !GetAtt ComputeStack.Outputs.AlbDnsName
+    Export:
+      Name: !Sub "${AWS::StackName}-AlbDnsName"
+
+  ApiUrl:
+    Description: "Public API URL (once Cloudflare DNS is configured)"
+    Value: !Sub "https://${ApiSubdomain}.${DomainName}"
+
+  RdsEndpoint:
+    Description: "RDS PostgreSQL endpoint (private — only reachable from EC2)"
+    Value: !GetAtt DatabaseStack.Outputs.RdsEndpoint
+
+  RedisEndpoint:
+    Description: "ElastiCache Redis endpoint (private — only reachable from EC2)"
+    Value: !GetAtt DatabaseStack.Outputs.RedisEndpoint
+
+  SecretArn:
+    Description: "Secrets Manager ARN — EC2 fetches this at startup"
+    Value: !GetAtt DatabaseStack.Outputs.SecretArn
+
+  AsgName:
+    Description: "Auto Scaling Group name — use for rolling deploys"
+    Value: !GetAtt ComputeStack.Outputs.AsgName
+
+  DeployCommand:
+    Description: "Zero-downtime rolling deploy command (run after git push)"
+    Value: !Sub
+      - "aws autoscaling start-instance-refresh --region ${AWS::Region} --auto-scaling-group-name ${AsgName} --preferences '{\"MinHealthyPercentage\":50,\"InstanceWarmup\":120}'"
+      - AsgName: !GetAtt ComputeStack.Outputs.AsgName
