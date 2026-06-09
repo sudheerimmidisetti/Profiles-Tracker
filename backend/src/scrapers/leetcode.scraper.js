@@ -72,7 +72,6 @@ async function getFullProfile(username) {
            upcomingBadges { name icon progress }
            activeBadge { name icon }
          }
-         problemsSolvedBeatsStats(username: $u) { difficulty percentage }
        }`,
       { u: username, year: currentYear }
     );
@@ -102,7 +101,6 @@ async function getFullProfile(username) {
     const profile = user.profile    || {};
     const acNums  = user.submitStatsGlobal?.acSubmissionNum    || [];
     const totNums = user.submitStatsGlobal?.totalSubmissionNum || [];
-    const beats   = q1?.problemsSolvedBeatsStats || [];
     const cal     = user.userCalendar || {};
 
     const contestInfo  = q2?.userContestRanking           || {};
@@ -112,10 +110,6 @@ async function getFullProfile(username) {
     // Helper: extract count for a difficulty
     const getAc  = (diff) => acNums.find(x => x.difficulty === diff) || {};
     const getTot = (diff) => totNums.find(x => x.difficulty === diff) || {};
-    const getBeat = (diff) => {
-      const e = beats.find(b => b.difficulty === diff);
-      return e ? parseFloat(e.percentage) : 0;
-    };
 
     // Acceptance rate = (total accepted submissions) / (total all submissions) × 100
     const acceptedSubs = getAc('All').submissions  || 0;
@@ -146,9 +140,6 @@ async function getFullProfile(username) {
       mediumSolved:   getAc('Medium').count || 0,
       hardSolved:     getAc('Hard').count   || 0,
       acceptanceRate,
-      beatsEasy:      getBeat('Easy'),
-      beatsMedium:    getBeat('Medium'),
-      beatsHard:      getBeat('Hard'),
 
       // ── Calendar ──
       streak:          cal.streak          || 0,
