@@ -15,7 +15,11 @@ const errorHandler      = require('./middleware/errorHandler');
 
 const app = express();
 
-// ─────────────────────────────────────────────────────────────
+// Trust Cloudflare/Nginx proxy — required for express-rate-limit behind a reverse proxy
+// 1 = trust first hop (Nginx → Node), Cloudflare handles the outer HTTPS layer
+app.set('trust proxy', 1);
+
+
 // Security & Utility Middleware
 // ─────────────────────────────────────────────────────────────
 app.use(helmet());
