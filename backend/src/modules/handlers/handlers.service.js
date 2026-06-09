@@ -170,11 +170,14 @@ async function confirmVerification(email) {
     hackerrank: buildResult(hackerrank, hrName)
   };
 
-  const allPassed = Object.values(results).every((r) => r.passed);
+  // scraperError = API was unavailable (network issue / platform blocked EC2 IP).
+  // Treat as soft-pass: the user cannot control this. Handle is still saved.
+  // Only a real name mismatch (scraperError: false, passed: false) should block verification.
+  const allPassed = Object.values(results).every((r) => r.passed || r.scraperError);
 
   if (!allPassed) {
     const failed = Object.entries(results)
-      .filter(([, v]) => !v.passed && v.handle) // only platforms that were provided
+      .filter(([, v]) => !v.passed && !v.scraperError && v.handle) // only REAL failures (wrong name), not API errors
       .map(([platform, v]) => ({
         platform,
         handle:       v.handle,
