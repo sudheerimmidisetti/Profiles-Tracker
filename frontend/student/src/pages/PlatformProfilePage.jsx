@@ -8,6 +8,7 @@ import { analyticsAPI }                      from '../api/api'
 import LeetCodeProfile                       from '../components/platform-profiles/LeetCodeProfile'
 import CodeforcesProfile                     from '../components/platform-profiles/CodeforcesProfile'
 import CodeChefProfile                       from '../components/platform-profiles/CodeChefProfile'
+import HackerRankProfile                     from '../components/platform-profiles/HackerRankProfile'
 import '../styles/platform-profile.css'
 
 const PLATFORM_META = {
@@ -79,11 +80,14 @@ export default function PlatformProfilePage() {
     return <CodeChefProfile data={data} onBack={() => navigate(-1)} />
   }
 
-  // Placeholder for HackerRank (implemented next)
+  if (platform === 'hackerrank') {
+    return <HackerRankProfile data={data} onBack={() => navigate(-1)} />
+  }
+
   return (
     <div className="pp-loading">
       <button className="pp-back-btn" onClick={() => navigate(-1)}>← Back</button>
-      <p style={{ marginTop: 24 }}>{meta.label} full profile coming soon.</p>
+      <p style={{ marginTop: 24 }}>{meta.label} profile coming soon.</p>
     </div>
   )
 }
