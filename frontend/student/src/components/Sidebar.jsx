@@ -19,10 +19,10 @@ const NAV = [
   {
     title: 'PLATFORMS',
     items: [
-      { to: '/leaderboard?p=leetcode',   label: 'LeetCode',   icon: Code2  },
-      { to: '/leaderboard?p=codeforces', label: 'Codeforces', icon: Flame  },
-      { to: '/leaderboard?p=codechef',   label: 'CodeChef',   icon: ChefHat },
-      { to: '/leaderboard?p=hackerrank', label: 'HackerRank', icon: Award  },
+      { to: '/platform/leetcode',   label: 'LeetCode',   icon: Code2   },
+      { to: '/platform/codeforces', label: 'Codeforces', icon: Flame   },
+      { to: '/platform/codechef',   label: 'CodeChef',   icon: ChefHat },
+      { to: '/platform/hackerrank', label: 'HackerRank', icon: Award   },
     ],
   },
   {
