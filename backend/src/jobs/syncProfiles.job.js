@@ -112,7 +112,7 @@ async function syncStudent(email, handles) {
 // Platform upsert helpers
 // ─────────────────────────────────────────────────────────────
 async function upsertLeetcode(email, d) {
-  // Upsert unified platform_profiles
+  // 1. Upsert unified platform_profiles (summary/leaderboard row)
   await query(
     `INSERT INTO platform_profiles
        (student_email, platform_name, username, current_rating, global_rank,
@@ -127,30 +127,92 @@ async function upsertLeetcode(email, d) {
      d.totalSolved, d.easySolved, d.mediumSolved, d.hardSolved]
   );
 
-  // Upsert leetcode_profiles
+  // 2. Upsert leetcode_profiles (full detail row)
   await query(
     `INSERT INTO leetcode_profiles
-       (student_email, username, global_ranking, contest_rating,
-        top_percentage, contribution_calendar, last_synced)
-     VALUES ($1,$2,$3,$4,$5,$6,NOW())
+       (student_email, username,
+        -- profile info
+        real_name, avatar_url, about_me, school, company, job_title,
+        country, github_url, linkedin_url, twitter_url, reputation,
+        -- ranking
+        global_ranking,
+        -- solving stats
+        total_solved, easy_solved, medium_solved, hard_solved,
+        acceptance_rate, beats_easy, beats_medium, beats_hard,
+        -- calendar
+        streak, total_active_days, contribution_calendar,
+        -- contest ranking
+        contest_rating, top_percentage, attended_contests_count,
+        total_participants, contest_badge_name,
+        -- JSONB rich data
+        language_stats, skill_tags, badges, upcoming_badges,
+        active_badge, recent_ac_submissions,
+        last_synced)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
+             $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,
+             $27,$28,$29,$30,$31,$32,$33,$34,$35,$36,NOW())
      ON CONFLICT (student_email) DO UPDATE SET
-       username = EXCLUDED.username, global_ranking = EXCLUDED.global_ranking,
-       contest_rating = EXCLUDED.contest_rating, top_percentage = EXCLUDED.top_percentage,
-       contribution_calendar = EXCLUDED.contribution_calendar, last_synced = NOW()`,
-    [email, d.username, d.globalRanking, d.contestRating,
-     d.topPercentage, d.contributionCalendar ? JSON.stringify(d.contributionCalendar) : null]
+       username = EXCLUDED.username,
+       real_name = EXCLUDED.real_name, avatar_url = EXCLUDED.avatar_url,
+       about_me = EXCLUDED.about_me, school = EXCLUDED.school,
+       company = EXCLUDED.company, job_title = EXCLUDED.job_title,
+       country = EXCLUDED.country, github_url = EXCLUDED.github_url,
+       linkedin_url = EXCLUDED.linkedin_url, twitter_url = EXCLUDED.twitter_url,
+       reputation = EXCLUDED.reputation, global_ranking = EXCLUDED.global_ranking,
+       total_solved = EXCLUDED.total_solved, easy_solved = EXCLUDED.easy_solved,
+       medium_solved = EXCLUDED.medium_solved, hard_solved = EXCLUDED.hard_solved,
+       acceptance_rate = EXCLUDED.acceptance_rate,
+       beats_easy = EXCLUDED.beats_easy, beats_medium = EXCLUDED.beats_medium,
+       beats_hard = EXCLUDED.beats_hard,
+       streak = EXCLUDED.streak, total_active_days = EXCLUDED.total_active_days,
+       contribution_calendar = EXCLUDED.contribution_calendar,
+       contest_rating = EXCLUDED.contest_rating,
+       top_percentage = EXCLUDED.top_percentage,
+       attended_contests_count = EXCLUDED.attended_contests_count,
+       total_participants = EXCLUDED.total_participants,
+       contest_badge_name = EXCLUDED.contest_badge_name,
+       language_stats = EXCLUDED.language_stats,
+       skill_tags = EXCLUDED.skill_tags, badges = EXCLUDED.badges,
+       upcoming_badges = EXCLUDED.upcoming_badges,
+       active_badge = EXCLUDED.active_badge,
+       recent_ac_submissions = EXCLUDED.recent_ac_submissions,
+       last_synced = NOW()`,
+    [
+      email, d.username,
+      d.realName, d.avatarUrl, d.aboutMe, d.school, d.company, d.jobTitle,
+      d.country, d.githubUrl, d.linkedinUrl, d.twitterUrl, d.reputation,
+      d.globalRanking,
+      d.totalSolved, d.easySolved, d.mediumSolved, d.hardSolved,
+      d.acceptanceRate, d.beatsEasy, d.beatsMedium, d.beatsHard,
+      d.streak, d.totalActiveDays,
+      d.contributionCalendar ? JSON.stringify(d.contributionCalendar) : null,
+      d.contestRating, d.topPercentage, d.attendedContestsCount,
+      d.totalParticipants, d.contestBadgeName,
+      JSON.stringify(d.languageStats   || []),
+      JSON.stringify(d.skillTags       || {}),
+      JSON.stringify(d.badges          || []),
+      JSON.stringify(d.upcomingBadges  || []),
+      d.activeBadge ? JSON.stringify(d.activeBadge) : null,
+      JSON.stringify(d.recentAcSubmissions || []),
+    ]
   );
 
-  // Upsert contest history
+  // 3. Upsert contest history (extended with trendDirection + totalProblems)
   for (const c of (d.contestHistory || [])) {
     await query(
       `INSERT INTO leetcode_contest_history
          (student_email, contest_title, contest_time, rank_achieved,
-          finish_time_seconds, problems_solved, rating_after_contest)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
-       ON CONFLICT (student_email, contest_title) DO NOTHING`,
+          finish_time_seconds, problems_solved, rating_after_contest,
+          trend_direction, total_problems)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (student_email, contest_title) DO UPDATE SET
+         rank_achieved = EXCLUDED.rank_achieved,
+         rating_after_contest = EXCLUDED.rating_after_contest,
+         trend_direction = EXCLUDED.trend_direction,
+         total_problems = EXCLUDED.total_problems`,
       [email, c.contestTitle, c.contestTime, c.rankAchieved,
-       c.finishTimeSeconds, c.problemsSolved, c.ratingAfterContest]
+       c.finishTimeSeconds, c.problemsSolved, c.ratingAfterContest,
+       c.trendDirection, c.totalProblems]
     );
   }
 }

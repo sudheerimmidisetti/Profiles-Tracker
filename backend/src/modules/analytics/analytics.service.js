@@ -110,7 +110,23 @@ async function getPlatformDetail(email, platform) {
 
   if (platform === 'leetcode') {
     const d = await query(
-      `SELECT username, global_ranking, contest_rating, top_percentage, contribution_calendar, last_synced
+      `SELECT
+         -- profile info
+         username, real_name, avatar_url, about_me, school, company, job_title,
+         country, github_url, linkedin_url, twitter_url, reputation,
+         -- ranking + stats
+         global_ranking, contest_rating, top_percentage, total_solved,
+         easy_solved, medium_solved, hard_solved, acceptance_rate,
+         beats_easy, beats_medium, beats_hard,
+         -- calendar
+         streak, total_active_days, contribution_calendar,
+         -- contest
+         attended_contests_count, total_participants,
+         contest_badge_name, contest_badge_icon, contest_badge_expired,
+         -- JSONB rich data
+         language_stats, skill_tags, badges, upcoming_badges,
+         active_badge, recent_ac_submissions,
+         last_synced
        FROM leetcode_profiles WHERE student_email = $1`,
       [email]
     );
@@ -118,7 +134,8 @@ async function getPlatformDetail(email, platform) {
 
     const c = await query(
       `SELECT contest_title, contest_time, rank_achieved, problems_solved,
-              rating_after_contest, finish_time_seconds
+              total_problems, rating_after_contest, finish_time_seconds,
+              trend_direction
        FROM leetcode_contest_history WHERE student_email = $1
        ORDER BY contest_time DESC LIMIT 30`,
       [email]
