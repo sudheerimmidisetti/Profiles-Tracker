@@ -52,16 +52,38 @@ async function getSummary(email) {
   );
 
   // Aggregate totals across all platforms
-  const totalSolved  = platformRes.rows.reduce((s, p) => s + (p.total_solved || 0), 0);
-  const platforms    = {};
+  const totalSolved = platformRes.rows.reduce((s, p) => s + (p.total_solved || 0), 0);
+  const platforms   = {};
   for (const row of platformRes.rows) {
     platforms[row.platform_name] = row;
   }
 
+  // Enrich LeetCode entry with heatmap + contest data from leetcode_profiles.
+  // Wrapped in try-catch: if the row doesn't exist yet (first-time user, sync not run),
+  // the base analytics still works — just no heatmap data yet.
+  try {
+    const lcRes = await query(
+      `SELECT contest_rating, global_ranking, top_percentage, contribution_calendar
+       FROM leetcode_profiles WHERE student_email = $1`,
+      [email]
+    );
+    if (lcRes.rows.length && platforms.leetcode) {
+      const lc = lcRes.rows[0];
+      platforms.leetcode.contest_rating        = lc.contest_rating;
+      platforms.leetcode.global_ranking        = lc.global_ranking;
+      platforms.leetcode.top_percentage        = lc.top_percentage;
+      platforms.leetcode.contribution_calendar = lc.contribution_calendar;
+    }
+  } catch (lcErr) {
+    // Non-fatal — dashboard still works, heatmap just stays empty
+    const logger = require('../../utils/logger');
+    logger.warn(`[Analytics] leetcode_profiles enrichment skipped for ${email}: ${lcErr.message}`);
+  }
+
   return {
-    student:    studentRes.rows[0],
+    student:   studentRes.rows[0],
     platforms,
-    aggregate:  { totalSolved }
+    aggregate: { totalSolved }
   };
 }
 

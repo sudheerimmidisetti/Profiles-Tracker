@@ -31,16 +31,16 @@ export default function PlatformCard({ platform, data }) {
       ]
     : platform === 'codeforces'
     ? [
-        { label: 'Total', value: data.total_solved ?? '—' },
-        { label: 'Max',   value: data.current_rating ?? '—' },
+        { label: 'Total',  value: data.total_solved   ?? '—' },
+        { label: 'Rating', value: data.current_rating ?? '—' },
       ]
     : platform === 'codechef'
     ? [
-        { label: 'Rating',  value: data.current_rating ?? '—' },
-        { label: 'Solved',  value: data.total_solved ?? '—' },
+        { label: 'Rating', value: data.current_rating ?? '—' },
+        { label: 'Solved', value: data.total_solved   ?? '—' },
       ]
     : [
-        { label: 'Points', value: data.current_rating ?? '—' },
+        { label: 'Points', value: data.current_rating ? Math.round(data.current_rating) : '—' },
         { label: 'Rank',   value: data.global_rank ? `#${data.global_rank}` : '—' },
       ]
 

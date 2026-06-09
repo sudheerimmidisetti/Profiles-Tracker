@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react'
-import { Flame, Eye, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Flame, Eye, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import { leaderboardAPI } from '../api/api'
 
 const PLATFORM_LABELS = { leetcode: 'LeetCode', codeforces: 'Codeforces', codechef: 'CodeChef', hackerrank: 'HackerRank' }
+const PLATFORM_URLS   = {
+  leetcode:   u => `https://leetcode.com/u/${u}`,
+  codeforces: u => `https://codeforces.com/profile/${u}`,
+  codechef:   u => `https://www.codechef.com/users/${u}`,
+  hackerrank: u => `https://www.hackerrank.com/profile/${u}`,
+}
 const FILTERS = ['all', 'contest', 'consistency', 'problems']
 
 function Sparkline({ data }) {
@@ -125,9 +131,15 @@ export default function Leaderboard({ platform: initPlatform = 'leetcode' }) {
                         ) : '—'}
                       </td>
                       <td className="right">
-                        <button className="btn btn-ghost btn-sm btn-icon" title="View profile">
-                          <Eye size={14} />
-                        </button>
+                        <a
+                          href={s.username ? (PLATFORM_URLS[platform] || PLATFORM_URLS.leetcode)(s.username) : '#'}
+                          target="_blank" rel="noopener noreferrer"
+                          className="btn btn-ghost btn-sm btn-icon"
+                          title={`View on ${PLATFORM_LABELS[platform]}`}
+                          style={{ display: 'inline-flex', alignItems: 'center' }}
+                        >
+                          <ExternalLink size={14} />
+                        </a>
                       </td>
                     </tr>
                   )

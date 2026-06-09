@@ -79,7 +79,9 @@ export function RatingChart({ data }) {
             {platforms.map(p => (
               <Line
                 key={p} type="monotone" dataKey={p}
-                stroke={COLORS[p]} strokeWidth={2} dot={false}
+                stroke={COLORS[p]} strokeWidth={2}
+                dot={chartData.length <= 3}
+                activeDot={{ r: 4 }}
                 name={p.charAt(0).toUpperCase() + p.slice(1)}
                 connectNulls
               />

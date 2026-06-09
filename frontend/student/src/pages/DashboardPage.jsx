@@ -32,7 +32,6 @@ export default function DashboardPage() {
   }, [user])
 
   const platforms = summary?.platforms || {}
-  const lcCalendar = null // Would come from a dedicated LC endpoint if available
 
   return (
     <>
