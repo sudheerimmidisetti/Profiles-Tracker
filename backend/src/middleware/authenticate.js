@@ -9,6 +9,13 @@ const logger = require('../utils/logger');
  */
 async function authenticate(req, res, next) {
   try {
+    // ── Allow admin secret as bypass ──────────────────
+    const adminSecret = req.headers['x-admin-secret'];
+    if (adminSecret && adminSecret === process.env.ADMIN_SECRET) {
+      req.user = { email: 'admin', sessionId: 'admin' };
+      return next();
+    }
+
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
