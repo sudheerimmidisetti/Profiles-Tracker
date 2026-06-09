@@ -310,6 +310,7 @@ async function upsertCodeforces(email, d) {
 }
 
 async function upsertCodechef(email, d) {
+  // 1. platform_profiles (unified summary)
   await query(
     `INSERT INTO platform_profiles
        (student_email, platform_name, username, current_rating, global_rank,
@@ -322,34 +323,76 @@ async function upsertCodechef(email, d) {
     [email, d.username, d.currentRating, d.globalRank, d.totalSolved]
   );
 
+  // 2. codechef_profiles (full detail)
   await query(
     `INSERT INTO codechef_profiles
-       (student_email, username, stars_string, current_rating, highest_rating,
+       (student_email, username, display_name, avatar_url, country, institution,
+        student_or_pro, is_pro_user,
+        stars_string, current_rating, highest_rating,
         global_rank, country_rank, current_division,
-        starters_solved, practice_solved, peer_solved, total_solved, last_synced)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
+        dsa_rating, dsa_highest_rating, dsa_global_rank, dsa_country_rank,
+        starters_solved, practice_solved, peer_solved, total_solved,
+        problems_fully_solved, problems_partial_solved,
+        contests_participated, best_rank, win_rate,
+        heat_map, badges, rating_graph,
+        last_synced)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
+             $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,NOW())
      ON CONFLICT (student_email) DO UPDATE SET
-       username = EXCLUDED.username, stars_string = EXCLUDED.stars_string,
-       current_rating = EXCLUDED.current_rating, highest_rating = EXCLUDED.highest_rating,
-       global_rank = EXCLUDED.global_rank, country_rank = EXCLUDED.country_rank,
-       current_division = EXCLUDED.current_division,
+       username = EXCLUDED.username, display_name = EXCLUDED.display_name,
+       avatar_url = EXCLUDED.avatar_url, country = EXCLUDED.country,
+       institution = EXCLUDED.institution, student_or_pro = EXCLUDED.student_or_pro,
+       is_pro_user = EXCLUDED.is_pro_user,
+       stars_string = EXCLUDED.stars_string, current_rating = EXCLUDED.current_rating,
+       highest_rating = EXCLUDED.highest_rating, global_rank = EXCLUDED.global_rank,
+       country_rank = EXCLUDED.country_rank, current_division = EXCLUDED.current_division,
+       dsa_rating = EXCLUDED.dsa_rating, dsa_highest_rating = EXCLUDED.dsa_highest_rating,
+       dsa_global_rank = EXCLUDED.dsa_global_rank, dsa_country_rank = EXCLUDED.dsa_country_rank,
        starters_solved = EXCLUDED.starters_solved, practice_solved = EXCLUDED.practice_solved,
        peer_solved = EXCLUDED.peer_solved, total_solved = EXCLUDED.total_solved,
+       problems_fully_solved = EXCLUDED.problems_fully_solved,
+       problems_partial_solved = EXCLUDED.problems_partial_solved,
+       contests_participated = EXCLUDED.contests_participated,
+       best_rank = EXCLUDED.best_rank, win_rate = EXCLUDED.win_rate,
+       heat_map = EXCLUDED.heat_map, badges = EXCLUDED.badges,
+       rating_graph = EXCLUDED.rating_graph,
        last_synced = NOW()`,
-    [email, d.username, d.starsString, d.currentRating, d.highestRating,
-     d.globalRank, d.countryRank, d.currentDivision,
-     d.startersSolved, d.practiceSolved, d.peerSolved, d.totalSolved]
+    [
+      email, d.username, d.displayName, d.avatarUrl, d.country, d.institution,
+      d.studentOrPro, d.isProUser,
+      d.starsString, d.currentRating, d.highestRating,
+      d.globalRank, d.countryRank, d.currentDivision,
+      d.dsaRating, d.dsaHighestRating, d.dsaGlobalRank, d.dsaCountryRank,
+      d.startersSolved, d.practiceSolved, d.peerSolved, d.totalSolved,
+      d.problemsFullySolved, d.problemsPartialSolved,
+      d.contestsParticipated, d.bestRank, d.winRate,
+      JSON.stringify(d.heatMap      || []),
+      JSON.stringify(d.badges       || []),
+      JSON.stringify(d.ratingGraph  || []),
+    ]
   );
 
+  // 3. Contest history
   for (const c of (d.contestHistory || [])) {
     await query(
       `INSERT INTO codechef_contest_history
          (student_email, contest_code, contest_name, rank_achieved,
-          rating_after_contest, rating_change)
-       VALUES ($1,$2,$3,$4,$5,$6)
-       ON CONFLICT (student_email, contest_code) DO NOTHING`,
-      [email, c.contestCode, c.contestName, c.rankAchieved,
-       c.ratingAfterContest, c.ratingChange]
+          rating_after_contest, rating_change,
+          contest_date, contest_type, division, problems_solved_count)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (student_email, contest_code) DO UPDATE SET
+         rank_achieved        = EXCLUDED.rank_achieved,
+         rating_after_contest = EXCLUDED.rating_after_contest,
+         rating_change        = EXCLUDED.rating_change,
+         contest_date         = EXCLUDED.contest_date,
+         contest_type         = EXCLUDED.contest_type,
+         division             = EXCLUDED.division,
+         problems_solved_count = EXCLUDED.problems_solved_count`,
+      [
+        email, c.contestCode, c.contestName, c.rankAchieved,
+        c.ratingAfterContest, c.ratingChange,
+        c.contestDate, c.contestType, c.division, c.problemsSolvedCount,
+      ]
     );
   }
 }

@@ -171,18 +171,28 @@ async function getPlatformDetail(email, platform) {
 
   } else if (platform === 'codechef') {
     const d = await query(
-      `SELECT username, stars_string, current_rating, highest_rating, global_rank,
-              country_rank, current_division, starters_solved, practice_solved,
-              peer_solved, total_solved, last_synced
+      `SELECT
+         username, display_name, avatar_url, country, institution,
+         student_or_pro, is_pro_user,
+         stars_string, current_rating, highest_rating,
+         global_rank, country_rank, current_division,
+         dsa_rating, dsa_highest_rating, dsa_global_rank, dsa_country_rank,
+         starters_solved, practice_solved, peer_solved, total_solved,
+         problems_fully_solved, problems_partial_solved,
+         contests_participated, best_rank, win_rate,
+         heat_map, badges, rating_graph,
+         last_synced
        FROM codechef_profiles WHERE student_email = $1`,
       [email]
     );
     detail = d.rows[0] || {};
 
     const c = await query(
-      `SELECT contest_code, contest_name, rank_achieved, rating_after_contest, rating_change
+      `SELECT contest_code, contest_name, rank_achieved,
+              rating_after_contest, rating_change,
+              contest_date, contest_type, division, problems_solved_count
        FROM codechef_contest_history WHERE student_email = $1
-       ORDER BY id DESC LIMIT 30`,
+       ORDER BY id DESC LIMIT 50`,
       [email]
     );
     contests = c.rows;
