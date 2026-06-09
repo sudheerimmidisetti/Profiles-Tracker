@@ -150,7 +150,7 @@ async function upsertLeetcode(email, d) {
         last_synced)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
              $12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
-             $22,$23,$24,$25,$26,$27,$28,$29,$30,$31,NOW())
+             $22,$23,$24,$25,$26,$27,$28,$29,$30,NOW())
      ON CONFLICT (student_email) DO UPDATE SET
        username = EXCLUDED.username,
        real_name = EXCLUDED.real_name, avatar_url = EXCLUDED.avatar_url,
