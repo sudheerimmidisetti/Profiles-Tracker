@@ -4,7 +4,7 @@ const PLATFORM_META = {
   leetcode:   { label: 'LeetCode',   dot: 'plat-lc', url: 'https://leetcode.com/u/' },
   codeforces: { label: 'Codeforces', dot: 'plat-cf', url: 'https://codeforces.com/profile/' },
   codechef:   { label: 'CodeChef',   dot: 'plat-cc', url: 'https://www.codechef.com/users/' },
-  hackerrank: { label: 'HackerRank', dot: 'plat-hr', url: 'https://www.hackerrank.com/' },
+  hackerrank: { label: 'HackerRank', dot: 'plat-hr', url: 'https://www.hackerrank.com/profile/' },
 }
 
 export default function PlatformCard({ platform, data }) {
