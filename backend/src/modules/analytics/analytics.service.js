@@ -113,11 +113,10 @@ async function getPlatformDetail(email, platform) {
       `SELECT
          -- profile info
          username, real_name, avatar_url, about_me, school, company, job_title,
-         country, github_url, linkedin_url, twitter_url, reputation,
+         country, reputation,
          -- ranking + stats
          global_ranking, contest_rating, top_percentage, total_solved,
          easy_solved, medium_solved, hard_solved, acceptance_rate,
-         beats_easy, beats_medium, beats_hard,
          -- calendar
          streak, total_active_days, contribution_calendar,
          -- contest

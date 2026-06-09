@@ -133,12 +133,12 @@ async function upsertLeetcode(email, d) {
        (student_email, username,
         -- profile info
         real_name, avatar_url, about_me, school, company, job_title,
-        country, github_url, linkedin_url, twitter_url, reputation,
+        country, reputation,
         -- ranking
         global_ranking,
         -- solving stats
         total_solved, easy_solved, medium_solved, hard_solved,
-        acceptance_rate, beats_easy, beats_medium, beats_hard,
+        acceptance_rate,
         -- calendar
         streak, total_active_days, contribution_calendar,
         -- contest ranking
@@ -148,22 +148,19 @@ async function upsertLeetcode(email, d) {
         language_stats, skill_tags, badges, upcoming_badges,
         active_badge, recent_ac_submissions,
         last_synced)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
-             $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,
-             $27,$28,$29,$30,$31,$32,$33,$34,$35,$36,NOW())
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
+             $12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
+             $22,$23,$24,$25,$26,$27,$28,$29,$30,$31,NOW())
      ON CONFLICT (student_email) DO UPDATE SET
        username = EXCLUDED.username,
        real_name = EXCLUDED.real_name, avatar_url = EXCLUDED.avatar_url,
        about_me = EXCLUDED.about_me, school = EXCLUDED.school,
        company = EXCLUDED.company, job_title = EXCLUDED.job_title,
-       country = EXCLUDED.country, github_url = EXCLUDED.github_url,
-       linkedin_url = EXCLUDED.linkedin_url, twitter_url = EXCLUDED.twitter_url,
-       reputation = EXCLUDED.reputation, global_ranking = EXCLUDED.global_ranking,
+       country = EXCLUDED.country, reputation = EXCLUDED.reputation,
+       global_ranking = EXCLUDED.global_ranking,
        total_solved = EXCLUDED.total_solved, easy_solved = EXCLUDED.easy_solved,
        medium_solved = EXCLUDED.medium_solved, hard_solved = EXCLUDED.hard_solved,
        acceptance_rate = EXCLUDED.acceptance_rate,
-       beats_easy = EXCLUDED.beats_easy, beats_medium = EXCLUDED.beats_medium,
-       beats_hard = EXCLUDED.beats_hard,
        streak = EXCLUDED.streak, total_active_days = EXCLUDED.total_active_days,
        contribution_calendar = EXCLUDED.contribution_calendar,
        contest_rating = EXCLUDED.contest_rating,
@@ -180,10 +177,10 @@ async function upsertLeetcode(email, d) {
     [
       email, d.username,
       d.realName, d.avatarUrl, d.aboutMe, d.school, d.company, d.jobTitle,
-      d.country, d.githubUrl, d.linkedinUrl, d.twitterUrl, d.reputation,
+      d.country, d.reputation,
       d.globalRanking,
       d.totalSolved, d.easySolved, d.mediumSolved, d.hardSolved,
-      d.acceptanceRate, d.beatsEasy, d.beatsMedium, d.beatsHard,
+      d.acceptanceRate,
       d.streak, d.totalActiveDays,
       d.contributionCalendar ? JSON.stringify(d.contributionCalendar) : null,
       d.contestRating, d.topPercentage, d.attendedContestsCount,

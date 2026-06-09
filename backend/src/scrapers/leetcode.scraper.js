@@ -53,7 +53,7 @@ async function getFullProfile(username) {
            username
            profile {
              realName userAvatar aboutMe school company jobTitle
-             countryName ranking reputation githubUrl linkedinUrl twitterUrl
+             countryName ranking reputation
            }
            submitStatsGlobal {
              acSubmissionNum   { difficulty count submissions }
@@ -128,9 +128,6 @@ async function getFullProfile(username) {
       company:       profile.company       || null,
       jobTitle:      profile.jobTitle      || null,
       country:       profile.countryName   || null,
-      githubUrl:     profile.githubUrl     || null,
-      linkedinUrl:   profile.linkedinUrl   || null,
-      twitterUrl:    profile.twitterUrl    || null,
       reputation:    profile.reputation    || 0,
       globalRanking: profile.ranking       || 0,
 
