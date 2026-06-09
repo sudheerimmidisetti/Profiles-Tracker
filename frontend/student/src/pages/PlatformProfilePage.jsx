@@ -52,7 +52,7 @@ export default function PlatformProfilePage() {
     )
   }
 
-  if (error || !data?.detail?.username) {
+  if (error || (!data?.detail?.username && !data?.base?.username)) {
     return (
       <div className="pp-error">
         <button className="pp-back-btn" onClick={() => navigate(-1)}>← Back</button>

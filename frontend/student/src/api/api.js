@@ -100,7 +100,10 @@ export const leaderboardAPI = {
 export const analyticsAPI = {
   snapshots:      (email)    => api.get(`/api/analytics/snapshot/${encodeURIComponent(email)}`),
   summary:        (email)    => api.get(`/api/analytics/summary/${encodeURIComponent(email)}`),
-  platformDetail: (platform) => api.get(`/api/analytics/detail/${platform}`),
+  platformDetail: (platform) =>
+    api.get(`/api/analytics/detail/${platform}`, {
+      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+    }),
 }
 
 export default api

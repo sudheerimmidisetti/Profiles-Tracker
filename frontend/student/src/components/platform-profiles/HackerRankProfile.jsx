@@ -96,8 +96,10 @@ export default function HackerRankProfile({ data, onBack }) {
   const [tab,  setTab]  = useState('Profile')
   const [page, setPage] = useState(0)
 
-  const { detail: d, submissions } = data
-  if (!d) return null
+  const { detail: rawDetail, submissions, base } = data
+  // Merge base into detail so we always have at least username
+  const d = { ...(base || {}), ...(rawDetail || {}) }
+  if (!d || (!d.username)) return null
 
   // Parsed JSONB
   const badges      = useMemo(() => parseJSON(d.badges)       || [], [d.badges])
