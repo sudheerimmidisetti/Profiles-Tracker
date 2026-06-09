@@ -29,9 +29,10 @@ export default function PlatformProfilePage() {
     setError(null)
     try {
       const res = await analyticsAPI.platformDetail(platform)
-      setData(res.data)
+      // API returns { success: true, data: { platform, base, detail, contests, ... } }
+      setData(res.data?.data ?? res.data)
     } catch (e) {
-      setError(e.response?.data?.error || 'Failed to load profile')
+      setError(e.response?.data?.message || e.response?.data?.error || 'Failed to load profile')
     } finally {
       setLoading(false)
     }
@@ -48,7 +49,7 @@ export default function PlatformProfilePage() {
     )
   }
 
-  if (error || !data?.detail) {
+  if (error || !data?.detail?.username) {
     return (
       <div className="pp-error">
         <button className="pp-back-btn" onClick={() => navigate(-1)}>← Back</button>
