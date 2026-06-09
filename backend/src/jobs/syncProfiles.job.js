@@ -398,6 +398,7 @@ async function upsertCodechef(email, d) {
 }
 
 async function upsertHackerrank(email, d) {
+  // 1. platform_profiles (unified summary)
   await query(
     `INSERT INTO platform_profiles
        (student_email, platform_name, username, current_rating, global_rank, last_updated)
@@ -408,35 +409,91 @@ async function upsertHackerrank(email, d) {
     [email, d.username, Math.round(d.totalPoints), d.globalRank]
   );
 
+  // 2. hackerrank_profiles (full detail)
   await query(
     `INSERT INTO hackerrank_profiles
-       (student_email, username, total_points, global_rank,
+       (student_email, username, display_name, avatar_url, country, city,
+        school, jobs_headline, about, graduation_year, created_at_hr,
+        linkedin_url, github_url, website, twitter_url,
+        followers_count, following_count,
+        total_points, leaderboard_rank, level, elo_rating, contest_points, global_rank,
+        medals_gold, medals_silver, medals_bronze, contests_participated,
+        submissions_count, accepted_submissions, acceptance_rate,
         problem_solving_stars, problem_solving_score,
-        cpp_stars, java_stars, python_stars, sql_stars, last_synced)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+        cpp_stars, java_stars, python_stars, sql_stars,
+        ruby_stars, js_stars, sql_score, algorithms_score, ds_score,
+        badges, certificates, track_scores,
+        last_synced)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
+             $18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,
+             $33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,NOW())
      ON CONFLICT (student_email) DO UPDATE SET
-       username = EXCLUDED.username, total_points = EXCLUDED.total_points,
-       global_rank = EXCLUDED.global_rank,
+       username = EXCLUDED.username, display_name = EXCLUDED.display_name,
+       avatar_url = EXCLUDED.avatar_url, country = EXCLUDED.country,
+       city = EXCLUDED.city, school = EXCLUDED.school,
+       jobs_headline = EXCLUDED.jobs_headline, about = EXCLUDED.about,
+       graduation_year = EXCLUDED.graduation_year, created_at_hr = EXCLUDED.created_at_hr,
+       linkedin_url = EXCLUDED.linkedin_url, github_url = EXCLUDED.github_url,
+       website = EXCLUDED.website, twitter_url = EXCLUDED.twitter_url,
+       followers_count = EXCLUDED.followers_count, following_count = EXCLUDED.following_count,
+       total_points = EXCLUDED.total_points, leaderboard_rank = EXCLUDED.leaderboard_rank,
+       level = EXCLUDED.level, elo_rating = EXCLUDED.elo_rating,
+       contest_points = EXCLUDED.contest_points, global_rank = EXCLUDED.global_rank,
+       medals_gold = EXCLUDED.medals_gold, medals_silver = EXCLUDED.medals_silver,
+       medals_bronze = EXCLUDED.medals_bronze,
+       contests_participated = EXCLUDED.contests_participated,
+       submissions_count = EXCLUDED.submissions_count,
+       accepted_submissions = EXCLUDED.accepted_submissions,
+       acceptance_rate = EXCLUDED.acceptance_rate,
        problem_solving_stars = EXCLUDED.problem_solving_stars,
        problem_solving_score = EXCLUDED.problem_solving_score,
        cpp_stars = EXCLUDED.cpp_stars, java_stars = EXCLUDED.java_stars,
        python_stars = EXCLUDED.python_stars, sql_stars = EXCLUDED.sql_stars,
+       ruby_stars = EXCLUDED.ruby_stars, js_stars = EXCLUDED.js_stars,
+       sql_score = EXCLUDED.sql_score, algorithms_score = EXCLUDED.algorithms_score,
+       ds_score = EXCLUDED.ds_score,
+       badges = EXCLUDED.badges, certificates = EXCLUDED.certificates,
+       track_scores = EXCLUDED.track_scores,
        last_synced = NOW()`,
-    [email, d.username, d.totalPoints, d.globalRank,
-     d.problemSolvingStars, d.problemSolvingScore,
-     d.cppStars, d.javaStars, d.pythonStars, d.sqlStars]
+    [
+      email, d.username, d.displayName, d.avatarUrl, d.country, d.city,
+      d.school, d.jobsHeadline, d.about, d.graduationYear, d.createdAtHr,
+      d.linkedinUrl, d.githubUrl, d.website, d.twitterUrl,
+      d.followersCount, d.followingCount,
+      d.totalPoints, d.leaderboardRank, d.level, d.eloRating, d.contestPoints, d.globalRank,
+      d.medalsGold, d.medalsSilver, d.medalsBronze, d.contestsParticipated,
+      d.submissionsCount, d.acceptedSubmissions, d.acceptanceRate,
+      d.problemSolvingStars, d.problemSolvingScore,
+      d.cppStars, d.javaStars, d.pythonStars, d.sqlStars,
+      d.rubyStars, d.jsStars, d.sqlScore, d.algorithmsScore, d.dsScore,
+      JSON.stringify(d.badges        || []),
+      JSON.stringify(d.certificates  || []),
+      JSON.stringify(d.trackScores   || []),
+    ]
   );
 
+  // 3. Recent submissions (upsert with score/track/difficulty)
   for (const sub of (d.recentSubmissions || [])) {
     await query(
       `INSERT INTO hackerrank_recent_submissions
-         (student_email, challenge_slug, challenge_name, language, status, submitted_at)
-       VALUES ($1,$2,$3,$4,$5,$6)
-       ON CONFLICT (student_email, challenge_slug) DO NOTHING`,
-      [email, sub.challengeSlug, sub.challengeName, sub.language, sub.status, sub.submittedAt]
+         (student_email, challenge_slug, challenge_name, language, status,
+          score, track, difficulty, submitted_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (student_email, challenge_slug) DO UPDATE SET
+         language   = EXCLUDED.language,
+         status     = EXCLUDED.status,
+         score      = EXCLUDED.score,
+         track      = EXCLUDED.track,
+         difficulty = EXCLUDED.difficulty,
+         submitted_at = EXCLUDED.submitted_at`,
+      [
+        email, sub.challengeSlug, sub.challengeName, sub.language, sub.status,
+        sub.score, sub.track, sub.difficulty, sub.submittedAt,
+      ]
     );
   }
 }
+
 
 // ─────────────────────────────────────────────────────────────
 // Distributed-lock wrapper — only ONE instance runs the nightly sync

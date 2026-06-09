@@ -199,18 +199,29 @@ async function getPlatformDetail(email, platform) {
 
   } else if (platform === 'hackerrank') {
     const d = await query(
-      `SELECT username, total_points, global_rank,
-              problem_solving_stars, problem_solving_score,
-              cpp_stars, java_stars, python_stars, sql_stars, last_synced
+      `SELECT
+         username, display_name, avatar_url, country, city,
+         school, jobs_headline, about, graduation_year, created_at_hr,
+         linkedin_url, github_url, website, twitter_url,
+         followers_count, following_count,
+         total_points, leaderboard_rank, level, elo_rating, contest_points, global_rank,
+         medals_gold, medals_silver, medals_bronze, contests_participated,
+         submissions_count, accepted_submissions, acceptance_rate,
+         problem_solving_stars, problem_solving_score,
+         cpp_stars, java_stars, python_stars, sql_stars,
+         ruby_stars, js_stars, sql_score, algorithms_score, ds_score,
+         badges, certificates, track_scores,
+         last_synced
        FROM hackerrank_profiles WHERE student_email = $1`,
       [email]
     );
     detail = d.rows[0] || {};
 
     const s = await query(
-      `SELECT challenge_name, language, status, submitted_at
+      `SELECT challenge_slug, challenge_name, language, status,
+              score, track, difficulty, submitted_at
        FROM hackerrank_recent_submissions WHERE student_email = $1
-       ORDER BY submitted_at DESC LIMIT 20`,
+       ORDER BY submitted_at DESC NULLS LAST LIMIT 50`,
       [email]
     );
     submissions = s.rows;
