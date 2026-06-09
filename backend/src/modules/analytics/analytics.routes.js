@@ -7,7 +7,8 @@ const router = Router();
 
 router.use(authenticate);
 
-router.get('/snapshot/:email', ctrl.getSnapshots); // Historical time-series for charts
-router.get('/summary/:email',  ctrl.getSummary);   // Cross-platform aggregated summary
+router.get('/snapshot/:email',  ctrl.getSnapshots);    // Historical time-series for charts
+router.get('/summary/:email',   ctrl.getSummary);      // Cross-platform aggregated summary
+router.get('/detail/:platform', ctrl.getPlatformDetail); // Full platform profile (uses JWT email)
 
 module.exports = router;

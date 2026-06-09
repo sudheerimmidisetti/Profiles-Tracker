@@ -98,8 +98,9 @@ export const leaderboardAPI = {
 
 // ── Analytics ─────────────────────────────────────────
 export const analyticsAPI = {
-  snapshots: (email) => api.get(`/api/analytics/snapshot/${encodeURIComponent(email)}`),
-  summary:   (email) => api.get(`/api/analytics/summary/${encodeURIComponent(email)}`),
+  snapshots:      (email)    => api.get(`/api/analytics/snapshot/${encodeURIComponent(email)}`),
+  summary:        (email)    => api.get(`/api/analytics/summary/${encodeURIComponent(email)}`),
+  platformDetail: (platform) => api.get(`/api/analytics/detail/${platform}`),
 }
 
 export default api

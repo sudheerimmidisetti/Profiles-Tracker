@@ -21,4 +21,21 @@ async function getSummary(req, res, next) {
   }
 }
 
-module.exports = { getSnapshots, getSummary };
+// GET /api/analytics/detail/:platform
+// Returns the logged-in student's full data for one platform
+async function getPlatformDetail(req, res, next) {
+  try {
+    // Use the JWT email (req.user.email) so students can only see their own data.
+    // Admin bypass: if admin secret was used, fall back to :email query param.
+    const email    = req.user.email === 'admin'
+      ? req.query.email
+      : req.user.email;
+    const platform = req.params.platform.toLowerCase();
+    const data = await analyticsService.getPlatformDetail(email, platform);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getSnapshots, getSummary, getPlatformDetail };

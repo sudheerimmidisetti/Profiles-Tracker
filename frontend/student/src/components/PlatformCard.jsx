@@ -1,4 +1,5 @@
 import { ExternalLink } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 const PLATFORM_META = {
   leetcode:   { label: 'LeetCode',   dot: 'plat-lc', url: 'https://leetcode.com/u/' },
@@ -8,7 +9,9 @@ const PLATFORM_META = {
 }
 
 export default function PlatformCard({ platform, data }) {
-  const meta = PLATFORM_META[platform] || {}
+  const meta     = PLATFORM_META[platform] || {}
+  const navigate = useNavigate()
+
   if (!data) {
     return (
       <div className="platform-card" style={{ opacity: 0.5 }}>
@@ -45,7 +48,14 @@ export default function PlatformCard({ platform, data }) {
       ]
 
   return (
-    <div className="platform-card">
+    <div
+      className="platform-card"
+      onClick={() => navigate(`/platform/${platform}`)}
+      style={{ cursor: 'pointer', transition: 'border-color 0.2s, transform 0.15s' }}
+      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = 'var(--fg-subtle)' }}
+      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)';   e.currentTarget.style.borderColor = '' }}
+      title={`View full ${meta.label} profile`}
+    >
       {/* Header */}
       <div className="platform-hd">
         <div className="platform-name">
@@ -58,7 +68,8 @@ export default function PlatformCard({ platform, data }) {
             target="_blank"
             rel="noopener noreferrer"
             className="icon-btn btn-sm"
-            title="View profile"
+            title="Open on platform"
+            onClick={e => e.stopPropagation()}  // don't trigger card click
           >
             <ExternalLink size={13} />
           </a>
@@ -85,6 +96,11 @@ export default function PlatformCard({ platform, data }) {
           </div>
         ))}
       </div>
+
+      {/* Click hint */}
+      <p style={{ fontSize: '0.68rem', color: 'var(--fg-subtle)', marginTop: 8, textAlign: 'right', letterSpacing: 0.5 }}>
+        Click to view full profile →
+      </p>
     </div>
   )
 }
