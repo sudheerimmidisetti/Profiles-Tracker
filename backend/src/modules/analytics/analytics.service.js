@@ -143,18 +143,28 @@ async function getPlatformDetail(email, platform) {
 
   } else if (platform === 'codeforces') {
     const d = await query(
-      `SELECT username, current_rating, max_rating, current_rank, max_rank, contribution, avatar_url,
-              solved_rating_under_1200, solved_rating_1200_1599, solved_rating_1600_1899,
-              solved_rating_1900_2199, solved_rating_above_2200, last_synced
+      `SELECT
+         username, first_name, last_name, country, city, organization,
+         avatar_url, title_photo,
+         current_rating, max_rating, current_rank, max_rank,
+         contribution, friend_of_count,
+         last_online_seconds, registration_seconds,
+         total_solved, total_submissions, accepted_submissions, acceptance_rate,
+         highest_rated_problem, most_frequent_tag,
+         solved_rating_under_1200, solved_rating_1200_1599, solved_rating_1600_1899,
+         solved_rating_1900_2199, solved_rating_above_2200,
+         language_stats, tag_stats, submission_calendar, recent_ac_submissions,
+         last_synced
        FROM codeforces_profiles WHERE student_email = $1`,
       [email]
     );
     detail = d.rows[0] || {};
 
     const c = await query(
-      `SELECT contest_name, rank_achieved, old_rating, new_rating, rating_change, timestamp_seconds
+      `SELECT contest_id, contest_name, rank_achieved, old_rating, new_rating,
+              rating_change, timestamp_seconds, division
        FROM codeforces_contest_history WHERE student_email = $1
-       ORDER BY timestamp_seconds DESC LIMIT 30`,
+       ORDER BY timestamp_seconds DESC LIMIT 50`,
       [email]
     );
     contests = c.rows;

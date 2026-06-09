@@ -215,6 +215,7 @@ async function upsertLeetcode(email, d) {
 }
 
 async function upsertCodeforces(email, d) {
+  // 1. platform_profiles (unified summary)
   await query(
     `INSERT INTO platform_profiles
        (student_email, platform_name, username, current_rating, global_rank,
@@ -227,39 +228,83 @@ async function upsertCodeforces(email, d) {
     [email, d.username, d.currentRating, 0, d.totalSolved]
   );
 
+  // 2. codeforces_profiles (full detail)
   await query(
     `INSERT INTO codeforces_profiles
-       (student_email, username, current_rating, max_rating, current_rank, max_rank,
-        contribution, avatar_url,
+       (student_email, username,
+        first_name, last_name, country, city, organization,
+        avatar_url, title_photo,
+        current_rating, max_rating, current_rank, max_rank,
+        contribution, friend_of_count,
+        last_online_seconds, registration_seconds,
+        total_solved, total_submissions, accepted_submissions, acceptance_rate,
+        highest_rated_problem, most_frequent_tag,
         solved_rating_under_1200, solved_rating_1200_1599, solved_rating_1600_1899,
-        solved_rating_1900_2199, solved_rating_above_2200, last_synced)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
+        solved_rating_1900_2199, solved_rating_above_2200,
+        language_stats, tag_stats, submission_calendar, recent_ac_submissions,
+        last_synced)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
+             $18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,NOW())
      ON CONFLICT (student_email) DO UPDATE SET
-       username = EXCLUDED.username, current_rating = EXCLUDED.current_rating,
-       max_rating = EXCLUDED.max_rating, current_rank = EXCLUDED.current_rank,
-       max_rank = EXCLUDED.max_rank, contribution = EXCLUDED.contribution,
-       avatar_url = EXCLUDED.avatar_url,
+       username = EXCLUDED.username,
+       first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name,
+       country = EXCLUDED.country, city = EXCLUDED.city,
+       organization = EXCLUDED.organization, avatar_url = EXCLUDED.avatar_url,
+       title_photo = EXCLUDED.title_photo,
+       current_rating = EXCLUDED.current_rating, max_rating = EXCLUDED.max_rating,
+       current_rank = EXCLUDED.current_rank, max_rank = EXCLUDED.max_rank,
+       contribution = EXCLUDED.contribution, friend_of_count = EXCLUDED.friend_of_count,
+       last_online_seconds = EXCLUDED.last_online_seconds,
+       registration_seconds = EXCLUDED.registration_seconds,
+       total_solved = EXCLUDED.total_solved,
+       total_submissions = EXCLUDED.total_submissions,
+       accepted_submissions = EXCLUDED.accepted_submissions,
+       acceptance_rate = EXCLUDED.acceptance_rate,
+       highest_rated_problem = EXCLUDED.highest_rated_problem,
+       most_frequent_tag = EXCLUDED.most_frequent_tag,
        solved_rating_under_1200 = EXCLUDED.solved_rating_under_1200,
        solved_rating_1200_1599  = EXCLUDED.solved_rating_1200_1599,
        solved_rating_1600_1899  = EXCLUDED.solved_rating_1600_1899,
        solved_rating_1900_2199  = EXCLUDED.solved_rating_1900_2199,
        solved_rating_above_2200 = EXCLUDED.solved_rating_above_2200,
+       language_stats = EXCLUDED.language_stats,
+       tag_stats = EXCLUDED.tag_stats,
+       submission_calendar = EXCLUDED.submission_calendar,
+       recent_ac_submissions = EXCLUDED.recent_ac_submissions,
        last_synced = NOW()`,
-    [email, d.username, d.currentRating, d.maxRating, d.currentRank, d.maxRank,
-     d.contribution, d.avatarUrl,
-     d.solvedRatingUnder1200, d.solvedRating1200_1599, d.solvedRating1600_1899,
-     d.solvedRating1900_2199, d.solvedRatingAbove2200]
+    [
+      email, d.username,
+      d.firstName, d.lastName, d.country, d.city, d.organization,
+      d.avatarUrl, d.titlePhoto,
+      d.currentRating, d.maxRating, d.currentRank, d.maxRank,
+      d.contribution, d.friendOfCount,
+      d.lastOnlineSeconds, d.registrationSeconds,
+      d.totalSolved, d.totalSubmissions, d.acceptedSubmissions, d.acceptanceRate,
+      d.highestRatedProblem, d.mostFrequentTag,
+      d.solvedRatingUnder1200, d.solvedRating1200_1599, d.solvedRating1600_1899,
+      d.solvedRating1900_2199, d.solvedRatingAbove2200,
+      JSON.stringify(d.languageStats       || []),
+      JSON.stringify(d.tagStats            || []),
+      JSON.stringify(d.submissionCalendar  || {}),
+      JSON.stringify(d.recentAcSubmissions || []),
+    ]
   );
 
+  // 3. Contest history
   for (const c of (d.contestHistory || [])) {
     await query(
       `INSERT INTO codeforces_contest_history
          (student_email, contest_id, contest_name, rank_achieved,
-          old_rating, new_rating, rating_change, timestamp_seconds)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       ON CONFLICT (student_email, contest_id) DO NOTHING`,
+          old_rating, new_rating, rating_change, timestamp_seconds, division)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (student_email, contest_id) DO UPDATE SET
+         rank_achieved  = EXCLUDED.rank_achieved,
+         old_rating     = EXCLUDED.old_rating,
+         new_rating     = EXCLUDED.new_rating,
+         rating_change  = EXCLUDED.rating_change,
+         division       = EXCLUDED.division`,
       [email, c.contestId, c.contestName, c.rankAchieved,
-       c.oldRating, c.newRating, c.ratingChange, c.timestampSeconds]
+       c.oldRating, c.newRating, c.ratingChange, c.timestampSeconds, c.division]
     );
   }
 }
