@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate }            from 'react-router-dom'
 import { analyticsAPI }                      from '../api/api'
 import LeetCodeProfile                       from '../components/platform-profiles/LeetCodeProfile'
+import CodeforcesProfile                     from '../components/platform-profiles/CodeforcesProfile'
 import '../styles/platform-profile.css'
 
 const PLATFORM_META = {
@@ -69,7 +70,11 @@ export default function PlatformProfilePage() {
     return <LeetCodeProfile data={data} onBack={() => navigate(-1)} />
   }
 
-  // Placeholder for other platforms (implemented next)
+  if (platform === 'codeforces') {
+    return <CodeforcesProfile data={data} onBack={() => navigate(-1)} />
+  }
+
+  // Placeholder for CodeChef and HackerRank (implemented next)
   return (
     <div className="pp-loading">
       <button className="pp-back-btn" onClick={() => navigate(-1)}>← Back</button>
