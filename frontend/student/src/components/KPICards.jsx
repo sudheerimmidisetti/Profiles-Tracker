@@ -59,8 +59,8 @@ export default function KPICards({ data }) {
       />
       <StatCard
         title="LeetCode Rating"
-        value={lc?.current_rating ? Math.round(lc.current_rating) : '—'}
-        sub={lc?.username ? `@${lc.username}` : 'Not linked'}
+        value={lc?.contest_rating ? Math.round(lc.contest_rating) : lc?.current_rating ? Math.round(lc.current_rating) : '—'}
+        sub={lc?.top_percentage ? `Top ${lc.top_percentage.toFixed(1)}%` : lc?.username ? `@${lc.username}` : 'Not linked'}
         trend={lc ? 4 : undefined}
         icon={<Target size={20} style={{ color: 'var(--lc)' }} />}
       />
