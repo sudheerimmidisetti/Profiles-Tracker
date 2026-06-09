@@ -163,13 +163,20 @@ async function fetchStudentFromCollegeDB(email) {
     }
   }
 
-  // Stub: derive roll number from email prefix
+  // Stub: derive roll number and college name from email (no college DB needed)
   const rollNumber = email.split('@')[0].toUpperCase();
+  const domain     = email.split('@')[1]?.toLowerCase() || '';
+  const collegeMap = {
+    'acet.ac.in':          'ACET',
+    'aec.edu.in':          'AEC',
+    'adityauniversity.in': 'Aditya University',
+  };
+  const collegeName = collegeMap[domain] || domain.split('.')[0].toUpperCase();
   logger.warn(`COLLEGE_DB_API_URL not set — stub data used for ${email}`);
   return {
     full_name:   'Update Your Name',
     roll_number: rollNumber,
-    college:     'ACET',
+    college:     collegeName,
     branch:      'CSE',
     phone:       '0000000000'
   };
