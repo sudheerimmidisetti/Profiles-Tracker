@@ -1,8 +1,7 @@
 # ── Secrets ───────────────────────────────────────────
 backend/.env
-frontend/student/.env.production
-frontend/admin/.env.production
 *.env.local
+setup-test-server.sh
 
 # ── Dependencies ──────────────────────────────────────
 node_modules/
