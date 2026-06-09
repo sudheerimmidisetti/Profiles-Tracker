@@ -14,7 +14,7 @@ export function AuthProvider({ children }) {
     if (!accessToken) { setLoading(false); return }
 
     profileAPI.getMe()
-      .then(r => setUser(r.data.data))
+      .then(r => setUser(r.data.data.student))  // store flat student object
       .catch(() => clearTokens())
       .finally(() => setLoading(false))
   }, [])
@@ -37,7 +37,7 @@ export function AuthProvider({ children }) {
     })
     // Fetch profile
     const profile = await profileAPI.getMe()
-    setUser(profile.data.data)
+    setUser(profile.data.data.student)  // store flat student object
     return data
   }, [])
 
@@ -50,7 +50,7 @@ export function AuthProvider({ children }) {
 
   const refreshUser = useCallback(async () => {
     const res = await profileAPI.getMe()
-    setUser(res.data.data)
+    setUser(res.data.data.student)  // store flat student object
   }, [])
 
   return (
