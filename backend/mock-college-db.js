@@ -60,11 +60,11 @@ const STUDENTS = {
     branch: 'AIML',
     phone: '9876543215'
   },
-  'divya@acet.ac.in': {
-    full_name: 'Divya Lakshmi',
-    roll_number: '22MH1A0507',
-    college: 'ACET',
-    branch: 'AIML',
+  '23a91a0561@acet.ac.in': {
+    full_name: 'Jashwanth',
+    roll_number: '23A91A0561',
+    college: 'AEC',
+    branch: 'CSE',
     phone: '9876543216'
   },
   'rahul@acet.ac.in': {

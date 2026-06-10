@@ -7,11 +7,11 @@
 set -euo pipefail
 
 # ── CONFIGURE THESE BEFORE RUNNING ────────────────────────────────────────────
-DB_PASSWORD="changeme_strong_password_here"   # PostgreSQL password
-JWT_SECRET=""                                  # Fill: openssl rand -hex 64
-ADMIN_SECRET=""                                # Fill: openssl rand -hex 16
-SMTP_USER=""                                   # SES SMTP username (AKIAxxxxx)
-SMTP_PASS=""                                   # SES SMTP password
+DB_PASSWORD="prasannareddy@123"   # PostgreSQL password
+JWT_SECRET="3a9f2c8e1b4d7f0a6e3c9b2d8f1a4e7c0b3d9f2a6e1c8b4d7f3a0c9e2b6d4f8a1c3e7b9d2f4a0c6e8b1d3f7a9c2e4b6d8f0a2c4e6b8d0f2a4c6e8"                                  # Fill: openssl rand -hex 64
+ADMIN_SECRET="7f3a9c2e6b4d8f1a"                                # Fill: openssl rand -hex 16
+SMTP_USER="AKIASKSYHA277SKTPHPA"                                   # SES SMTP username (AKIAxxxxx)
+SMTP_PASS="BOhaStECDa3KYU5vBR8F5a0EPM6Z+xGtp8THyiSmZSmd"                                   # SES SMTP password
 DOMAIN="dealance.app"                          # Your domain
 GITHUB_REPO="PrasannaReddy0583/profiles_tracker"
 COLLEGE_DOMAINS="@acet.ac.in,@aec.edu.in,@adityauniversity.in"
