@@ -50,50 +50,41 @@ async function fetchCalendarForYear(username, year) {
 // Returns unique solved problems (no re-submission duplicates)
 // ─────────────────────────────────────────────────────────────
 async function fetchAllAcSubmissions(username) {
-  const BATCH = 100;
-  const seen  = new Set();
-  const result = [];
-  let offset = 0;
+  try {
+    // LC's public recentAcSubmissionList doesn't support true offset pagination.
+    // Fetch up to 100 (max the API allows without auth) and deduplicate by titleSlug.
+    const d = await gql(
+      `query GetAC($u: String!, $limit: Int!) {
+         recentAcSubmissionList(username: $u, limit: $limit) {
+           id title titleSlug timestamp
+         }
+       }`,
+      { u: username, limit: 100 }
+    );
+    const batch = d?.recentAcSubmissionList || [];
+    const seen  = new Set();
+    const result = [];
 
-  while (true) {
-    try {
-      const d = await gql(
-        `query GetAC($u: String!, $limit: Int!, $offset: Int!) {
-           recentAcSubmissionList(username: $u, limit: $limit) {
-             id title titleSlug timestamp
-           }
-         }`,
-        { u: username, limit: BATCH, offset }
-      );
-      const batch = d?.recentAcSubmissionList || [];
-      if (batch.length === 0) break;
-
-      for (const s of batch) {
-        // Deduplicate: one entry per unique problem (titleSlug)
-        if (!seen.has(s.titleSlug)) {
-          seen.add(s.titleSlug);
-          result.push({
-            problem_id:   s.titleSlug,
-            problem_name: s.title,
-            status:       'AC',
-            submitted_at: new Date(Number(s.timestamp) * 1000).toISOString(),
-            language:     null, // not available in public API
-            platform:     'leetcode',
-          });
-        }
+    for (const s of batch) {
+      if (!seen.has(s.titleSlug)) {
+        seen.add(s.titleSlug);
+        result.push({
+          problem_id:   s.titleSlug,
+          problem_name: s.title,
+          status:       'AC',
+          submitted_at: new Date(Number(s.timestamp) * 1000).toISOString(),
+          language:     null,
+          platform:     'leetcode',
+        });
       }
-
-      // LC's recentAcSubmissionList doesn't support real offset pagination —
-      // it always returns the most recent N. So we stop after first batch.
-      break;
-    } catch (err) {
-      logger.warn(`[LC] fetchAllAcSubmissions(${username}) batch failed: ${err.message}`);
-      break;
     }
+    return result;
+  } catch (err) {
+    logger.warn(`[LC] fetchAllAcSubmissions(${username}) failed: ${err.message}`);
+    return [];
   }
-
-  return result;
 }
+
 
 // ─────────────────────────────────────────────────────────────
 // Used during handle VERIFICATION (fast, single field)
