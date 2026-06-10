@@ -56,7 +56,9 @@ function fmt(n) { return (!n && n !== 0) ? '—' : Number(n).toLocaleString() }
 
 function fmtDate(str) {
   if (!str) return '—'
-  const d = new Date(str)
+  // Use only YYYY-MM-DD to avoid UTC→local timezone shift adding +1 day
+  const dateOnly = String(str).slice(0, 10)
+  const d = new Date(dateOnly + 'T00:00:00')
   if (isNaN(d)) return str
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
@@ -129,15 +131,24 @@ function Heatmap({ heatMap }) {
 
 // ── Convert CC contest history to shared chart format ─────────────────────────
 function ccToChartPoints(contests) {
+  // Parse only the date part to avoid UTC→local timezone shift
+  // e.g. '2024-02-21 22:00:08' stored as UTC → Feb 22 IST → wrong.
+  // By using just '2024-02-21' we get midnight local time → correct date.
+  const dateOnly = str => {
+    if (!str) return 0
+    const d = String(str).slice(0, 10)  // 'YYYY-MM-DD'
+    return new Date(d + 'T00:00:00').getTime()  // local midnight
+  }
+
   const sorted = [...(contests || [])]
     .filter(c => c.rating_after_contest > 0 && c.contest_date)
-    .sort((a, b) => new Date(a.contest_date) - new Date(b.contest_date))
+    .sort((a, b) => dateOnly(a.contest_date) - dateOnly(b.contest_date))
 
   return sorted.map((c, idx) => {
     const ratingBefore = idx > 0 ? sorted[idx - 1].rating_after_contest : null
     const si = starInfo(c.rating_after_contest)
     return {
-      date:          new Date(c.contest_date).getTime(),
+      date:          dateOnly(c.contest_date),
       rating:        c.rating_after_contest,
       ratingBefore,
       ratingChange:  c.rating_change ?? null,

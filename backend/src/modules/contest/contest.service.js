@@ -1,41 +1,35 @@
 // backend/src/modules/contest/contest.service.js
 // Fetches per-contest detail: problems, user submissions, and where possible, source code.
-const axios = require('axios');
+const axios   = require('axios');
 const cheerio = require('cheerio');
+const { query } = require('../../config/db');
 
-// ── helpers ───────────────────────────────────────────────────────────────────
 const CF_API = 'https://codeforces.com/api';
 const CC_API = 'https://www.codechef.com';
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-  'Accept': 'application/json, text/html, */*',
+  'Accept':     'application/json, text/html, */*',
 };
 
 // ── CODEFORCES ────────────────────────────────────────────────────────────────
-// NOTE: CF API does NOT allow filtering standings by handle for non-gym contests
-// (non-admin users). We use the anonymous public standings for the problem list
-// and contest.status (which DOES accept a handle) for the user's submissions.
+// IMPORTANT: CF standings API now blocks ANY extra parameter for non-gym contests.
+// Only ?contestId=<id> works. We get the problem list from the public standings
+// and per-user submissions from contest.status (which does accept a handle).
 async function getCodeforcesDetail(contestId, handle) {
   const [standingsRes, statusRes] = await Promise.all([
-    // Public standings (no handles param) — gives us contest name + problem list
-    axios.get(`${CF_API}/contest.standings`, {
-      params: { contestId, from: 1, count: 1 },   // ← no handles param
+    // ⚠ NO extra params — even from/count breaks it
+    axios.get(`${CF_API}/contest.standings?contestId=${contestId}`, {
       headers: HEADERS,
       timeout: 15000,
-    }).catch(e => {
-      console.warn('[CF standings]', e.message);
-      return null;
-    }),
-    // User's own submissions in this contest — handles param is fine here
+    }).catch(e => { console.warn('[CF standings]', e.message); return null; }),
+
+    // contest.status — handle param IS allowed here
     axios.get(`${CF_API}/contest.status`, {
       params: { contestId, handle, from: 1, count: 300 },
       headers: HEADERS,
       timeout: 15000,
-    }).catch(e => {
-      console.warn('[CF status]', e.message);
-      return null;
-    }),
+    }).catch(e => { console.warn('[CF status]', e.message); return null; }),
   ]);
 
   const contestName = standingsRes?.data?.result?.contest?.name || `Contest #${contestId}`;
@@ -44,11 +38,11 @@ async function getCodeforcesDetail(contestId, handle) {
     name:   p.name,
     points: p.points || null,
     rating: p.rating || null,
-    tags:   p.tags || [],
+    tags:   p.tags   || [],
     url:    `https://codeforces.com/contest/${contestId}/problem/${p.index}`,
   }));
 
-  // All submissions by user in this contest
+  // Build submission list for this user
   const rawSubs = statusRes?.data?.result || [];
   const submissions = rawSubs.map(s => ({
     id:           s.id,
@@ -63,20 +57,20 @@ async function getCodeforcesDetail(contestId, handle) {
     codeUrl:      `https://codeforces.com/contest/${contestId}/submission/${s.id}`,
   }));
 
-  // Build solved map from submissions (not from standings, which we can't filter by handle)
+  // Build solved map from submission verdicts
   const solved = {};
   submissions.forEach(s => {
     const key = s.problemIndex;
     if (!key) return;
-    if (!solved[key]) solved[key] = { accepted: false, attempts: 0, points: null };
+    if (!solved[key]) solved[key] = { accepted: false, attempts: 0 };
     if (s.verdict === 'OK') {
       solved[key].accepted = true;
     } else if (s.verdict !== 'COMPILATION_ERROR') {
-      solved[key].attempts++;
+      if (!solved[key].accepted) solved[key].attempts++;
     }
   });
 
-  // Fetch source code for ACCEPTED submissions (up to 5 to avoid rate limits)
+  // Fetch source code for ACCEPTED submissions (up to 5)
   const acceptedSubs = submissions.filter(s => s.verdict === 'OK').slice(0, 5);
   await Promise.all(acceptedSubs.map(async sub => {
     try {
@@ -85,10 +79,10 @@ async function getCodeforcesDetail(contestId, handle) {
         timeout: 8000,
       });
       const $ = cheerio.load(page.data);
-      const code = $('#program-source-text').text().trim() ||
-                   $('pre.source-code').text().trim()     ||
-                   $('pre.prettyprint').text().trim();
-      sub.sourceCode = code || null;
+      sub.sourceCode =
+        $('#program-source-text').text().trim() ||
+        $('pre.source-code').text().trim()      ||
+        $('pre.prettyprint').text().trim()      || null;
     } catch {
       sub.sourceCode = null;
     }
@@ -102,89 +96,138 @@ async function getCodeforcesDetail(contestId, handle) {
     problems,
     solved,
     submissions,
-    rank:   null,   // can't get from public standings without handle
+    rank:   null,
     points: null,
   };
 }
 
 // ── CODECHEF ──────────────────────────────────────────────────────────────────
-async function getCodechefDetail(contestCode, handle) {
-  // Fetch contest info and user submissions in parallel
-  const [contestRes, subsRes] = await Promise.all([
+// CC has no public submissions API that works without authentication.
+// Strategy:
+//   1. Get problem list from public contest API (works fine)
+//   2. Get solved info from DB (codechef_contest_history.problems_solved_count)
+//      and from the stored scraper data where available
+//   3. Try the /api/rankings endpoint with search for per-problem solved info
+async function getCodechefDetail(contestCode, email, dbQuery) {
+  // Parallel: contest info + DB data for this user + this contest
+  const [contestRes, dbRes] = await Promise.all([
     axios.get(`${CC_API}/api/contests/${contestCode}`, {
-      headers: HEADERS,
+      headers: {
+        ...HEADERS,
+        'Referer': 'https://www.codechef.com',
+      },
       timeout: 15000,
     }).catch(e => { console.warn('[CC contest]', e.message); return null; }),
-    // CodeChef submissions API with handle
-    axios.get(`${CC_API}/api/submissions`, {
-      params: { contestCode, handle, language: 'all', status: 'all', page: 1, itemsPerPage: 50 },
-      headers: HEADERS,
-      timeout: 15000,
-    }).catch(e => { console.warn('[CC subs]', e.message); return null; }),
+
+    dbQuery(
+      `SELECT h.*, p.username
+       FROM codechef_contest_history h
+       JOIN codechef_profiles p ON p.student_email = h.student_email
+       WHERE h.student_email = $1 AND h.contest_code = $2
+       LIMIT 1`,
+      [email, contestCode]
+    ).catch(() => null),
   ]);
 
-  // Parse problem list
+  // Parse problem list from the public contest API
   const raw = contestRes?.data;
   let problems = [];
   if (raw?.problems && typeof raw.problems === 'object') {
-    problems = Object.values(raw.problems).map(p => ({
-      code:  p.code || p.problem_code,
-      name:  p.name || p.problem_name,
-      tags:  p.categories || [],
-      url:   `https://www.codechef.com/problems/${p.code || p.problem_code}`,
-    }));
-  } else if (Array.isArray(raw?.problem_list)) {
-    problems = raw.problem_list.map(p => ({
-      code: p.problem_code || p.code,
-      name: p.problem_name || p.name,
-      tags: [],
-      url:  `https://www.codechef.com/problems/${p.problem_code || p.code}`,
+    // Sort by problem index if available, else alphabetically
+    const entries = Object.entries(raw.problems);
+    entries.sort((a, b) => {
+      const ia = a[1].index || a[0];
+      const ib = b[1].index || b[0];
+      return ia < ib ? -1 : ia > ib ? 1 : 0;
+    });
+    problems = entries.map(([code, p], i) => ({
+      index:  p.index || String.fromCharCode(65 + i),  // A, B, C...
+      code,
+      name:   p.name || code,
+      tags:   p.categories || [],
+      url:    `https://www.codechef.com/problems/${code}`,
+      successfulSubmissions: p.successful_submissions || null,
     }));
   }
 
-  // Parse submissions
-  const rawSubs = subsRes?.data?.data || subsRes?.data?.submissions || subsRes?.data?.list || [];
-  const submissions = Array.isArray(rawSubs) ? rawSubs.map(s => ({
-    id:          s.id || s.submission_id,
-    problemCode: s.problemCode || s.problem_code,
-    problemName: s.problemName || s.problem_name,
-    verdict:     s.result || s.status || s.verdict,
-    language:    s.language,
-    timeMs:      s.time ? Math.round(Number(s.time) * 1000) : null,
-    score:       s.score || null,
-    timestamp:   s.date ? new Date(s.date).getTime() : null,
-    codeUrl:     `https://www.codechef.com/submit/${contestCode}/${s.problemCode || s.problem_code}`,
-  })) : [];
+  const dbRow = dbRes?.rows?.[0];
+  const handle = dbRow?.username || '';
+
+  // Try CC rankings API to find the user's per-problem results
+  // Format: /api/rankings/<contest>?page=1&itemsPerPage=10&order=asc&sortBy=rank&search=<username>
+  let rankingRow = null;
+  if (handle) {
+    try {
+      const rankRes = await axios.get(
+        `${CC_API}/api/rankings/${contestCode}`,
+        {
+          params: {
+            page: 1,
+            itemsPerPage: 50,
+            order: 'asc',
+            sortBy: 'rank',
+            search: handle,
+          },
+          headers: { ...HEADERS, 'Referer': 'https://www.codechef.com' },
+          timeout: 15000,
+        }
+      );
+      const rankList = rankRes.data?.list || rankRes.data?.rankings || [];
+      rankingRow = rankList.find(r =>
+        (r.user_handle || r.username || '').toLowerCase() === handle.toLowerCase()
+      ) || rankList[0] || null;
+    } catch (e) {
+      console.warn('[CC rankings]', e.message);
+    }
+  }
 
   // Build solved map
+  // If rankingRow has per-problem results use them, otherwise fall back to count from DB
   const solved = {};
-  submissions.forEach(s => {
-    const code = s.problemCode;
-    if (!code) return;
-    if (!solved[code]) solved[code] = { accepted: false, attempts: 0 };
-    solved[code].attempts++;
-    const v = (s.verdict || '').toUpperCase();
-    if (v === 'AC' || v === 'ACCEPTED' || v === 'FULLY SOLVED' || v === 'CORRECT') {
-      solved[code].accepted = true;
-    }
-  });
+  if (rankingRow?.problems) {
+    // Format: { PROBLEMCODE: { score, totalAttempts, pendingAttempts, ... } }
+    Object.entries(rankingRow.problems).forEach(([code, pr]) => {
+      solved[code] = {
+        accepted: (pr.score || 0) > 0 || pr.result === 'AC',
+        attempts: pr.totalAttempts || pr.wrongAttempts || 0,
+        score:    pr.score || null,
+        penalty:  pr.penalty || null,
+      };
+    });
+  } else if (dbRow?.problems_solved_count > 0) {
+    // We know count but not which ones — mark first N as solved (best effort)
+    const numSolved = Number(dbRow.problems_solved_count);
+    problems.slice(0, numSolved).forEach(p => {
+      solved[p.code] = { accepted: true, attempts: 1 };
+    });
+  }
 
   return {
     platform:    'codechef',
     contestId:   contestCode,
-    contestName: raw?.name || raw?.contest_name || contestCode,
+    contestName: raw?.name || dbRow?.contest_name || contestCode,
     handle,
     problems,
     solved,
-    submissions,
+    submissions: [],  // CC submissions API requires auth — not available
+    myData: dbRow ? {
+      rank:           dbRow.rank_achieved,
+      problemsSolved: dbRow.problems_solved_count,
+      ratingAfter:    dbRow.rating_after_contest,
+      ratingChange:   dbRow.rating_change,
+      division:       dbRow.division,
+    } : null,
+    note: rankingRow
+      ? null
+      : (handle
+          ? `Submission details require CodeChef authentication. Solved count from our database: ${dbRow?.problems_solved_count ?? '?'} problems.`
+          : 'CodeChef submission details require authentication.'),
+    platformUrl: `https://www.codechef.com/${contestCode}`,
   };
 }
 
 // ── LEETCODE ──────────────────────────────────────────────────────────────────
 async function getLeetcodeDetail(contestSlug, email, dbQuery) {
-  // Normalize slug: "Weekly Contest 399" → "weekly-contest-399"
-  const normalizeSlug = s => s.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-
   // Get contest history row from DB
   const dbRes = await dbQuery(
     `SELECT ch.*, lp.username
@@ -198,7 +241,7 @@ async function getLeetcodeDetail(contestSlug, email, dbQuery) {
   );
   const row = dbRes?.rows?.[0];
 
-  // Try to fetch problem list from LeetCode public GraphQL (no auth needed for contest questions)
+  // Fetch problem list from LeetCode public GraphQL (no auth needed)
   let problems = [];
   try {
     const gqlRes = await axios.post(
@@ -224,7 +267,7 @@ async function getLeetcodeDetail(contestSlug, email, dbQuery) {
     );
     const questions = gqlRes.data?.data?.contest?.questions || [];
     problems = questions.map((q, i) => ({
-      index:      String.fromCharCode(65 + i),   // A, B, C, D
+      index:      String.fromCharCode(65 + i),
       slug:       q.titleSlug,
       name:       q.title,
       difficulty: q.difficulty,
@@ -235,18 +278,7 @@ async function getLeetcodeDetail(contestSlug, email, dbQuery) {
     console.warn('[LC graphql]', e.message);
   }
 
-  // Build a partial solved map from what we have stored
-  // LC doesn't give per-problem solved status without auth, but we know how many were solved
-  const solved = {};
-  if (row && problems.length > 0) {
-    const numSolved = Number(row.problems_solved) || 0;
-    // Mark the first N problems as solved (best estimate without auth)
-    // This is approximate — we just show which problems were "possibly solved"
-    // The real indicator should be the count in the KPI row
-    // Don't try to guess individual verdicts
-  }
-
-  const platformUrl = `https://leetcode.com/contest/${contestSlug}/`;
+  const numSolved = Number(row?.problems_solved) || 0;
 
   return {
     platform:     'leetcode',
@@ -254,18 +286,18 @@ async function getLeetcodeDetail(contestSlug, email, dbQuery) {
     contestName:  row?.contest_title || contestSlug,
     handle:       row?.username || '',
     problems,
-    submissions:  [],   // requires auth
-    solved,
+    submissions:  [],
+    solved:       {},  // LC requires auth for per-problem verdicts
     myData: row ? {
       rank:           row.rank_achieved,
-      problemsSolved: row.problems_solved,
+      problemsSolved: numSolved,
       totalProblems:  row.total_problems,
       finishTime:     row.finish_time_seconds,
       rating:         row.rating_after_contest,
       trendDirection: row.trend_direction,
     } : null,
-    note: `LeetCode submissions require you to be logged in. Showing public contest data only. You solved ${row?.problems_solved ?? '?'}/${row?.total_problems ?? '?'} problems.`,
-    platformUrl,
+    note: `Solved ${numSolved}/${row?.total_problems ?? problems.length} problems. Submission details require LeetCode login.`,
+    platformUrl: `https://leetcode.com/contest/${contestSlug}/`,
   };
 }
 

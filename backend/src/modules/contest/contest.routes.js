@@ -37,13 +37,7 @@ router.get('/detail', async (req, res) => {
       result = await getCodeforcesDetail(contestId, handle);
 
     } else if (platform === 'codechef') {
-      const r = await query(
-        `SELECT pp.username FROM platform_profiles pp WHERE pp.student_email=$1 AND pp.platform_name='codechef' LIMIT 1`,
-        [email]
-      );
-      const handle = r.rows[0]?.username;
-      if (!handle) return res.status(404).json({ error: 'CodeChef handle not found' });
-      result = await getCodechefDetail(contestId, handle);
+      result = await getCodechefDetail(contestId, email, query);
 
     } else if (platform === 'leetcode') {
       const r = await query(
