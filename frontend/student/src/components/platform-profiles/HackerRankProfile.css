@@ -1,0 +1,260 @@
+/* HackerRankProfile.css — Premium SaaS design */
+
+/* ── Profile Grid ─────────────────────────────────────────────────────────── */
+.hr-profile-grid {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 700px) {
+  .hr-profile-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Identity Card ────────────────────────────────────────────────────────── */
+.hr-identity-card {
+  background: rgba(255,255,255,.025);
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 16px;
+  padding: 20px 16px;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 8px; text-align: center;
+  position: sticky; top: 0;
+}
+
+.hr-avatar-wrap { position: relative; }
+
+.hr-avatar {
+  width: 72px; height: 72px; border-radius: 50%;
+  border: 2px solid rgba(26,140,255,.4);
+  object-fit: cover;
+}
+.hr-avatar-initials {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: linear-gradient(135deg, #1a8cff, #7c3aed);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem; font-weight: 800; color: #fff;
+}
+
+.hr-name {
+  font-size: 1rem; font-weight: 700; color: var(--fg, #f9fafb);
+  line-height: 1.2; margin-top: 4px;
+}
+.hr-handle {
+  font-size: 0.75rem; color: var(--fg-muted, #6b7280);
+  font-family: 'Roboto Mono', monospace;
+}
+.hr-headline {
+  font-size: 0.72rem; color: var(--fg-muted, #9ca3af);
+  margin: 0; line-height: 1.4; max-width: 200px;
+}
+
+.hr-donut-wrap { margin: 6px 0; }
+.hr-donut { display: block; }
+
+.hr-chips { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
+.hr-chip {
+  font-size: 0.68rem; font-weight: 600;
+  padding: 3px 9px; border-radius: 20px;
+}
+.hr-chip-blue   { background: rgba(26,140,255,.12);  color: #1a8cff; border: 1px solid rgba(26,140,255,.25); }
+.hr-chip-gold   { background: rgba(255,215,0,.1);    color: #ffd700; border: 1px solid rgba(255,215,0,.2); }
+.hr-chip-silver { background: rgba(192,192,192,.08); color: #c0c0c0; border: 1px solid rgba(192,192,192,.15); }
+.hr-chip-bronze { background: rgba(205,127,50,.1);   color: #cd7f32; border: 1px solid rgba(205,127,50,.2); }
+
+.hr-bio {
+  font-size: 0.72rem; color: var(--fg-muted, #9ca3af);
+  line-height: 1.5; margin: 2px 0; max-width: 200px;
+}
+
+.hr-meta-list { width: 100%; display: flex; flex-direction: column; gap: 5px; }
+.hr-meta-row {
+  font-size: 0.72rem; color: var(--fg-muted, #9ca3af);
+  display: flex; align-items: center; gap: 6px; justify-content: center;
+}
+
+.hr-socials { display: flex; gap: 8px; justify-content: center; }
+.hr-social-link {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.9rem; text-decoration: none;
+  transition: background .15s, transform .15s;
+}
+.hr-social-link:hover { background: rgba(255,255,255,.12); transform: translateY(-1px); }
+
+.hr-follow-row {
+  display: flex; align-items: center; gap: 0;
+  width: 100%; background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.06); border-radius: 10px;
+  overflow: hidden; margin-top: 4px;
+}
+.hr-follow-item { flex: 1; padding: 10px 8px; text-align: center; }
+.hr-follow-divider { width: 1px; height: 36px; background: rgba(255,255,255,.07); }
+.hr-follow-val   { font-size: 1rem; font-weight: 800; color: var(--fg, #f9fafb); }
+.hr-follow-label { font-size: 0.65rem; color: var(--fg-muted, #6b7280); text-transform: uppercase; letter-spacing: .05em; }
+
+/* ── Right column ─────────────────────────────────────────────────────────── */
+.hr-right-col { display: flex; flex-direction: column; gap: 16px; }
+
+/* ── Star list ────────────────────────────────────────────────────────────── */
+.hr-star-list { display: flex; flex-direction: column; gap: 10px; }
+.hr-star-row  { display: flex; align-items: center; gap: 10px; }
+.hr-star-icon  { width: 22px; text-align: center; font-size: 0.95rem; flex-shrink: 0; }
+.hr-star-label { font-size: 0.78rem; color: var(--fg, #e5e7eb); flex: 1; font-weight: 500; }
+.hr-stars { display: inline-flex; gap: 1px; }
+.hr-star-score { font-size: 0.68rem; color: var(--fg-muted, #6b7280); margin-left: auto; white-space: nowrap; }
+
+/* ── Cert list (profile tab) ──────────────────────────────────────────────── */
+.hr-cert-list { display: flex; flex-direction: column; gap: 8px; }
+.hr-cert-row  {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: 8px;
+  background: rgba(255,255,255,.03);
+}
+.hr-cert-dot   { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.hr-cert-title { font-size: 0.82rem; color: var(--fg, #e5e7eb); flex: 1; font-weight: 500; }
+.hr-cert-level {
+  font-size: 0.65rem; font-weight: 600;
+  padding: 2px 7px; border-radius: 5px; white-space: nowrap;
+}
+.hr-cert-date  { font-size: 0.68rem; color: var(--fg-muted, #6b7280); white-space: nowrap; }
+
+/* ── Recent challenges ────────────────────────────────────────────────────── */
+.hr-recent-list { display: flex; flex-direction: column; gap: 7px; }
+.hr-recent-row  { display: flex; align-items: center; gap: 8px; }
+.hr-recent-dot  { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.hr-recent-name { font-size: 0.82rem; color: var(--fg, #e5e7eb); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hr-recent-time { font-size: 0.68rem; color: var(--fg-muted, #6b7280); flex-shrink: 0; }
+.hr-track-pill {
+  font-size: 0.65rem; padding: 2px 7px; border-radius: 5px;
+  background: rgba(26,140,255,.12); color: #1a8cff;
+  white-space: nowrap; flex-shrink: 0;
+}
+
+/* ── Language grid ────────────────────────────────────────────────────────── */
+.hr-lang-grid { display: flex; flex-direction: column; gap: 8px; }
+.hr-lang-item { }
+.hr-lang-bar-wrap {
+  height: 5px; background: rgba(255,255,255,.07);
+  border-radius: 3px; overflow: hidden; margin-bottom: 4px;
+}
+.hr-lang-bar { height: 100%; border-radius: 3px; transition: width .4s; }
+.hr-lang-info { display: flex; justify-content: space-between; }
+.hr-lang-name  { font-size: 0.75rem; color: var(--fg, #e5e7eb); }
+.hr-lang-count { font-size: 0.72rem; color: var(--fg-muted, #6b7280); }
+
+/* ── Badge grid ───────────────────────────────────────────────────────────── */
+.hr-badge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 12px;
+}
+.hr-badge-card {
+  padding: 16px 12px; border-radius: 12px; text-align: center;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.07);
+  opacity: .6; transition: all .2s;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+}
+.hr-badge-card.hr-badge-earned {
+  opacity: 1;
+  background: color-mix(in srgb, var(--badge-color) 8%, transparent);
+  border-color: color-mix(in srgb, var(--badge-color) 30%, transparent);
+}
+.hr-badge-card:hover { transform: translateY(-2px); }
+.hr-badge-icon { font-size: 1.6rem; }
+.hr-badge-name { font-size: 0.75rem; font-weight: 700; color: var(--badge-color, #888); }
+.hr-badge-pts  { font-size: 0.65rem; color: var(--fg-muted, #6b7280); }
+.hr-badge-ns   { font-size: 0.62rem; color: var(--fg-muted, #6b7280); }
+.hr-badge-progress-track {
+  width: 100%; height: 3px; background: rgba(255,255,255,.07);
+  border-radius: 2px; overflow: hidden; margin-top: 4px;
+}
+.hr-badge-progress-fill { height: 100%; border-radius: 2px; transition: width .4s; }
+
+/* ── Cert grid (badges tab) ───────────────────────────────────────────────── */
+.hr-cert-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+.hr-cert-card {
+  padding: 14px; border-radius: 10px;
+  background: color-mix(in srgb, var(--cert-color) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cert-color) 25%, transparent);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.hr-cert-card-icon { font-size: 1.2rem; }
+.hr-cert-card-title { font-size: 0.82rem; font-weight: 700; color: var(--fg, #f9fafb); line-height: 1.3; }
+.hr-cert-card-footer { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.hr-cert-passed { font-size: 0.65rem; font-weight: 600; color: #22c55e; }
+
+/* ── Medals ───────────────────────────────────────────────────────────────── */
+.hr-medals-row { display: flex; gap: 20px; }
+.hr-medal-item { text-align: center; }
+.hr-medal-icon  { font-size: 2rem; }
+.hr-medal-count { font-size: 1.3rem; font-weight: 800; }
+.hr-medal-label { font-size: 0.65rem; color: var(--fg-muted, #6b7280); }
+
+/* ── Stats list ───────────────────────────────────────────────────────────── */
+.hr-stats-list { display: flex; flex-direction: column; gap: 10px; }
+.hr-stat-row {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 0.82rem;
+}
+.hr-stat-row span { color: var(--fg-muted, #6b7280); }
+.hr-stat-row strong { color: var(--fg, #f9fafb); font-weight: 700; }
+
+/* ── Track list ───────────────────────────────────────────────────────────── */
+.hr-track-list { display: flex; flex-direction: column; gap: 12px; }
+.hr-track-item { }
+.hr-track-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 5px;
+}
+.hr-track-name  {
+  font-size: 0.8rem; color: var(--fg, #e5e7eb); font-weight: 500;
+  display: flex; align-items: center; gap: 6px;
+}
+.hr-track-icon { font-size: 0.9rem; }
+.hr-track-score-val { font-size: 0.75rem; color: var(--fg-muted, #9ca3af); display: flex; align-items: center; gap: 6px; }
+.hr-track-rank {
+  font-size: 0.68rem; padding: 1px 6px; border-radius: 5px;
+  background: rgba(255,255,255,.07); color: var(--fg-muted, #9ca3af);
+}
+.hr-track-bar-bg {
+  height: 5px; background: rgba(255,255,255,.07); border-radius: 3px; overflow: hidden;
+}
+.hr-track-bar-fill { height: 100%; border-radius: 3px; transition: width .4s; }
+
+/* ── Domain grid ──────────────────────────────────────────────────────────── */
+.hr-domain-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+}
+.hr-domain-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 10px;
+  background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06);
+  transition: background .15s;
+}
+.hr-domain-item.hr-domain-earned {
+  background: color-mix(in srgb, var(--domain-color) 8%, transparent);
+  border-color: color-mix(in srgb, var(--domain-color) 25%, transparent);
+}
+.hr-domain-icon  { font-size: 1.1rem; flex-shrink: 0; }
+.hr-domain-label { font-size: 0.72rem; font-weight: 600; color: var(--fg, #e5e7eb); margin-bottom: 3px; }
+
+/* ── Status chips (submissions) ───────────────────────────────────────────── */
+.hr-status-chip {
+  font-size: 0.7rem; font-weight: 700; padding: 3px 9px; border-radius: 6px;
+}
+.hr-status-ac { background: rgba(34,197,94,.12); color: #22c55e; }
+.hr-status-na { background: rgba(107,114,128,.1);  color: #9ca3af; }
+
+/* ── Reuse lcp utils ──────────────────────────────────────────────────────── */
+.lcp-empty { color: var(--fg-muted, #6b7280); font-size: 0.82rem; }
+.lcp-td-muted { color: var(--fg-muted, #6b7280); }
+.lcp-range { font-size: 0.72rem; color: var(--fg-muted, #6b7280); margin-top: 8px; }
