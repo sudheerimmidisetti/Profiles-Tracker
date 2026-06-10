@@ -4,7 +4,6 @@
 import { useState, useMemo } from 'react'
 import RatingChart from '../RatingChart'
 import ContestDetailPanel from '../ContestDetailPanel'
-import { useAuth } from '../../context/AuthContext'
 
 const TABS = ['Profile', 'Statistics', 'Contests', 'Topics']
 
@@ -199,7 +198,7 @@ const LANG_COLORS = ['#1a8cff','#f89f1b','#22c55e','#a855f7','#ef4444','#06b6d4'
 export default function CodeforcesProfile({ data, onBack }) {
   const [tab,              setTab]              = useState('Profile')
   const [selectedContest,  setSelectedContest]  = useState(null)
-  const { user } = useAuth()
+  const email = localStorage.getItem('email') || ''
 
   const { detail: d, contests } = data
   if (!d) return null
@@ -771,7 +770,7 @@ export default function CodeforcesProfile({ data, onBack }) {
         <ContestDetailPanel
           contest={selectedContest}
           platform="codeforces"
-          email={user?.email}
+          email={email}
           onClose={() => setSelectedContest(null)}
         />
       )}

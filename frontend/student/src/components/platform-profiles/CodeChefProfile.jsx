@@ -3,7 +3,6 @@
 import { useState, useMemo } from 'react'
 import RatingChart from '../RatingChart'
 import ContestDetailPanel from '../ContestDetailPanel'
-import { useAuth } from '../../context/AuthContext'
 
 const TABS = ['Profile', 'Statistics', 'Contests', 'Badges']
 
@@ -197,7 +196,7 @@ export default function CodeChefProfile({ data, onBack }) {
   const [tab,             setTab]             = useState('Profile')
   const [selectedContest, setSelectedContest] = useState(null)
   const PAGE_SIZE = 10   // kept for the Contests tab preview in Statistics
-  const { user } = useAuth()
+  const email = localStorage.getItem('email') || ''
 
   const { detail: d, contests } = data
   if (!d) return null
@@ -832,7 +831,7 @@ export default function CodeChefProfile({ data, onBack }) {
         <ContestDetailPanel
           contest={selectedContest}
           platform="codechef"
-          email={user?.email}
+          email={email}
           onClose={() => setSelectedContest(null)}
         />
       )}

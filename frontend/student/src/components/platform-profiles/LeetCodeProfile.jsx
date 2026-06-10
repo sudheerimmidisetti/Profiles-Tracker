@@ -4,7 +4,6 @@
 import { useState, useMemo } from 'react'
 import RatingChart from '../RatingChart'
 import ContestDetailPanel from '../ContestDetailPanel'
-import { useAuth } from '../../context/AuthContext'
 
 const TABS = ['Profile', 'Statistics', 'Contests', 'Badges', 'Topics']
 
@@ -196,7 +195,7 @@ function BadgeIcon({ icon, name, size = 40 }) {
 export default function LeetCodeProfile({ data, onBack }) {
   const [tab,             setTab]             = useState('Profile')
   const [selectedContest, setSelectedContest] = useState(null)
-  const { user } = useAuth()
+  const email = localStorage.getItem('email') || ''
 
   const { detail, contests } = data
   const d = detail || {}
@@ -873,7 +872,7 @@ export default function LeetCodeProfile({ data, onBack }) {
         <ContestDetailPanel
           contest={selectedContest}
           platform="leetcode"
-          email={user?.email}
+          email={email}
           onClose={() => setSelectedContest(null)}
         />
       )}

@@ -141,13 +141,19 @@ export default function RatingChart({ points = [], platform = 'codeforces', heig
   }, [points, range])
 
   // Min/max for domain with padding
-  const { minR, maxR } = useMemo(() => {
-    if (!filtered.length) return { minR: 0, maxR: 100 }
+  const { minR, maxR, minDate, maxDate } = useMemo(() => {
+    if (!filtered.length) return { minR: 0, maxR: 100, minDate: 0, maxDate: Date.now() }
     const ratings = filtered.map(p => p.rating)
     const lo = Math.min(...ratings)
     const hi = Math.max(...ratings)
     const pad = Math.max((hi - lo) * 0.15, 30)
-    return { minR: Math.max(0, Math.floor(lo - pad)), maxR: Math.ceil(hi + pad) }
+    const dates = filtered.map(p => p.date)
+    return {
+      minR:    Math.max(0, Math.floor(lo - pad)),
+      maxR:    Math.ceil(hi + pad),
+      minDate: Math.min(...dates),
+      maxDate: Math.max(...dates),
+    }
   }, [filtered])
 
   // Last point for header display
@@ -222,7 +228,7 @@ export default function RatingChart({ points = [], platform = 'codeforces', heig
             <XAxis
               dataKey="date"
               type="number"
-              domain={[d => d, d => d]}
+              domain={[minDate, maxDate]}
               scale="time"
               tickFormatter={formatAxisDate}
               tick={{ fill: 'var(--fg-muted)', fontSize: 11 }}

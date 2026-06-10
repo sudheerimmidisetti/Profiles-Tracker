@@ -363,7 +363,7 @@ export default function ContestDetailPanel({ contest, platform, email, onClose }
     setSelectedSub(null)
     setData(null)
 
-    api.get('/contest/detail', { params: { platform, contestId, email } })
+    api.get('/api/contest/detail', { params: { platform, contestId, email } })
       .then(r => setData(r.data.data))
       .catch(e => setError(e.response?.data?.message || e.message || 'Failed to load contest details'))
       .finally(() => setLoading(false))
