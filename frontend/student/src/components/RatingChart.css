@@ -1,0 +1,254 @@
+/* RatingChart.css — Premium trading-style rating chart */
+
+/* ── Root container ──────────────────────────────────────────────────────── */
+.rc-root {
+  background: var(--surface, #12121f);
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-radius: 16px;
+  padding: 20px 20px 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.rc-root::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% -20%, rgba(26,140,255,0.06) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+.rc-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.rc-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rc-current-rating {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--fg, #f0f0f5);
+  line-height: 1;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rc-delta {
+  font-size: 0.82rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rc-delta-pct {
+  opacity: 0.8;
+}
+
+.rc-delta-label {
+  color: var(--fg-muted, #8b8fa8);
+  font-weight: 400;
+}
+
+/* ── Range buttons ───────────────────────────────────────────────────────── */
+.rc-ranges {
+  display: flex;
+  gap: 4px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-radius: 10px;
+  padding: 3px;
+}
+
+.rc-range-btn {
+  background: transparent;
+  border: none;
+  color: var(--fg-muted, #8b8fa8);
+  font-size: 0.73rem;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: 0.3px;
+}
+
+.rc-range-btn:hover {
+  color: var(--fg, #f0f0f5);
+  background: rgba(255,255,255,0.06);
+}
+
+.rc-range-btn.active {
+  background: var(--primary, #1a8cff);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(26,140,255,0.35);
+}
+
+/* ── Chart wrapper ───────────────────────────────────────────────────────── */
+.rc-chart-wrap {
+  margin: 0 -4px;
+  user-select: none;
+}
+
+/* Override recharts text */
+.recharts-cartesian-axis-tick-value {
+  font-family: inherit !important;
+}
+
+/* ── Custom Tooltip ──────────────────────────────────────────────────────── */
+.rc-tooltip {
+  background: rgba(16, 16, 30, 0.96);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  padding: 14px 16px;
+  min-width: 220px;
+  max-width: 300px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  pointer-events: none;
+  animation: rcTtFade 0.12s ease;
+}
+
+@keyframes rcTtFade {
+  from { opacity: 0; transform: translateY(4px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.rc-tt-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+.rc-tt-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--fg, #f0f0f5);
+  line-height: 1.3;
+}
+
+.rc-tt-date {
+  font-size: 0.72rem;
+  color: var(--fg-muted, #8b8fa8);
+}
+
+.rc-tt-rating {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.rc-tt-rating-val {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #f0f0f5;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rc-tt-delta {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.rc-tt-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rc-tt-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.rc-tt-k {
+  font-size: 0.72rem;
+  color: var(--fg-muted, #8b8fa8);
+  white-space: nowrap;
+}
+
+.rc-tt-v {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--fg, #f0f0f5);
+  text-align: right;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+.rc-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.rc-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--fg-muted, #8b8fa8);
+}
+
+.rc-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.rc-last-update {
+  font-size: 0.72rem;
+  color: var(--fg-muted, #8b8fa8);
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────────── */
+.rc-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px;
+  color: var(--fg-muted, #8b8fa8);
+  font-size: 0.85rem;
+}
+
+.rc-empty span {
+  font-size: 2rem;
+  opacity: 0.4;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .rc-current-rating {
+    font-size: 1.5rem;
+  }
+  .rc-range-btn {
+    padding: 4px 7px;
+    font-size: 0.68rem;
+  }
+  .rc-tooltip {
+    min-width: 180px;
+  }
+}

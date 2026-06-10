@@ -2,6 +2,7 @@
 // Full Codeforces GitHub-style profile with 4 tabs:
 //   Profile | Statistics | Contests | Topics
 import { useState, useMemo } from 'react'
+import RatingChart from '../RatingChart'
 
 const TABS = ['Profile', 'Statistics', 'Contests', 'Topics']
 
@@ -137,66 +138,25 @@ function Heatmap({ calendar }) {
   )
 }
 
-// ── Rating SVG Line Chart ──────────────────────────────────────────────────────
-function RatingChart({ contests, currentRating }) {
-  const sorted = useMemo(() =>
-    [...(contests || [])]
-      .filter(c => c.new_rating > 0)
-      .sort((a, b) => a.timestamp_seconds - b.timestamp_seconds),
-    [contests]
-  )
-
-  if (sorted.length < 2) {
-    return <p style={{ color: 'var(--fg-muted)', fontSize: '0.82rem', padding: '20px 0' }}>
-      Not enough data to draw chart.
-    </p>
-  }
-
-  const W = 500, H = 160
-  const PAD = { t: 16, b: 24, l: 44, r: 16 }
-  const ratings = sorted.map(c => c.new_rating)
-  const minR    = Math.min(...ratings) - 50
-  const maxR    = Math.max(...ratings) + 50
-  const xScale  = i => PAD.l + (i / (sorted.length - 1)) * (W - PAD.l - PAD.r)
-  const yScale  = r => PAD.t + (1 - (r - minR) / (maxR - minR)) * (H - PAD.t - PAD.b)
-
-  // Color-code segments by rating tier
-  const lastPt  = sorted[sorted.length - 1]
-  const color   = rankColor(lastPt.rank || '')
-  const accentColor = '#1a8cff'
-
-  const points = sorted.map((c, i) => `${xScale(i)},${yScale(c.new_rating)}`).join(' ')
-  const area   = `M${xScale(0)},${yScale(sorted[0].new_rating)} ` +
-    sorted.slice(1).map((c,i) => `L${xScale(i+1)},${yScale(c.new_rating)}`).join(' ') +
-    ` L${xScale(sorted.length-1)},${H-PAD.b} L${xScale(0)},${H-PAD.b} Z`
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', overflow: 'visible' }}>
-      <defs>
-        <linearGradient id="cf-area-grad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={accentColor} stopOpacity="0.3" />
-          <stop offset="100%" stopColor={accentColor} stopOpacity="0.0" />
-        </linearGradient>
-      </defs>
-      <path d={area} fill="url(#cf-area-grad)" />
-      <polyline points={points} fill="none" stroke={accentColor} strokeWidth="2" strokeLinejoin="round" />
-      <circle
-        cx={xScale(sorted.length-1)} cy={yScale(lastPt.new_rating)}
-        r="5" fill={accentColor} stroke="var(--surface)" strokeWidth="2"
-      />
-      <text x={xScale(sorted.length-1)} y={yScale(lastPt.new_rating)-10}
-        fill={accentColor} fontSize="11" fontWeight="700" textAnchor="middle">
-        {Math.round(lastPt.new_rating)}
-      </text>
-      {[minR+50, Math.round((minR+maxR)/2), maxR-50].map(r => (
-        <text key={r} x={PAD.l-4} y={yScale(r)+4}
-          fill="var(--fg-muted)" fontSize="10" textAnchor="end">{Math.round(r)}</text>
-      ))}
-      <line x1={PAD.l} y1={H-PAD.b} x2={W-PAD.r} y2={H-PAD.b}
-        stroke="var(--border)" strokeWidth="1" />
-    </svg>
-  )
+// ── Convert CF contest history rows to shared chart format ──────────────────
+function cfToChartPoints(contests) {
+  return [...(contests || [])]
+    .filter(c => (c.new_rating ?? c.newRating) > 0 && c.timestamp_seconds)
+    .sort((a, b) => a.timestamp_seconds - b.timestamp_seconds)
+    .map(c => ({
+      date:          c.timestamp_seconds * 1000,
+      rating:        c.new_rating ?? c.newRating ?? 0,
+      ratingBefore:  c.old_rating ?? c.oldRating ?? null,
+      ratingChange:  c.rating_change ?? c.ratingChange ?? null,
+      label:         c.contest_name ?? c.contestName ?? '',
+      contestName:   c.contest_name ?? c.contestName ?? '',
+      rank:          c.rank_achieved ?? c.rankAchieved ?? null,
+      division:      c.division ?? null,
+      problemsSolved: null,
+      contestType:   null,
+    }))
 }
+
 
 // ── Donut ──────────────────────────────────────────────────────────────────────
 function TierDonut({ d }) {
@@ -549,7 +509,7 @@ export default function CodeforcesProfile({ data, onBack }) {
             {/* Rating chart */}
             <div className="lcp-card">
               <p className="lcp-card-title">Rating History</p>
-              <RatingChart contests={contests} currentRating={d.current_rating} />
+              <RatingChart points={cfToChartPoints(contests)} platform="codeforces" height={280} />
               <div style={{ display:'flex', gap:20, marginTop:12, flexWrap:'wrap' }}>
                 {[
                   { label:'Current',  val: Math.round(d.current_rating)||'—' },
@@ -633,7 +593,7 @@ export default function CodeforcesProfile({ data, onBack }) {
           {/* Rating trend */}
           <div className="lcp-card">
             <p className="lcp-card-title">Rating Trend</p>
-            <RatingChart contests={contests} currentRating={d.current_rating} />
+            <RatingChart points={cfToChartPoints(contests)} platform="codeforces" height={300} />
           </div>
 
           {/* Contest history table */}

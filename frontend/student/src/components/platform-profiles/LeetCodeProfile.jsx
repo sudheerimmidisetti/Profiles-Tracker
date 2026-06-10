@@ -2,6 +2,7 @@
 // Full LeetCode GitHub-style profile with 5 tabs:
 //   Profile | Statistics | Contests | Badges | Topics
 import { useState, useMemo } from 'react'
+import RatingChart from '../RatingChart'
 
 const TABS = ['Profile', 'Statistics', 'Contests', 'Badges', 'Topics']
 
@@ -102,74 +103,30 @@ function Heatmap({ calendar }) {
   )
 }
 
-// ── SVG Rating Chart ──────────────────────────────────────────────────────────
-function RatingChart({ contests }) {
-  const filtered = useMemo(() =>
-    [...(contests || [])]
-      .filter(c => c.rating_after_contest > 0)
-      .sort((a, b) => a.contest_time - b.contest_time),
-    [contests]
-  )
-
-  if (filtered.length < 2) {
-    return <p style={{ color: 'var(--fg-muted)', fontSize: '0.82rem', padding: '20px 0' }}>
-      Not enough contest data to draw chart.
-    </p>
-  }
-
-  const W = 500, H = 160
-  const PAD = { t: 16, b: 24, l: 40, r: 16 }
-  const ratings = filtered.map(c => c.rating_after_contest)
-  const minR = Math.min(...ratings) - 50
-  const maxR = Math.max(...ratings) + 50
-  const xScale = i  => PAD.l + (i / (filtered.length - 1)) * (W - PAD.l - PAD.r)
-  const yScale = r  => PAD.t + (1 - (r - minR) / (maxR - minR)) * (H - PAD.t - PAD.b)
-
-  const points = filtered.map((c, i) => `${xScale(i)},${yScale(c.rating_after_contest)}`).join(' ')
-  const area   = `M${xScale(0)},${yScale(filtered[0].rating_after_contest)} ` +
-    filtered.slice(1).map((c,i) => `L${xScale(i+1)},${yScale(c.rating_after_contest)}`).join(' ') +
-    ` L${xScale(filtered.length-1)},${H - PAD.b} L${xScale(0)},${H - PAD.b} Z`
-
-  const last = filtered[filtered.length - 1]
-
-  return (
-    <div className="lcp-chart-wrap">
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ overflow: 'visible' }}>
-        <defs>
-          <linearGradient id="lc-area-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#f89f1b" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#f89f1b" stopOpacity="0.00" />
-          </linearGradient>
-        </defs>
-        {/* Area fill */}
-        <path d={area} fill="url(#lc-area-grad)" />
-        {/* Line */}
-        <polyline points={points} fill="none" stroke="#f89f1b" strokeWidth="2" strokeLinejoin="round" />
-        {/* Last point highlight */}
-        <circle
-          cx={xScale(filtered.length - 1)}
-          cy={yScale(last.rating_after_contest)}
-          r="5" fill="#f89f1b" stroke="var(--surface)" strokeWidth="2"
-        />
-        <text
-          x={xScale(filtered.length - 1) - 4}
-          y={yScale(last.rating_after_contest) - 10}
-          fill="#f89f1b" fontSize="11" fontWeight="700" textAnchor="middle"
-        >
-          {Math.round(last.rating_after_contest)}
-        </text>
-        {/* Y-axis labels */}
-        {[minR + 50, Math.round((minR + maxR) / 2), maxR - 50].map(r => (
-          <text key={r} x={PAD.l - 4} y={yScale(r) + 4} fill="var(--fg-muted)" fontSize="10" textAnchor="end">
-            {Math.round(r)}
-          </text>
-        ))}
-        {/* X-axis base */}
-        <line x1={PAD.l} y1={H - PAD.b} x2={W - PAD.r} y2={H - PAD.b}
-          stroke="var(--border)" strokeWidth="1" />
-      </svg>
-    </div>
-  )
+// ── Convert LC contest history to shared chart format ─────────────────────────
+function lcToChartPoints(contests) {
+  return [...(contests || [])]
+    .filter(c => c.rating_after_contest > 0 && c.contest_time)
+    .sort((a, b) => a.contest_time - b.contest_time)
+    .map((c, idx, arr) => {
+      const ratingBefore = idx > 0 ? arr[idx - 1].rating_after_contest : null
+      return {
+        date:          c.contest_time * 1000,
+        rating:        c.rating_after_contest,
+        ratingBefore,
+        ratingChange:  ratingBefore != null ? c.rating_after_contest - ratingBefore : null,
+        label:         c.contest_title ?? '',
+        contestName:   c.contest_title ?? '',
+        rank:          c.rank_achieved ?? null,
+        division:      null,
+        problemsSolved: c.problems_solved != null
+          ? `${c.problems_solved}${c.total_problems ? ' / ' + c.total_problems : ''}`
+          : null,
+        contestType:   null,
+        finishTime:    c.finish_time_seconds ? fmtTime(c.finish_time_seconds) : null,
+        totalFinished: null,
+      }
+    })
 }
 
 // ── Problem Donut ─────────────────────────────────────────────────────────────
@@ -652,7 +609,7 @@ export default function LeetCodeProfile({ data, onBack }) {
           {/* Contest rating history chart */}
           <div className="lcp-card">
             <p className="lcp-card-title">Contest Rating History</p>
-            <RatingChart contests={contests} />
+            <RatingChart points={lcToChartPoints(contests)} platform="leetcode" height={280} />
             <div style={{ display: 'flex', gap: 24, marginTop: 12, flexWrap: 'wrap' }}>
               {[
                 { label: 'Current Rating', val: Math.round(d.contest_rating) || '—' },
@@ -691,7 +648,7 @@ export default function LeetCodeProfile({ data, onBack }) {
           {/* Rating trend chart */}
           <div className="lcp-card">
             <p className="lcp-card-title">Contest Rating Trend</p>
-            <RatingChart contests={contests} />
+            <RatingChart points={lcToChartPoints(contests)} platform="leetcode" height={300} />
             <div style={{ display: 'flex', gap: 24, marginTop: 12, flexWrap: 'wrap' }}>
               {[
                 { label: 'Current Rating', val: Math.round(d.contest_rating) || '—' },

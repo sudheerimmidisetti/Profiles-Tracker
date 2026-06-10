@@ -1,6 +1,7 @@
 // frontend/student/src/components/platform-profiles/CodeChefProfile.jsx
 // Full CodeChef GitHub-style profile — 4 tabs: Profile | Statistics | Contests | Badges
 import { useState, useMemo } from 'react'
+import RatingChart from '../RatingChart'
 
 const TABS = ['Profile', 'Statistics', 'Contests', 'Badges']
 
@@ -125,67 +126,31 @@ function Heatmap({ heatMap }) {
   )
 }
 
-// ── Rating Chart (SVG line) ────────────────────────────────────────────────────
-function RatingChart({ contests, currentRating }) {
-  const sorted = useMemo(() => {
-    const raw = contests || []
-    return [...raw]
-      .filter(c => c.rating_after_contest > 0 && c.contest_date)
-      .sort((a, b) => new Date(a.contest_date) - new Date(b.contest_date))
-  }, [contests])
+// ── Convert CC contest history to shared chart format ─────────────────────────
+function ccToChartPoints(contests) {
+  const sorted = [...(contests || [])]
+    .filter(c => c.rating_after_contest > 0 && c.contest_date)
+    .sort((a, b) => new Date(a.contest_date) - new Date(b.contest_date))
 
-  // Fallback: use order if dates missing
-  const points = sorted.length >= 2 ? sorted
-    : (contests || []).filter(c => c.rating_after_contest > 0).reverse()
-
-  if (points.length < 2) {
-    return <p style={{ color: 'var(--fg-muted)', fontSize: '0.82rem', padding: '20px 0' }}>
-      Not enough data to draw chart.
-    </p>
-  }
-
-  const W = 500, H = 160
-  const PAD = { t: 16, b: 24, l: 44, r: 16 }
-  const ratings = points.map(c => c.rating_after_contest)
-  const minR    = Math.min(...ratings) - 30
-  const maxR    = Math.max(...ratings) + 30
-  const xScale  = i => PAD.l + (i / (points.length - 1)) * (W - PAD.l - PAD.r)
-  const yScale  = r => PAD.t + (1 - (r - minR) / (maxR - minR)) * (H - PAD.t - PAD.b)
-
-  const accent = '#f89f1b'
-  const ptStr  = points.map((c, i) => `${xScale(i)},${yScale(c.rating_after_contest)}`).join(' ')
-  const area   = `M${xScale(0)},${yScale(points[0].rating_after_contest)} ` +
-    points.slice(1).map((c, i) => `L${xScale(i+1)},${yScale(c.rating_after_contest)}`).join(' ') +
-    ` L${xScale(points.length-1)},${H-PAD.b} L${xScale(0)},${H-PAD.b} Z`
-  const last   = points[points.length - 1]
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', overflow: 'visible' }}>
-      <defs>
-        <linearGradient id="cc-grad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={accent} stopOpacity="0.28" />
-          <stop offset="100%" stopColor={accent} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={area} fill="url(#cc-grad)" />
-      <polyline points={ptStr} fill="none" stroke={accent} strokeWidth="2" strokeLinejoin="round" />
-      <circle
-        cx={xScale(points.length-1)} cy={yScale(last.rating_after_contest)}
-        r="5" fill={accent} stroke="var(--surface)" strokeWidth="2"
-      />
-      <text x={xScale(points.length-1)} y={yScale(last.rating_after_contest)-10}
-        fill={accent} fontSize="11" fontWeight="700" textAnchor="middle">
-        {last.rating_after_contest}
-      </text>
-      {[minR+30, Math.round((minR+maxR)/2), maxR-30].map(r => (
-        <text key={r} x={PAD.l-4} y={yScale(r)+4}
-          fill="var(--fg-muted)" fontSize="10" textAnchor="end">{Math.round(r)}</text>
-      ))}
-      <line x1={PAD.l} y1={H-PAD.b} x2={W-PAD.r} y2={H-PAD.b}
-        stroke="var(--border)" strokeWidth="1" />
-    </svg>
-  )
+  return sorted.map((c, idx) => {
+    const ratingBefore = idx > 0 ? sorted[idx - 1].rating_after_contest : null
+    const si = starInfo(c.rating_after_contest)
+    return {
+      date:          new Date(c.contest_date).getTime(),
+      rating:        c.rating_after_contest,
+      ratingBefore,
+      ratingChange:  c.rating_change ?? null,
+      label:         c.contest_name ?? '',
+      contestName:   c.contest_name ?? '',
+      rank:          c.rank_achieved ?? null,
+      division:      c.division ?? null,
+      problemsSolved: c.problems_solved_count ?? null,
+      contestType:   c.contest_type ?? null,
+      stars:         si.stars,
+    }
+  })
 }
+
 
 // ── Star ring ─────────────────────────────────────────────────────────────────
 function StarRing({ rating, starsLabel, starColor }) {
@@ -571,7 +536,7 @@ export default function CodeChefProfile({ data, onBack }) {
             {/* Rating chart */}
             <div className="lcp-card">
               <p className="lcp-card-title">Rating History</p>
-              <RatingChart contests={sortedContests} currentRating={d.current_rating} />
+              <RatingChart points={ccToChartPoints(sortedContests)} platform="codechef" height={280} />
               <div style={{ display:'flex', gap:20, marginTop:12, flexWrap:'wrap' }}>
                 {[
                   { label:'Current',  val: fmt(d.current_rating) },
@@ -649,7 +614,7 @@ export default function CodeChefProfile({ data, onBack }) {
           {/* Rating trend */}
           <div className="lcp-card">
             <p className="lcp-card-title">Rating Trend</p>
-            <RatingChart contests={sortedContests} currentRating={d.current_rating} />
+            <RatingChart points={ccToChartPoints(sortedContests)} platform="codechef" height={300} />
           </div>
 
           {/* Contest table */}

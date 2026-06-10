@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { analyticsAPI } from '../api/api'
 import Header from '../components/Header'
-import { RatingChart, SolvedChart } from '../components/RatingChart'
+import { RatingChart, SolvedChart } from '../components/AnalyticsCharts'
 
 export default function AnalyticsPage() {
   const { user } = useAuth()
