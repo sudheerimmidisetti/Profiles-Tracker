@@ -136,7 +136,7 @@ async function getPlatformDetail(email, platform) {
               total_problems, rating_after_contest, finish_time_seconds,
               trend_direction
        FROM leetcode_contest_history WHERE student_email = $1
-       ORDER BY contest_time DESC LIMIT 30`,
+       ORDER BY contest_time ASC`,
       [email]
     );
     contests = c.rows;
@@ -162,9 +162,9 @@ async function getPlatformDetail(email, platform) {
 
     const c = await query(
       `SELECT contest_id, contest_name, rank_achieved, old_rating, new_rating,
-              rating_change, timestamp_seconds, division
+              rating_change, timestamp_seconds, division, problems_solved
        FROM codeforces_contest_history WHERE student_email = $1
-       ORDER BY timestamp_seconds DESC LIMIT 50`,
+       ORDER BY timestamp_seconds ASC`,
       [email]
     );
     contests = c.rows;
@@ -192,7 +192,7 @@ async function getPlatformDetail(email, platform) {
               rating_after_contest, rating_change,
               contest_date, contest_type, division, problems_solved_count
        FROM codechef_contest_history WHERE student_email = $1
-       ORDER BY id DESC LIMIT 50`,
+       ORDER BY contest_date ASC`,
       [email]
     );
     contests = c.rows;

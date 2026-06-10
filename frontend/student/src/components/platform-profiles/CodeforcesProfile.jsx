@@ -599,7 +599,7 @@ export default function CodeforcesProfile({ data, onBack }) {
           {/* Contest history table */}
           <div className="lcp-card">
             <p className="lcp-card-title">Contest History</p>
-            {pageContests.length === 0
+            {sortedContests.length === 0
               ? <p style={{ color:'var(--fg-muted)', fontSize:'0.82rem' }}>No contest data yet.</p>
               : (
                 <>
