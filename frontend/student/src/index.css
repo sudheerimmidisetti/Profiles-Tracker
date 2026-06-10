@@ -557,17 +557,30 @@ tbody tr:last-child td { border-bottom: none; }
 .auth-form { display: flex; flex-direction: column; gap: 14px; }
 
 /* OTP Input */
-.otp-row { display: flex; gap: 8px; }
-
-.otp-digit {
-  flex: 1; height: 54px; text-align: center;
-  font-size: 1.4rem; font-weight: 700;
-  background: var(--muted); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); color: var(--fg); outline: none;
-  transition: border-color 0.15s;
+.otp-row {
+  display: flex; gap: 6px;
+  width: 100%;         /* fill auth-card */
 }
 
-.otp-digit:focus { border-color: oklch(0.48 0 0); }
+.otp-digit {
+  flex: 1;             /* share space equally */
+  min-width: 0;        /* allow shrinking below content size */
+  max-width: 52px;     /* hard cap so they never overflow on any screen */
+  height: 52px;
+  text-align: center;
+  font-size: 1.35rem; font-weight: 700;
+  background: var(--muted); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--fg); outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.otp-digit:focus {
+  border-color: oklch(0.65 0.18 240);
+  box-shadow: 0 0 0 3px oklch(0.65 0.18 240 / 0.18);
+}
+.otp-digit:not(:placeholder-shown) {
+  border-color: oklch(0.48 0 0);
+}
 
 /* ── Verify Handlers ─────────────────────────────────── */
 .code-display {

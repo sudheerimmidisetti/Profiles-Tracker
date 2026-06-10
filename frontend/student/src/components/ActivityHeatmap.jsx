@@ -1,109 +1,439 @@
-import { useMemo } from 'react'
+// frontend/student/src/components/ActivityHeatmap.jsx
+// Shared heatmap for LeetCode, Codeforces, CodeChef.
+// Supports: year filter, month group separators, hover tooltip, day-click drawer.
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import './ActivityHeatmap.css'
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+const FULL_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
+const DAYS_ABBR = ['S','M','T','W','T','F','S']
 
-export default function ActivityHeatmap({ calendarJson }) {
-  const cells = useMemo(() => {
-    // calendarJson is LeetCode format: { "timestamp": "count", ... }
-    // Build 53 weeks × 7 days grid
-    const today = new Date()
-    const start = new Date(today)
-    start.setDate(start.getDate() - 371) // ~53 weeks back
-    // align to Sunday
-    start.setDate(start.getDate() - start.getDay())
+// ── Parse any format into { 'YYYY-MM-DD': count } ─────────────────────────────
+function parseCalendar(calendar) {
+  const map = {}
+  if (!calendar) return map
 
-    const counts = {}
-    if (calendarJson) {
-      try {
-        const parsed = typeof calendarJson === 'string' ? JSON.parse(calendarJson) : calendarJson
-        Object.entries(parsed).forEach(([ts, cnt]) => {
-          const d = new Date(parseInt(ts, 10) * 1000)
-          counts[d.toDateString()] = parseInt(cnt, 10) || 0
-        })
-      } catch (_) {}
-    }
+  let raw = calendar
+  if (typeof calendar === 'string') {
+    try { raw = JSON.parse(calendar) } catch { return map }
+  }
 
-    const grid = []
-    const d = new Date(start)
-    for (let w = 0; w < 53; w++) {
-      for (let day = 0; day < 7; day++) {
-        const key = d.toDateString()
-        const cnt = counts[key] || 0
-        grid.push({
-          key,
-          level: cnt === 0 ? 0 : cnt <= 2 ? 1 : cnt <= 5 ? 2 : cnt <= 9 ? 3 : 4,
-          count: cnt,
-          date: new Date(d),
-        })
-        d.setDate(d.getDate() + 1)
-      }
-    }
-    return grid
-  }, [calendarJson])
-
-  // Month labels
-  const monthLabels = useMemo(() => {
-    const labels = []
-    cells.forEach((cell, i) => {
-      if (i % 7 === 0 && cell.date.getDate() <= 7) {
-        labels.push({ month: MONTHS[cell.date.getMonth()], col: Math.floor(i / 7) })
+  if (Array.isArray(raw)) {
+    // CC format: [{date:"2024-6-10", count:32}]
+    raw.forEach(({ date, count }) => {
+      if (!date) return
+      const parts = String(date).split('-')
+      if (parts.length === 3) {
+        const iso = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`
+        map[iso] = (map[iso] || 0) + (parseInt(count) || 0)
       }
     })
-    return labels
-  }, [cells])
+  } else if (typeof raw === 'object') {
+    // LC/CF format: { "1767225600": 2 }  OR  { "2024-01-01": 2 }
+    Object.entries(raw).forEach(([key, cnt]) => {
+      const num = Number(key)
+      const dt  = !isNaN(num) && num > 1e9
+        ? new Date(num * 1000)
+        : new Date(key)
+      if (!isNaN(dt)) {
+        const iso = dt.toISOString().slice(0, 10)
+        map[iso] = (map[iso] || 0) + (parseInt(cnt) || 0)
+      }
+    })
+  }
+  return map
+}
 
-  const weeks = useMemo(() => {
-    const w = []
-    for (let i = 0; i < cells.length; i += 7) w.push(cells.slice(i, i + 7))
-    return w
-  }, [cells])
+// ── Find years with data ───────────────────────────────────────────────────────
+function getAvailableYears(map) {
+  const years = new Set(Object.keys(map).map(iso => iso.slice(0, 4)))
+  const currentYear = String(new Date().getFullYear())
+  years.add(currentYear)
+  return [...years].sort().reverse()
+}
 
-  const totalActive = cells.filter(c => c.level > 0).length
+// ── Build month-grouped grid for a given year ──────────────────────────────────
+// Returns [{monthIdx, monthName, weeks: [[{iso,date,count,inYear}]]}]
+function buildGrid(year, map) {
+  const y = parseInt(year)
+  const today = new Date(); today.setHours(23,59,59,999)
+
+  // Start from Jan 1 of selected year, aligned to Sunday
+  const jan1 = new Date(y, 0, 1)
+  const gridStart = new Date(jan1)
+  gridStart.setDate(gridStart.getDate() - gridStart.getDay())
+
+  // End: Dec 31 (or today if current year)
+  const isCurrentYear = y === new Date().getFullYear()
+  const yearEnd = isCurrentYear ? today : new Date(y, 11, 31, 23, 59, 59)
+
+  // Pad end to complete the last week
+  const gridEnd = new Date(yearEnd)
+  while (gridEnd.getDay() !== 6) gridEnd.setDate(gridEnd.getDate() + 1)
+
+  // Build all days
+  const allDays = []
+  const cur = new Date(gridStart)
+  while (cur <= gridEnd) {
+    const iso = cur.toISOString().slice(0, 10)
+    allDays.push({
+      iso,
+      date:   new Date(cur),
+      count:  map[iso] || 0,
+      inYear: cur.getFullYear() === y,
+    })
+    cur.setDate(cur.getDate() + 1)
+  }
+
+  // Chunk into 7-day weeks
+  const allWeeks = []
+  for (let i = 0; i < allDays.length; i += 7) {
+    allWeeks.push(allDays.slice(i, i + 7))
+  }
+
+  // Group weeks by the month of their first in-year day
+  const groups = []
+  let curGroup = null
+  allWeeks.forEach(week => {
+    const anchor = week.find(d => d.inYear) || week[0]
+    const mIdx = anchor.date.getFullYear() === y ? anchor.date.getMonth() : -1
+    if (mIdx < 0) { if (curGroup) curGroup.weeks.push(week); return }
+    if (!curGroup || curGroup.monthIdx !== mIdx) {
+      curGroup = { monthIdx: mIdx, monthName: MONTHS[mIdx], fullName: FULL_MONTHS[mIdx], weeks: [] }
+      groups.push(curGroup)
+    }
+    curGroup.weeks.push(week)
+  })
+
+  return groups
+}
+
+function heatLevel(count, max) {
+  if (count === 0 || max === 0) return 0
+  const pct = count / max
+  if (pct < 0.25) return 1
+  if (pct < 0.50) return 2
+  if (pct < 0.75) return 3
+  return 4
+}
+
+// ── Tooltip component ─────────────────────────────────────────────────────────
+function HoverTooltip({ cell, color }) {
+  if (!cell || !cell.inYear) return null
+  const dateStr = cell.date.toLocaleDateString('en-IN', {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
+  })
+  return (
+    <div className="ahm-tooltip" style={{ '--ahm-color': color }}>
+      <div className="ahm-tt-date">{dateStr}</div>
+      <div className="ahm-tt-count" style={{ color }}>
+        {cell.count === 0
+          ? 'No submissions'
+          : `${cell.count} submission${cell.count !== 1 ? 's' : ''}`}
+      </div>
+      {cell.count > 0 && (
+        <div className="ahm-tt-hint">Click to see details →</div>
+      )}
+    </div>
+  )
+}
+
+// ── Day Detail Drawer ─────────────────────────────────────────────────────────
+function DayDrawer({ cell, recentSubs, color, onClose }) {
+  const matchSubs = useMemo(() => {
+    if (!recentSubs?.length || !cell?.iso) return []
+    return recentSubs.filter(s => {
+      const ts = s.submitted_at || s.timestamp || s.createdAt
+      if (!ts) return false
+      const d = new Date(typeof ts === 'number' && ts > 1e10 ? ts : ts * 1000)
+      return !isNaN(d) && d.toISOString().slice(0, 10) === cell.iso
+    })
+  }, [recentSubs, cell?.iso])
+
+  if (!cell) return null
+
+  const statusInfo = (s) => {
+    const raw = (s.status || s.verdict || s.result || '').toString().toUpperCase().trim()
+    if (raw === 'OK' || raw.includes('ACCEPT') || raw === 'AC')
+      return { label: 'Accepted', cls: 'ac', icon: '✓' }
+    if (raw.includes('WRONG') || raw === 'WA' || raw.includes('INCORRECT'))
+      return { label: 'Wrong Answer', cls: 'wa', icon: '✗' }
+    if (raw.includes('TIME') || raw === 'TLE')
+      return { label: 'Time Limit Exceeded', cls: 'tle', icon: '⏱' }
+    if (raw.includes('MEMORY') || raw === 'MLE')
+      return { label: 'Memory Limit Exceeded', cls: 'mle', icon: '💾' }
+    if (raw.includes('RUNTIME') || raw === 'RE' || raw.includes('RUNTIME_ERROR'))
+      return { label: 'Runtime Error', cls: 're', icon: '💥' }
+    if (raw.includes('COMPIL') || raw === 'CE')
+      return { label: 'Compilation Error', cls: 'ce', icon: '🔧' }
+    if (raw.includes('PARTIAL') || raw === 'PA')
+      return { label: 'Partial Score', cls: 'pa', icon: '◑' }
+    if (raw.includes('TESTCASE') || raw.includes('FAILED'))
+      return { label: 'Test Case Failed', cls: 'wa', icon: '✗' }
+    if (raw.includes('SKIPPED') || raw.includes('SKIP'))
+      return { label: 'Skipped', cls: 'na', icon: '—' }
+    return { label: raw || 'Unknown', cls: 'na', icon: '?' }
+  }
+
+  const dateStr = cell.date.toLocaleDateString('en-IN', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  })
 
   return (
-    <div className="card">
-      <div className="card-header">
-        <h3 className="card-title">Submission Activity</h3>
-        <span className="badge badge-green">{totalActive} active days</span>
-      </div>
-      <div className="card-body">
-        <div className="heatmap-wrap">
-          {/* Month labels */}
-          <div style={{ display: 'flex', gap: 0, marginBottom: 4, paddingLeft: 0, width: 'max-content' }}>
-            {weeks.map((week, wi) => {
-              const monthLabel = monthLabels.find(m => m.col === wi)
-              return (
-                <div key={wi} style={{ width: 15, fontSize: '0.6rem', color: 'var(--fg-subtle)' }}>
-                  {monthLabel?.month || ''}
-                </div>
-              )
-            })}
+    <div className="ahm-drawer-overlay" onClick={onClose}>
+      <div className="ahm-drawer" onClick={e => e.stopPropagation()} style={{ '--ahm-color': color }}>
+        <div className="ahm-drawer-head">
+          <div>
+            <div className="ahm-drawer-date">{dateStr}</div>
+            <div className="ahm-drawer-kpi" style={{ color }}>
+              {cell.count} submission{cell.count !== 1 ? 's' : ''}
+            </div>
           </div>
-          {/* Grid */}
-          <div style={{ display: 'flex', gap: 3 }}>
-            {weeks.map((week, wi) => (
-              <div key={wi} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                {week.map((cell, di) => (
-                  <div
-                    key={`${wi}-${di}`}
-                    className={`hm-cell hm-${cell.level}`}
-                    title={`${cell.date.toDateString()}: ${cell.count} submission${cell.count !== 1 ? 's' : ''}`}
-                  />
-                ))}
+          <button className="ahm-drawer-close" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+
+        <div className="ahm-drawer-body">
+          {matchSubs.length > 0 ? (
+            <>
+              <div className="ahm-drawer-section-title">Problems Attempted</div>
+              <div className="ahm-drawer-list">
+                {matchSubs.map((s, i) => {
+                  const st = statusInfo(s)
+                  const name = s.problem_name || s.problemName || s.title
+                    || s.challenge_name || s.name || `Submission ${i + 1}`
+                  return (
+                    <div key={i} className="ahm-drawer-row">
+                      <span className={`ahm-verdict-chip ahm-vc-${st.cls}`}>
+                        <span>{st.icon}</span> {st.label}
+                      </span>
+                      <div className="ahm-drawer-row-info">
+                        <span className="ahm-drawer-prob">{name}</span>
+                        <div className="ahm-drawer-row-meta">
+                          {s.language && <span className="ahm-drawer-lang">{s.language}</span>}
+                          {(s.timeMs || s.time_consumed) && (
+                            <span className="ahm-drawer-perf">
+                              ⏱ {s.timeMs ?? s.time_consumed} ms
+                            </span>
+                          )}
+                          {(s.memoryBytes || s.memory_consumed) && (
+                            <span className="ahm-drawer-perf">
+                              💾 {Math.round((s.memoryBytes ?? s.memory_consumed) / 1024)} KB
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-            ))}
+            </>
+          ) : (
+            <div className="ahm-drawer-empty">
+              <div className="ahm-drawer-empty-icon">📊</div>
+              <div className="ahm-drawer-empty-title">
+                {cell.count} submission{cell.count !== 1 ? 's' : ''} recorded
+              </div>
+              <div className="ahm-drawer-empty-sub">
+                Per-problem details are only available for recent submissions stored in your profile.
+                Check the Submissions tab for full history.
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main Component ─────────────────────────────────────────────────────────────
+export default function ActivityHeatmap({
+  calendar,
+  color             = '#22c55e',
+  platformLabel     = '',
+  recentSubmissions = [],
+  title             = 'Submission Activity',
+}) {
+  const dayMap = useMemo(() => parseCalendar(calendar), [calendar])
+  const years  = useMemo(() => getAvailableYears(dayMap), [dayMap])
+
+  const [selYear,     setSelYear]     = useState(() => years[0] || String(new Date().getFullYear()))
+  const [hovered,     setHovered]     = useState(null)
+  const [tooltipPos,  setTooltipPos]  = useState({ x: 0, y: 0 })
+  const [clickedCell, setClickedCell] = useState(null)
+  const gridRef = useRef(null)
+
+  useEffect(() => {
+    if (years.length && !years.includes(selYear)) setSelYear(years[0])
+  }, [years])
+
+  const monthGroups = useMemo(() => buildGrid(selYear, dayMap), [selYear, dayMap])
+
+  const maxCount = useMemo(() => {
+    const vals = Object.entries(dayMap)
+      .filter(([iso]) => iso.startsWith(selYear))
+      .map(([, c]) => c)
+    return Math.max(1, ...vals)
+  }, [dayMap, selYear])
+
+  // Stats
+  const yearEntries = useMemo(() =>
+    Object.entries(dayMap).filter(([iso]) => iso.startsWith(selYear))
+  , [dayMap, selYear])
+  const totalSubs  = yearEntries.reduce((a, [, c]) => a + c, 0)
+  const activeDays = yearEntries.filter(([, c]) => c > 0).length
+
+  const streak = useMemo(() => {
+    let s = 0
+    const today = new Date()
+    for (let i = 0; i < 365; i++) {
+      const d = new Date(today)
+      d.setDate(d.getDate() - i)
+      if ((dayMap[d.toISOString().slice(0, 10)] || 0) > 0) s++
+      else if (i > 0) break
+    }
+    return s
+  }, [dayMap])
+
+  const handleMouseEnter = useCallback((e, cell) => {
+    if (!cell.inYear) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const gridRect = gridRef.current?.getBoundingClientRect() || { left: 0, top: 0 }
+    setTooltipPos({
+      x: rect.left - gridRect.left + rect.width / 2,
+      y: rect.top  - gridRect.top  - 8,
+    })
+    setHovered(cell)
+  }, [])
+
+  const handleClick = useCallback((cell) => {
+    if (!cell.inYear || cell.count === 0) return
+    setClickedCell(cell)
+  }, [])
+
+  return (
+    <div className="ahm-root">
+      {/* ── Header ── */}
+      <div className="ahm-header">
+        <div className="ahm-header-left">
+          <span className="ahm-title">{title}</span>
+          <div className="ahm-stats-row">
+            <span className="ahm-stat-item">
+              <strong>{totalSubs.toLocaleString()}</strong> submissions in {selYear}
+            </span>
+            <span className="ahm-stat-dot">·</span>
+            <span className="ahm-stat-item">
+              <strong>{activeDays}</strong> active days
+            </span>
+            {streak > 1 && (
+              <>
+                <span className="ahm-stat-dot">·</span>
+                <span className="ahm-stat-item">🔥 <strong>{streak}</strong>-day streak</span>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Legend */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10 }}>
-          <span style={{ fontSize: '0.68rem', color: 'var(--fg-subtle)' }}>Less</span>
-          {[0, 1, 2, 3, 4].map(l => (
-            <div key={l} className={`hm-cell hm-${l}`} />
+        {/* Year pills */}
+        {years.length > 1 && (
+          <div className="ahm-year-pills">
+            {years.map(y => (
+              <button
+                key={y}
+                className={`ahm-year-btn${y === selYear ? ' active' : ''}`}
+                style={y === selYear
+                  ? { borderColor: color, color, background: `color-mix(in srgb, ${color} 12%, transparent)` }
+                  : {}}
+                onClick={() => setSelYear(y)}
+              >
+                {y}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Scrollable grid ── */}
+      <div className="ahm-scroll-wrap">
+        <div className="ahm-grid-container" ref={gridRef}>
+          {/* Day-of-week axis */}
+          <div className="ahm-dow-col">
+            <div className="ahm-dow-spacer" /> {/* Align with month labels */}
+            {DAYS_ABBR.map((d, i) => (
+              <div key={i} className="ahm-dow-label">{i % 2 === 1 ? d : ''}</div>
+            ))}
+          </div>
+
+          {/* Month groups */}
+          {monthGroups.map((mg, mi) => (
+            <div key={`${mg.monthName}-${mi}`} className="ahm-month-block">
+              {/* Month name above */}
+              <div className="ahm-month-name" title={mg.fullName}>{mg.monthName}</div>
+
+              {/* Week columns for this month */}
+              <div className="ahm-month-weeks">
+                {mg.weeks.map((week, wi) => (
+                  <div key={wi} className="ahm-week">
+                    {week.map((cell, di) => {
+                      const level = heatLevel(cell.count, maxCount)
+                      const isHov = hovered?.iso === cell.iso
+                      const isClk = clickedCell?.iso === cell.iso
+                      return (
+                        <div
+                          key={di}
+                          className={`ahm-cell${!cell.inYear ? ' ahm-cell-out' : ''}${cell.count > 0 && cell.inYear ? ' ahm-cell-active' : ''}`}
+                          style={cell.inYear && level > 0 ? {
+                            background: color,
+                            opacity: level === 1 ? 0.22 : level === 2 ? 0.48 : level === 3 ? 0.74 : 1,
+                            transform: isHov || isClk ? 'scale(1.4)' : undefined,
+                            outline: isClk ? `2px solid ${color}` : undefined,
+                            outlineOffset: '1px',
+                          } : undefined}
+                          onMouseEnter={e => handleMouseEnter(e, cell)}
+                          onMouseLeave={() => setHovered(null)}
+                          onClick={() => handleClick(cell)}
+                          title={cell.inYear ? `${cell.date.toDateString()}: ${cell.count} submissions` : undefined}
+                        />
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
           ))}
-          <span style={{ fontSize: '0.68rem', color: 'var(--fg-subtle)' }}>More</span>
+
+          {/* Relative tooltip */}
+          {hovered && hovered.inYear && (
+            <div className="ahm-tooltip-wrap" style={{
+              left: tooltipPos.x,
+              top:  tooltipPos.y,
+            }}>
+              <HoverTooltip cell={hovered} color={color} />
+            </div>
+          )}
         </div>
       </div>
+
+      {/* ── Legend ── */}
+      <div className="ahm-legend-row">
+        <span className="ahm-legend-txt">Less</span>
+        {[0,1,2,3,4].map(l => (
+          <div key={l} className="ahm-legend-cell" style={l > 0 ? {
+            background: color,
+            opacity: l === 1 ? 0.22 : l === 2 ? 0.48 : l === 3 ? 0.74 : 1,
+          } : {}} />
+        ))}
+        <span className="ahm-legend-txt">More</span>
+      </div>
+
+      {/* ── Day Detail Drawer ── */}
+      {clickedCell && (
+        <DayDrawer
+          cell={clickedCell}
+          recentSubs={recentSubmissions}
+          color={color}
+          onClose={() => setClickedCell(null)}
+        />
+      )}
     </div>
   )
 }

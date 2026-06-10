@@ -4,6 +4,7 @@
 import { useState, useMemo } from 'react'
 import RatingChart from '../RatingChart'
 import ContestDetailPanel from '../ContestDetailPanel'
+import ActivityHeatmap from '../ActivityHeatmap'
 
 const TABS = ['Profile', 'Statistics', 'Contests', 'Topics']
 
@@ -83,61 +84,8 @@ function ratingToNextRank(rating) {
   return null
 }
 
-// ── Activity Heatmap ───────────────────────────────────────────────────────────
-function Heatmap({ calendar }) {
-  const data = useMemo(() => {
-    if (!calendar) return {}
-    return typeof calendar === 'string' ? JSON.parse(calendar) : calendar
-  }, [calendar])
+// Heatmap now uses shared ActivityHeatmap component (imported above)
 
-  const maxCount = useMemo(() =>
-    Math.max(1, ...Object.values(data).map(Number)), [data])
-
-  const weeks = useMemo(() => {
-    const today = new Date(); today.setHours(0,0,0,0)
-    const start = new Date(today); start.setDate(start.getDate() - 363)
-    start.setDate(start.getDate() - start.getDay())
-
-    const allWeeks = []
-    const cur = new Date(start)
-    while (cur <= today) {
-      const week = []
-      for (let d = 0; d < 7; d++) {
-        const k = cur.toISOString().slice(0,10)
-        week.push({ date: new Date(cur), count: data[k] || 0 })
-        cur.setDate(cur.getDate() + 1)
-      }
-      allWeeks.push(week)
-    }
-    return allWeeks
-  }, [data])
-
-  const heat = (count) => {
-    if (!count) return 0
-    const p = count / maxCount
-    if (p < .25) return 1
-    if (p < .50) return 2
-    if (p < .75) return 3
-    return 4
-  }
-
-  return (
-    <div className="lcp-heatmap">
-      <div className="lcp-heatmap-inner">
-        {weeks.map((week, wi) => (
-          <div key={wi} className="lcp-heatmap-col">
-            {week.map((day, di) => (
-              <div key={di}
-                className={`lcp-heatmap-cell heat-${heat(day.count)}`}
-                title={`${day.date.toDateString()}: ${day.count} submission${day.count !== 1 ? 's' : ''}`}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
 
 // ── Convert CF contest history rows to shared chart format ──────────────────
 function cfToChartPoints(contests) {
@@ -422,13 +370,13 @@ export default function CodeforcesProfile({ data, onBack }) {
 
               {/* Activity heatmap */}
               <div className="lcp-card">
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-                  <p className="lcp-card-title" style={{ margin:0 }}>Submission Activity</p>
-                  <span style={{ fontSize:'0.72rem', color:'var(--fg-muted)' }}>
-                    {Object.keys(calData).length} active days
-                  </span>
-                </div>
-                <Heatmap calendar={calData} />
+                <ActivityHeatmap
+                  calendar={calData}
+                  color="#1a8cff"
+                  platformLabel="Codeforces"
+                  recentSubmissions={recentAc}
+                  title="Submission Activity"
+                />
               </div>
 
               {/* Recent AC */}
@@ -551,8 +499,13 @@ export default function CodeforcesProfile({ data, onBack }) {
             </div>
 
             <div className="lcp-card">
-              <p className="lcp-card-title">Submission Activity</p>
-              <Heatmap calendar={calData} />
+              <ActivityHeatmap
+                calendar={calData}
+                color="#1a8cff"
+                platformLabel="Codeforces"
+                recentSubmissions={recentAc}
+                title="Submission Activity"
+              />
               <div style={{ display:'flex', gap:20, marginTop:12 }}>
                 <div>
                   <div style={{ fontSize:'0.7rem', color:'var(--fg-muted)' }}>Active Days</div>

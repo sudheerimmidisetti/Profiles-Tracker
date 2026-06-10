@@ -4,6 +4,7 @@
 import { useState, useMemo } from 'react'
 import RatingChart from '../RatingChart'
 import ContestDetailPanel from '../ContestDetailPanel'
+import ActivityHeatmap from '../ActivityHeatmap'
 
 const TABS = ['Profile', 'Statistics', 'Contests', 'Badges', 'Topics']
 
@@ -38,71 +39,7 @@ function fmtTime(sec) {
     : `${m}:${String(s).padStart(2,'0')}`
 }
 
-// ── Activity Heatmap ─────────────────────────────────────────────────────────
-function Heatmap({ calendar }) {
-  const data = useMemo(() => {
-    if (!calendar) return []
-    const raw = typeof calendar === 'string' ? JSON.parse(calendar) : calendar
-    return Object.entries(raw).map(([ts, count]) => ({
-      date: new Date(Number(ts) * 1000),
-      count: Number(count),
-    }))
-  }, [calendar])
-
-  const maxCount = useMemo(() => Math.max(1, ...data.map(d => d.count)), [data])
-
-  // Build 52-week grid (364 days going back from today)
-  const weeks = useMemo(() => {
-    const today  = new Date(); today.setHours(0,0,0,0)
-    const start  = new Date(today); start.setDate(start.getDate() - 363)
-    // align to Monday
-    start.setDate(start.getDate() - start.getDay())
-
-    const lookup = new Map(data.map(d => {
-      const k = d.date.toISOString().slice(0,10); return [k, d.count]
-    }))
-
-    const allWeeks = []
-    const cur = new Date(start)
-    while (cur <= today) {
-      const week = []
-      for (let d = 0; d < 7; d++) {
-        const k = cur.toISOString().slice(0,10)
-        week.push({ date: new Date(cur), count: lookup.get(k) || 0 })
-        cur.setDate(cur.getDate() + 1)
-      }
-      allWeeks.push(week)
-    }
-    return allWeeks
-  }, [data])
-
-  const heatLevel = (count) => {
-    if (count === 0) return 0
-    const pct = count / maxCount
-    if (pct < .25) return 1
-    if (pct < .50) return 2
-    if (pct < .75) return 3
-    return 4
-  }
-
-  return (
-    <div className="lcp-heatmap">
-      <div className="lcp-heatmap-inner">
-        {weeks.map((week, wi) => (
-          <div key={wi} className="lcp-heatmap-col">
-            {week.map((day, di) => (
-              <div
-                key={di}
-                className={`lcp-heatmap-cell heat-${heatLevel(day.count)}`}
-                title={`${day.date.toDateString()}: ${day.count} submission${day.count !== 1 ? 's' : ''}`}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
+// Heatmap now uses shared ActivityHeatmap component (imported above)
 
 // ── Convert LC contest history to shared chart format ─────────────────────────
 function lcToChartPoints(contests) {
@@ -423,18 +360,15 @@ export default function LeetCodeProfile({ data, onBack }) {
 
               {/* Activity calendar */}
               <div className="lcp-card">
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-                  <p className="lcp-card-title" style={{ margin:0 }}>Activity Calendar</p>
-                  <div className="lcp-streak">
-                    <span className="lcp-streak-fire">🔥</span>
-                    <span>Current Streak: <strong>{d.streak ?? 0} Days</strong></span>
-                  </div>
-                </div>
-                <Heatmap calendar={d.contribution_calendar} />
-                <p style={{ fontSize: '0.72rem', color: 'var(--fg-muted)', marginTop: 8, textAlign: 'right' }}>
-                  {fmt(d.total_active_days)} total active days
-                </p>
+                <ActivityHeatmap
+                  calendar={d.contribution_calendar}
+                  color="#f89f1b"
+                  platformLabel="LeetCode"
+                  recentSubmissions={recentAc}
+                  title="Activity Calendar"
+                />
               </div>
+
 
               {/* Recent AC submissions */}
               {recentAc.length > 0 && (
@@ -539,7 +473,12 @@ export default function LeetCodeProfile({ data, onBack }) {
               {/* Activity */}
               <div className="lcp-card">
                 <p className="lcp-card-title">Activity</p>
-                <Heatmap calendar={d.contribution_calendar} />
+                <ActivityHeatmap
+                  calendar={d.contribution_calendar}
+                  color="#f89f1b"
+                  platformLabel="LeetCode"
+                  recentSubmissions={recentAc}
+                />
                 <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
                   <div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--fg-muted)' }}>Current Streak</div>
