@@ -222,13 +222,14 @@ export default function RatingChart({ points = [], platform = 'codeforces', heig
             <XAxis
               dataKey="date"
               type="number"
-              domain={['dataMin', 'dataMax']}
+              domain={[d => d, d => d]}
               scale="time"
               tickFormatter={formatAxisDate}
               tick={{ fill: 'var(--fg-muted)', fontSize: 11 }}
               axisLine={false}
               tickLine={false}
               tickCount={6}
+              padding={{ left: 0, right: 8 }}
             />
             <YAxis
               domain={[minR, maxR]}

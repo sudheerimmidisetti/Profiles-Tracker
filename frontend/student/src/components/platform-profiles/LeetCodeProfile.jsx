@@ -3,6 +3,8 @@
 //   Profile | Statistics | Contests | Badges | Topics
 import { useState, useMemo } from 'react'
 import RatingChart from '../RatingChart'
+import ContestDetailPanel from '../ContestDetailPanel'
+import { useAuth } from '../../context/AuthContext'
 
 const TABS = ['Profile', 'Statistics', 'Contests', 'Badges', 'Topics']
 
@@ -192,9 +194,9 @@ function BadgeIcon({ icon, name, size = 40 }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function LeetCodeProfile({ data, onBack }) {
-  const [tab,     setTab]     = useState('Profile')
-  const [page,    setPage]    = useState(0)
-  const PAGE_SIZE = 10
+  const [tab,             setTab]             = useState('Profile')
+  const [selectedContest, setSelectedContest] = useState(null)
+  const { user } = useAuth()
 
   const { detail, contests } = data
   const d = detail || {}
@@ -239,8 +241,7 @@ export default function LeetCodeProfile({ data, onBack }) {
     [...(contests || [])].sort((a, b) => b.contest_time - a.contest_time),
     [contests]
   )
-  const pageCount = Math.ceil(sortedContests.length / PAGE_SIZE)
-  const pageContests = sortedContests.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  // No pagination — show all
 
   // Top skill cards (top 6 by solved count)
   const topSkills = useMemo(() => [
@@ -667,7 +668,7 @@ export default function LeetCodeProfile({ data, onBack }) {
           {/* Contest history table */}
           <div className="lcp-card">
             <p className="lcp-card-title">Contest History</p>
-            {pageContests.length === 0
+            {sortedContests.length === 0
               ? <p style={{ color: 'var(--fg-muted)', fontSize: '0.82rem' }}>No contest data yet.</p>
               : (
                 <>
@@ -683,10 +684,16 @@ export default function LeetCodeProfile({ data, onBack }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {pageContests.map((c, i) => {
+                        {sortedContests.map((c, i) => {
                           const isUp = c.trend_direction === 'UP'
                           return (
-                            <tr key={i}>
+                            <tr
+                              key={i}
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => setSelectedContest(c)}
+                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(34,197,94,0.06)'}
+                              onMouseLeave={e => e.currentTarget.style.background = ''}
+                            >
                               <td>
                                 <div style={{ fontWeight: 500 }}>{c.contest_title}</div>
                                 <div style={{ fontSize: '0.7rem', color: 'var(--fg-muted)' }}>
@@ -708,21 +715,9 @@ export default function LeetCodeProfile({ data, onBack }) {
                     </table>
                   </div>
 
-                  {pageCount > 1 && (
-                    <div className="lcp-pagination">
-                      <button className="lcp-page-btn" disabled={page === 0}
-                        onClick={() => setPage(p => p - 1)}>‹</button>
-                      {Array.from({ length: pageCount }, (_, i) => (
-                        <button key={i}
-                          className={`lcp-page-btn${page === i ? ' active' : ''}`}
-                          onClick={() => setPage(i)}>{i + 1}</button>
-                      ))}
-                      <button className="lcp-page-btn" disabled={page === pageCount - 1}
-                        onClick={() => setPage(p => p + 1)}>›</button>
-                    </div>
-                  )}
                   <p style={{ fontSize: '0.72rem', color: 'var(--fg-muted)', marginTop: 8 }}>
-                    Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sortedContests.length)} of {sortedContests.length} contests
+                    {sortedContests.length} contest{sortedContests.length !== 1 ? 's' : ''} total
+                    {' · '}<span style={{ color: '#22c55e' }}>Click any row to view contest details</span>
                   </p>
                 </>
               )
@@ -872,6 +867,15 @@ export default function LeetCodeProfile({ data, onBack }) {
             </div>
           </div>
         </div>
+      )}
+      {/* Contest detail panel */}
+      {selectedContest && (
+        <ContestDetailPanel
+          contest={selectedContest}
+          platform="leetcode"
+          email={user?.email}
+          onClose={() => setSelectedContest(null)}
+        />
       )}
     </div>
   )
