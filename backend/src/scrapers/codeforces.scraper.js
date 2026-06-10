@@ -67,11 +67,13 @@ async function getFullProfile(handle) {
     const solvedByTier = { under1200: 0, r1200_1599: 0, r1600_1899: 0, r1900_2199: 0, above2200: 0 };
     const langMap      = {};   // language → count
     const tagMap       = {};   // tag → count
-    const calMap       = {};   // date YYYY-MM-DD → submission count
-    const recentAC     = [];
-    let totalSubs     = 0;
-    let acceptedSubs  = 0;
-    let highestRated  = 0;
+    const calMap          = {};   // date YYYY-MM-DD → submission count
+    const recentAC        = [];
+    const allAcSubs       = [];   // ALL unique AC problems for submissions table
+    let totalSubs         = 0;
+    let acceptedSubs      = 0;
+    let highestRated      = 0;
+
 
     try {
       const submissions = await cfGet(
@@ -111,6 +113,18 @@ async function getFullProfile(handle) {
         else                    solvedByTier.above2200++;
 
         if (rating > highestRated) highestRated = rating;
+
+        // All unique AC submissions for DB storage
+        allAcSubs.push({
+          problem_id:   key,
+          problem_name: sub.problem.name,
+          status:       'AC',
+          language:     sub.programmingLanguage || null,
+          submitted_at: new Date(sub.creationTimeSeconds * 1000).toISOString(),
+          runtime_ms:   sub.timeConsumedMillis  || null,
+          memory_kb:    Math.round((sub.memoryConsumedBytes || 0) / 1024) || null,
+          platform:     'codeforces',
+        });
 
         // Recent AC (collect first 20 unique)
         if (recentAC.length < 20) {
@@ -186,6 +200,7 @@ async function getFullProfile(handle) {
       tagStats,
       submissionCalendar:      calMap,
       recentAcSubmissions:     recentAC,
+      allAcSubmissions:        allAcSubs,   // full unique AC history
       // Contest history
       contestHistory,
     };

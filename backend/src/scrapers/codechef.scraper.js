@@ -320,6 +320,26 @@ async function getFullProfile(username) {
       badges,
       ratingGraph,
       contestHistory,
+      // All AC submissions derived from heatMap (CC doesn't expose problem names publicly)
+      // One synthetic entry per active day; count = number of submissions that day
+      allAcSubmissions: heatMap
+        .filter(h => h.count > 0)
+        .flatMap(h => {
+          // Parse date carefully to avoid UTC offset issues
+          const [y, m, d] = (h.date || '').split(/[-/]/).map(Number);
+          if (!y || !m || !d) return [];
+          const iso = new Date(y, m - 1, d, 12, 0, 0).toISOString();
+          // Create one entry per submission count on that day
+          return Array.from({ length: h.count }, (_, i) => ({
+            problem_id:   `cc-${h.date}-${i}`,
+            problem_name: `CodeChef submission`,
+            status:       'AC',
+            language:     null,
+            submitted_at: iso,
+            platform:     'codechef',
+          }));
+        }),
+
     };
   } catch (err) {
     logger.error(`[CC] getFullProfile failed for ${username}: ${err.message}`);

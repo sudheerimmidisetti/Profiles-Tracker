@@ -109,6 +109,44 @@ async function syncStudent(email, handles) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Upsert all unique AC submissions into student_submissions table
+// ─────────────────────────────────────────────────────────────
+async function upsertSubmissions(email, platform, submissions) {
+  if (!submissions || submissions.length === 0) return;
+
+  // Batch in groups of 200 to avoid huge query params
+  const BATCH = 200;
+  for (let i = 0; i < submissions.length; i += BATCH) {
+    const batch = submissions.slice(i, i + BATCH);
+    const values = [];
+    const params = [];
+    let p = 1;
+    for (const s of batch) {
+      values.push(`($${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++})`);
+      params.push(
+        email,
+        platform,
+        s.problem_id,
+        s.problem_name || null,
+        s.status || 'AC',
+        s.language || null,
+        s.submitted_at || null,
+        s.runtime_ms   || null
+      );
+    }
+    await query(
+      `INSERT INTO student_submissions
+         (student_email, platform, problem_id, problem_name, status, language, submitted_at, runtime_ms)
+       VALUES ${values.join(',')}
+       ON CONFLICT (student_email, platform, problem_id) DO NOTHING`,
+      params
+    ).catch(err => logger.warn(`[SyncJob] upsertSubmissions batch failed: ${err.message}`));
+  }
+  logger.debug(`[SyncJob] Upserted ${submissions.length} ${platform} submissions for ${email}`);
+}
+
+
+// ─────────────────────────────────────────────────────────────
 // Platform upsert helpers
 // ─────────────────────────────────────────────────────────────
 async function upsertLeetcode(email, d) {
@@ -212,6 +250,9 @@ async function upsertLeetcode(email, d) {
        c.trendDirection, c.totalProblems]
     );
   }
+
+  // 4. Upsert all unique AC submissions
+  await upsertSubmissions(email, 'leetcode', d.allAcSubmissions || []);
 }
 
 async function upsertCodeforces(email, d) {
@@ -307,7 +348,11 @@ async function upsertCodeforces(email, d) {
        c.oldRating, c.newRating, c.ratingChange, c.timestampSeconds, c.division]
     );
   }
+
+  // 4. Upsert all unique AC submissions
+  await upsertSubmissions(email, 'codeforces', d.allAcSubmissions || []);
 }
+
 
 async function upsertCodechef(email, d) {
   // 1. platform_profiles (unified summary)
@@ -395,7 +440,11 @@ async function upsertCodechef(email, d) {
       ]
     );
   }
+
+  // 4. Upsert all unique AC submissions (derived from heatMap)
+  await upsertSubmissions(email, 'codechef', d.allAcSubmissions || []);
 }
+
 
 async function upsertHackerrank(email, d) {
   // 1. platform_profiles (unified summary)
