@@ -235,5 +235,35 @@ async function getPlatformDetail(email, platform) {
   return { platform, base, detail, contests, submissions, snapshots: snapRes.rows };
 }
 
-module.exports = { getSnapshots, getSummary, getPlatformDetail };
+/**
+ * Get all AC submissions for a student on a platform, optionally filtered to one date.
+ * date: 'YYYY-MM-DD' | undefined
+ */
+async function getSubmissions(email, platform, date) {
+  let sql, params;
+  if (date) {
+    // Filter to submissions on that specific date (in local-ish terms: date part of submitted_at)
+    sql = `
+      SELECT problem_id, problem_name, status, language, submitted_at, runtime_ms, memory_kb
+      FROM student_submissions
+      WHERE student_email = $1
+        AND platform      = $2
+        AND submitted_at::date = $3::date
+      ORDER BY submitted_at DESC
+    `;
+    params = [email, platform, date];
+  } else {
+    sql = `
+      SELECT problem_id, problem_name, status, language, submitted_at, runtime_ms, memory_kb
+      FROM student_submissions
+      WHERE student_email = $1
+        AND platform      = $2
+      ORDER BY submitted_at DESC
+    `;
+    params = [email, platform];
+  }
+  const res = await query(sql, params);
+  return res.rows;
+}
 
+module.exports = { getSnapshots, getSummary, getPlatformDetail, getSubmissions };

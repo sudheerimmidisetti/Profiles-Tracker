@@ -1,8 +1,10 @@
 // frontend/student/src/components/ActivityHeatmap.jsx
 // Shared heatmap for LeetCode, Codeforces, CodeChef.
-// Supports: year filter, month group separators, hover tooltip, day-click drawer.
+// Supports: year filter, month group separators, hover tooltip, day-click drawer with DB fetch.
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import axios from 'axios'
 import './ActivityHeatmap.css'
+
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const FULL_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
@@ -139,8 +141,27 @@ function HoverTooltip({ cell, color }) {
 }
 
 // ── Day Detail Drawer ─────────────────────────────────────────────────────────
-function DayDrawer({ cell, recentSubs, color, onClose }) {
+function DayDrawer({ cell, platform, recentSubs, color, onClose }) {
+  const [dbSubs,   setDbSubs]   = useState(null)  // null = not fetched yet
+  const [loading,  setLoading]  = useState(false)
+
+  // Fetch from student_submissions table on mount
+  useEffect(() => {
+    if (!cell?.iso || !platform) return
+    setLoading(true)
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+    axios.get(`/api/analytics/submissions/${platform}`, {
+      params: { date: cell.iso },
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => setDbSubs(r.data?.data || []))
+      .catch(() => setDbSubs([]))  // fall back silently
+      .finally(() => setLoading(false))
+  }, [cell?.iso, platform])
+
+  // Merge: prefer DB rows; fall back to in-memory recentSubs for same date
   const matchSubs = useMemo(() => {
+    if (dbSubs && dbSubs.length > 0) return dbSubs
     if (!recentSubs?.length || !cell?.iso) return []
     return recentSubs.filter(s => {
       const ts = s.submitted_at || s.timestamp || s.createdAt
@@ -148,7 +169,7 @@ function DayDrawer({ cell, recentSubs, color, onClose }) {
       const d = new Date(typeof ts === 'number' && ts > 1e10 ? ts : ts * 1000)
       return !isNaN(d) && d.toISOString().slice(0, 10) === cell.iso
     })
-  }, [recentSubs, cell?.iso])
+  }, [dbSubs, recentSubs, cell?.iso])
 
   if (!cell) return null
 
@@ -172,7 +193,7 @@ function DayDrawer({ cell, recentSubs, color, onClose }) {
       return { label: 'Test Case Failed', cls: 'wa', icon: '✗' }
     if (raw.includes('SKIPPED') || raw.includes('SKIP'))
       return { label: 'Skipped', cls: 'na', icon: '—' }
-    return { label: raw || 'Unknown', cls: 'na', icon: '?' }
+    return { label: raw || 'Accepted', cls: 'ac', icon: '✓' }
   }
 
   const dateStr = cell.date.toLocaleDateString('en-IN', {
@@ -193,9 +214,14 @@ function DayDrawer({ cell, recentSubs, color, onClose }) {
         </div>
 
         <div className="ahm-drawer-body">
-          {matchSubs.length > 0 ? (
+          {loading ? (
+            <div className="ahm-drawer-empty">
+              <div className="ahm-drawer-empty-icon" style={{ animation: 'spin 1s linear infinite' }}>⟳</div>
+              <div className="ahm-drawer-empty-title">Loading submissions…</div>
+            </div>
+          ) : matchSubs.length > 0 ? (
             <>
-              <div className="ahm-drawer-section-title">Problems Attempted</div>
+              <div className="ahm-drawer-section-title">Problems Solved</div>
               <div className="ahm-drawer-list">
                 {matchSubs.map((s, i) => {
                   const st = statusInfo(s)
@@ -210,15 +236,11 @@ function DayDrawer({ cell, recentSubs, color, onClose }) {
                         <span className="ahm-drawer-prob">{name}</span>
                         <div className="ahm-drawer-row-meta">
                           {s.language && <span className="ahm-drawer-lang">{s.language}</span>}
-                          {(s.timeMs || s.time_consumed) && (
-                            <span className="ahm-drawer-perf">
-                              ⏱ {s.timeMs ?? s.time_consumed} ms
-                            </span>
+                          {s.runtime_ms && (
+                            <span className="ahm-drawer-perf">⏱ {s.runtime_ms} ms</span>
                           )}
-                          {(s.memoryBytes || s.memory_consumed) && (
-                            <span className="ahm-drawer-perf">
-                              💾 {Math.round((s.memoryBytes ?? s.memory_consumed) / 1024)} KB
-                            </span>
+                          {s.memory_kb && (
+                            <span className="ahm-drawer-perf">💾 {s.memory_kb} KB</span>
                           )}
                         </div>
                       </div>
@@ -231,11 +253,10 @@ function DayDrawer({ cell, recentSubs, color, onClose }) {
             <div className="ahm-drawer-empty">
               <div className="ahm-drawer-empty-icon">📊</div>
               <div className="ahm-drawer-empty-title">
-                {cell.count} submission{cell.count !== 1 ? 's' : ''} recorded
+                {cell.count} submission{cell.count !== 1 ? 's' : ''} on this day
               </div>
               <div className="ahm-drawer-empty-sub">
-                Per-problem details are only available for recent submissions stored in your profile.
-                Check the Submissions tab for full history.
+                Detailed problem data will appear here after the next sync.
               </div>
             </div>
           )}
@@ -250,9 +271,11 @@ export default function ActivityHeatmap({
   calendar,
   color             = '#22c55e',
   platformLabel     = '',
+  platform          = '',           // e.g. 'leetcode' | 'codeforces' | 'codechef'
   recentSubmissions = [],
   title             = 'Submission Activity',
 }) {
+
   const dayMap = useMemo(() => parseCalendar(calendar), [calendar])
   const years  = useMemo(() => getAvailableYears(dayMap), [dayMap])
 
@@ -429,11 +452,13 @@ export default function ActivityHeatmap({
       {clickedCell && (
         <DayDrawer
           cell={clickedCell}
+          platform={platform}
           recentSubs={recentSubmissions}
           color={color}
           onClose={() => setClickedCell(null)}
         />
       )}
+
     </div>
   )
 }

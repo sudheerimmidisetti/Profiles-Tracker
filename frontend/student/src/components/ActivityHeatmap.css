@@ -257,3 +257,9 @@
   font-size: 0.75rem; color: rgba(255,255,255,.35);
   max-width: 300px; line-height: 1.5;
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+

@@ -374,9 +374,11 @@ export default function CodeforcesProfile({ data, onBack }) {
                   calendar={calData}
                   color="#1a8cff"
                   platformLabel="Codeforces"
+                  platform="codeforces"
                 recentSubmissions={recentAC}
                   title="Submission Activity"
                 />
+
               </div>
 
               {/* Recent AC */}
@@ -503,9 +505,11 @@ export default function CodeforcesProfile({ data, onBack }) {
                 calendar={calData}
                 color="#1a8cff"
                 platformLabel="Codeforces"
+                platform="codeforces"
                 recentSubmissions={recentAC}
                 title="Submission Activity"
               />
+
 
               <div style={{ display:'flex', gap:20, marginTop:12 }}>
                 <div>

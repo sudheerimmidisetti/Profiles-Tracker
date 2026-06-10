@@ -364,9 +364,11 @@ export default function LeetCodeProfile({ data, onBack }) {
                   calendar={d.contribution_calendar}
                   color="#f89f1b"
                   platformLabel="LeetCode"
+                  platform="leetcode"
                   recentSubmissions={recentAc}
                   title="Activity Calendar"
                 />
+
               </div>
 
 
@@ -477,8 +479,10 @@ export default function LeetCodeProfile({ data, onBack }) {
                   calendar={d.contribution_calendar}
                   color="#f89f1b"
                   platformLabel="LeetCode"
+                  platform="leetcode"
                   recentSubmissions={recentAc}
                 />
+
                 <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
                   <div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--fg-muted)' }}>Current Streak</div>

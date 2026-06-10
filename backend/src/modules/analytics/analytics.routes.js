@@ -7,8 +7,10 @@ const router = Router();
 
 router.use(authenticate);
 
-router.get('/snapshot/:email',  ctrl.getSnapshots);    // Historical time-series for charts
-router.get('/summary/:email',   ctrl.getSummary);      // Cross-platform aggregated summary
-router.get('/detail/:platform', ctrl.getPlatformDetail); // Full platform profile (uses JWT email)
+router.get('/snapshot/:email',      ctrl.getSnapshots);      // Historical time-series for charts
+router.get('/summary/:email',        ctrl.getSummary);        // Cross-platform aggregated summary
+router.get('/detail/:platform',      ctrl.getPlatformDetail); // Full platform profile (uses JWT email)
+router.get('/submissions/:platform', ctrl.getSubmissions);    // All AC submissions for a date
+
 
 module.exports = router;

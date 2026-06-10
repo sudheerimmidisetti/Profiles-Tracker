@@ -405,8 +405,10 @@ export default function CodeChefProfile({ data, onBack }) {
                   calendar={heatMap}
                   color="#22c55e"
                   platformLabel="CodeChef"
+                  platform="codechef"
                   title="Submission Activity"
                 />
+
               </div>
 
               {/* Recent contests preview */}
@@ -517,8 +519,10 @@ export default function CodeChefProfile({ data, onBack }) {
                 calendar={heatMap}
                 color="#22c55e"
                 platformLabel="CodeChef"
+                platform="codechef"
                 title="Submission Activity"
               />
+
               <div style={{ display:'flex', gap:20, marginTop:12 }}>
                 <div>
                   <div style={{ fontSize:'0.7rem', color:'var(--fg-muted)' }}>Active Days</div>

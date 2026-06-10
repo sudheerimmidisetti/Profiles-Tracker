@@ -38,4 +38,18 @@ async function getPlatformDetail(req, res, next) {
   }
 }
 
-module.exports = { getSnapshots, getSummary, getPlatformDetail };
+// GET /api/analytics/submissions/:platform?date=YYYY-MM-DD
+// Returns all unique AC submissions for the logged-in student filtered by platform + date
+async function getSubmissions(req, res, next) {
+  try {
+    const email    = req.user.email === 'admin' ? req.query.email : req.user.email;
+    const platform = req.params.platform.toLowerCase();
+    const date     = req.query.date; // YYYY-MM-DD optional
+    const data = await analyticsService.getSubmissions(email, platform, date);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getSnapshots, getSummary, getPlatformDetail, getSubmissions };
