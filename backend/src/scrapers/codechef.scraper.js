@@ -78,6 +78,101 @@ async function getDisplayName(username) {
 }
 
 // ── Full profile ───────────────────────────────────────────────────────────────
+
+// Fetches real submission data from /recent/user (HTML scraping)
+// Returns array of { problem_id, problem_name, status, language, submitted_at, contest_id }
+async function fetchCCRecentSubmissions(username) {
+  const submissions = [];
+  const seen = new Set(); // dedupe by problem code (keep best score)
+
+  try {
+    let page = 0;
+    const MAX_PAGES = 20; // 20 × 20 rows = 400 submissions
+
+    while (page < MAX_PAGES) {
+      const res = await axios.get(`${BASE}/recent/user`, {
+        params: { page, user_handle: username },
+        headers: { ...HEADERS, 'Accept': 'application/json', 'Referer': `${BASE}/users/${username}` },
+        timeout: 12000,
+      });
+
+      const html    = res.data?.content || '';
+      const maxPage = res.data?.max_page || 0;
+      if (!html || html.trim() === '<') break;
+
+      const $ = cheerio.load(html);
+      let rowCount = 0;
+
+      $('table tr').each((_, row) => {
+        const cells = $(row).find('td');
+        if (cells.length < 4) return;
+
+        const linkEl    = $(cells[1]).find('a').first();
+        const href      = linkEl.attr('href') || '';           // e.g. /START242D/problems/EQMNG
+        const scoreText = $(cells[2]).text().trim();            // e.g. "(100)"
+        const lang      = $(cells[3]).text().trim();
+        const timeText  = $(cells[0]).text().trim();            // e.g. "18 hours ago" or "08:42 PM 03/06/26"
+
+        // Extract problem code and contest code from href
+        const hrefParts   = href.split('/problems/');
+        if (hrefParts.length < 2) return;
+        const problemCode = hrefParts[1]?.split('?')[0]?.trim();
+        const contestCode = hrefParts[0]?.replace('/', '').trim(); // remove leading /
+        if (!problemCode) return;
+
+        rowCount++;
+
+        // Parse score: "(100)" → 100, "100" → 100
+        const scoreMatch = scoreText.match(/(\d+)/);
+        const score = scoreMatch ? parseInt(scoreMatch[1]) : 0;
+        const status = score >= 100 ? 'AC' : score > 0 ? 'PA' : 'WA';
+
+        // Parse submitted_at from time text
+        // Format A: "08:42 PM 03/06/26" → parse as date
+        // Format B: relative "N hours ago", "N days ago" → approximate
+        let submitted_at = null;
+        const absMatch = timeText.match(/(\d{1,2}:\d{2}\s*[AP]M\s+\d{2}\/\d{2}\/\d{2})/i);
+        if (absMatch) {
+          try {
+            submitted_at = new Date(absMatch[1].replace(/(\d{2})\/(\d{2})\/(\d{2})/, '20$3-$2-$1')).toISOString();
+          } catch { submitted_at = null; }
+        } else {
+          const hoursAgo = timeText.match(/(\d+)\s*hour/i);
+          const daysAgo  = timeText.match(/(\d+)\s*day/i);
+          const minsAgo  = timeText.match(/(\d+)\s*min/i);
+          const now = Date.now();
+          if (hoursAgo)     submitted_at = new Date(now - Number(hoursAgo[1]) * 3600000).toISOString();
+          else if (daysAgo) submitted_at = new Date(now - Number(daysAgo[1]) * 86400000).toISOString();
+          else if (minsAgo) submitted_at = new Date(now - Number(minsAgo[1]) * 60000).toISOString();
+          else              submitted_at = new Date().toISOString();
+        }
+
+        // Use problem_id as CC problem code (e.g. "EQMNG")
+        // For the DB, we store the actual problem code so contest lookups work
+        submissions.push({
+          problem_id:   problemCode,
+          problem_name: problemCode,  // CC doesn't give name in this endpoint
+          status,
+          language:     lang || null,
+          submitted_at,
+          contest_id:   contestCode || null,
+          score,
+        });
+      });
+
+      if (page >= maxPage) break;
+      page++;
+      // Polite delay
+      await new Promise(r => setTimeout(r, 200));
+    }
+  } catch (err) {
+    logger.warn(`[CC] fetchCCRecentSubmissions failed for ${username}: ${err.message}`);
+  }
+
+  return submissions;
+}
+
+
 async function getFullProfile(username) {
   try {
     const { html, $ } = await fetchProfile(username);
@@ -320,27 +415,10 @@ async function getFullProfile(username) {
       badges,
       ratingGraph,
       contestHistory,
-      // All AC submissions derived from heatMap (CC doesn't expose problem names publicly)
-      // One synthetic entry per active day; count = number of submissions that day
-      allAcSubmissions: heatMap
-        .filter(h => h.count > 0)
-        .flatMap(h => {
-          // Parse date carefully to avoid UTC offset issues
-          const [y, m, d] = (h.date || '').split(/[-/]/).map(Number);
-          if (!y || !m || !d) return [];
-          const iso = new Date(y, m - 1, d, 12, 0, 0).toISOString();
-          // Create one entry per submission count on that day
-          return Array.from({ length: h.count }, (_, i) => ({
-            problem_id:   `cc-${h.date}-${i}`,
-            problem_name: `CodeChef submission`,
-            status:       'AC',
-            language:     null,
-            submitted_at: iso,
-            platform:     'codechef',
-          }));
-        }),
-
+      // Real CC submissions scraped from /recent/user (actual problem codes, not heatmap fakes)
+      allAcSubmissions: await fetchCCRecentSubmissions(username),
     };
+
   } catch (err) {
     logger.error(`[CC] getFullProfile failed for ${username}: ${err.message}`);
     return null;

@@ -155,7 +155,6 @@ async function getCodechefDetail(contestCode, email, dbQuery) {
   const handle = dbRow?.username || '';
 
   // ── 3. Fetch problem difficulty_rating in parallel ──
-  // GET /api/contests/{contestCode}/problems/{problemCode} → { difficulty_rating }
   if (problems.length > 0) {
     await Promise.all(problems.map(async p => {
       try {
@@ -172,15 +171,19 @@ async function getCodechefDetail(contestCode, email, dbQuery) {
     }));
   }
 
-  // ── 4. Scrape user submissions from /recent/user to find which problems solved ──
-  // The endpoint returns HTML with rows: [time, problem_code, score, language, view]
-  // Links embed the contest code e.g. href="/START242D/problems/EQMNG"
-  let solved = {};
+  // ── 4. Fetch which problems user solved ──
+  // Source A: /recent/user HTML scraping (works for recent contests, up to ~300 submissions)
+  // Source B: student_submissions table in DB (populated by sync job)
+  // The solved map is keyed by PROBLEM CODE (e.g. "EQMNG"), then remapped to INDEX ("A","B"...) below.
+  let solvedByCode = {};
+
+  // Source A: /recent/user scraping
   if (handle) {
     try {
-      const MAX_PAGES = 5; // Each page = 20 rows, 5 pages = 100 recent submissions
+      const MAX_PAGES = 15; // 15 pages × 20 rows = 300 submissions
       let page = 0;
-      let found = false;
+      let contestFound = false;
+      let pagesWithoutContest = 0;
 
       while (page < MAX_PAGES) {
         const recentRes = await axios.get(`${CC_API}/recent/user`, {
@@ -189,11 +192,12 @@ async function getCodechefDetail(contestCode, email, dbQuery) {
           timeout: 10000,
         });
 
-        const html = recentRes.data?.content || '';
+        const html      = recentRes.data?.content || '';
+        const maxPage   = recentRes.data?.max_page  || 0;
         if (!html || html.trim() === '<') break;
 
         const $ = cheerio.load(html);
-        let rowsOnPage = 0;
+        let contestRowsThisPage = 0;
 
         $('table tr').each((_, row) => {
           const cells = $(row).find('td');
@@ -201,53 +205,90 @@ async function getCodechefDetail(contestCode, email, dbQuery) {
 
           const linkEl    = $(cells[1]).find('a').first();
           const href      = linkEl.attr('href') || '';
-          const probCode  = href.split('/problems/')[1] || $(cells[1]).text().trim();
-          const scoreText = $(cells[2]).text().trim(); // e.g. "(100)" or "(0)"
-          const lang      = $(cells[3]).text().trim();
+          const scoreText = $(cells[2]).text().trim(); // e.g. "(100)" or "100"
 
           // Only count submissions for THIS contest
           if (!href.includes(`/${contestCode}/`)) return;
 
-          rowsOnPage++;
-          found = true;
+          const probCode = href.split('/problems/')[1]?.split('?')[0]?.trim();
+          if (!probCode) return;
 
-          // Score > 0 means at least partial credit (for starters, 100 = full AC)
-          const scoreMatch = scoreText.match(/\((\d+)\)/);
+          contestRowsThisPage++;
+          contestFound = true;
+
+          const scoreMatch = scoreText.match(/(\d+)/);
           const score = scoreMatch ? parseInt(scoreMatch[1]) : 0;
 
-          if (!solved[probCode]) {
-            solved[probCode] = { accepted: false, attempts: 0, score: 0 };
+          if (!solvedByCode[probCode]) {
+            solvedByCode[probCode] = { accepted: false, attempts: 0, score: 0 };
           }
-          solved[probCode].attempts++;
-          if (score > 0 && score > (solved[probCode].score || 0)) {
-            solved[probCode].score    = score;
-            solved[probCode].accepted = score >= 100; // 100 = full AC in IOI-style
+          solvedByCode[probCode].attempts++;
+          if (score > (solvedByCode[probCode].score || 0)) {
+            solvedByCode[probCode].score    = score;
+            solvedByCode[probCode].accepted = score >= 100;
           }
         });
 
-        // If we already found this contest's rows and next page has none, stop
-        if (found && rowsOnPage === 0) break;
-        // If we never find this contest on several pages, stop early
-        if (!found && page >= 2) break;
-        page++;
+        // Stop scanning early: if we found the contest and this page had none, we've passed it
+        if (contestFound && contestRowsThisPage === 0) { pagesWithoutContest++; if (pagesWithoutContest >= 2) break; }
+        else pagesWithoutContest = 0;
 
-        // Small delay between pages
-        if (page < MAX_PAGES) await new Promise(r => setTimeout(r, 300));
+        // Hard stop if next page doesn't exist
+        if (page >= maxPage) break;
+        page++;
+        if (page < MAX_PAGES) await new Promise(r => setTimeout(r, 200));
       }
     } catch (e) {
       console.warn('[CC recent/user]', e.message);
     }
   }
 
-  // Fallback: if recent/user had no data but DB has count, mark first N as solved
-  if (Object.keys(solved).length === 0 && (dbRow?.problems_solved_count || 0) > 0) {
+  // Source B: student_submissions DB (real problem codes stored by sync job)
+  // Only useful if the scraper now stores real CC problem codes (not fake cc-date-N IDs)
+  const problemCodes = problems.map(p => p.code).filter(Boolean);
+  if (email && problemCodes.length > 0) {
+    try {
+      const dbSubs = await dbQuery(
+        `SELECT problem_id, status FROM student_submissions
+         WHERE student_email = $1
+           AND platform = 'codechef'
+           AND problem_id = ANY($2)`,
+        [email, problemCodes]
+      );
+      for (const sub of (dbSubs?.rows || [])) {
+        if (!solvedByCode[sub.problem_id]) {
+          solvedByCode[sub.problem_id] = { accepted: true, attempts: 1, score: 100 };
+        } else if (!solvedByCode[sub.problem_id].accepted) {
+          solvedByCode[sub.problem_id].accepted = true;
+          solvedByCode[sub.problem_id].score    = 100;
+        }
+      }
+    } catch (e) {
+      console.warn('[CC db-check]', e.message);
+    }
+  }
+
+  // ── 5. Remap solved: code→index for ProblemsTab (which uses p.index "A","B"... as key) ──
+  // Build BOTH mappings so the panel works regardless of which key it uses:
+  //   solved["A"] = ... AND solved["EQMNG"] = ...
+  const solved = { ...solvedByCode }; // keep code-based entries too
+  problems.forEach(p => {
+    const byCode = solvedByCode[p.code];
+    if (byCode) solved[p.index] = byCode;  // add index-based entry
+  });
+
+  // Fallback: no data at all but DB says N problems solved — mark first N by index
+  const solvedCount = problems.filter(p => solved[p.index]?.accepted).length;
+  if (solvedCount === 0 && (dbRow?.problems_solved_count || 0) > 0) {
     const numSolved = Number(dbRow.problems_solved_count);
     problems.slice(0, numSolved).forEach(p => {
-      solved[p.code] = { accepted: true, attempts: 1, score: 100 };
+      solved[p.index] = { accepted: true, attempts: 1, score: 100 };
+      solved[p.code]  = { accepted: true, attempts: 1, score: 100 };
     });
   }
 
-  const solvedCount = Object.values(solved).filter(s => s.accepted).length;
+  const finalSolvedCount = problems.filter(p => solved[p.index]?.accepted).length
+    || (dbRow?.problems_solved_count || 0);
 
   return {
     platform:    'codechef',
@@ -259,13 +300,13 @@ async function getCodechefDetail(contestCode, email, dbQuery) {
     submissions: [],
     myData: dbRow ? {
       rank:           dbRow.rank_achieved,
-      problemsSolved: dbRow.problems_solved_count || solvedCount,
+      problemsSolved: finalSolvedCount,
       ratingAfter:    dbRow.rating_after_contest,
       ratingChange:   dbRow.rating_change,
       division:       dbRow.division,
     } : null,
     note: handle
-      ? `Solved ${solvedCount}/${problems.length} problems.`
+      ? `Solved ${finalSolvedCount}/${problems.length} problems in this contest.`
       : 'CodeChef submission details require a synced profile.',
     platformUrl: `https://www.codechef.com/${contestCode}`,
   };

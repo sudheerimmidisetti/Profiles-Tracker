@@ -138,8 +138,12 @@ async function upsertSubmissions(email, platform, submissions) {
       `INSERT INTO student_submissions
          (student_email, platform, problem_id, problem_name, status, language, submitted_at, runtime_ms)
        VALUES ${values.join(',')}
-       ON CONFLICT (student_email, platform, problem_id) DO NOTHING`,
+       ON CONFLICT (student_email, platform, problem_id) DO UPDATE SET
+         problem_name = COALESCE(NULLIF(EXCLUDED.problem_name, problem_id), student_submissions.problem_name),
+         status       = EXCLUDED.status,
+         language     = COALESCE(EXCLUDED.language, student_submissions.language)`,
       params
+
     ).catch(err => logger.warn(`[SyncJob] upsertSubmissions batch failed: ${err.message}`));
   }
   logger.debug(`[SyncJob] Upserted ${submissions.length} ${platform} submissions for ${email}`);
@@ -441,9 +445,21 @@ async function upsertCodechef(email, d) {
     );
   }
 
-  // 4. Upsert all unique AC submissions (derived from heatMap)
-  await upsertSubmissions(email, 'codechef', d.allAcSubmissions || []);
+  // 4. Upsert real AC submissions (scraped from /recent/user with actual problem codes)
+  //    First, purge old fake rows (problem_id like 'cc-YYYY-M-D-N') from heatmap era
+  const newSubs = d.allAcSubmissions || [];
+  if (newSubs.length > 0) {
+    await query(
+      `DELETE FROM student_submissions
+       WHERE student_email = $1
+         AND platform = 'codechef'
+         AND problem_id ~ '^cc-[0-9]'`,
+      [email]
+    ).catch(err => logger.warn(`[SyncJob] CC fake-row cleanup failed: ${err.message}`));
+  }
+  await upsertSubmissions(email, 'codechef', newSubs);
 }
+
 
 
 async function upsertHackerrank(email, d) {
