@@ -102,21 +102,22 @@ async function getCodeforcesDetail(contestId, handle) {
 }
 
 // ── CODECHEF ──────────────────────────────────────────────────────────────────
-// CC has no public submissions API that works without authentication.
 // Strategy:
-//   1. Get problem list from public contest API (works fine)
-//   2. Get solved info from DB (codechef_contest_history.problems_solved_count)
-//      and from the stored scraper data where available
-//   3. Try the /api/rankings endpoint with search for per-problem solved info
+//   1. Problem list from /api/contests/{contestCode} (public)
+//   2. Problem difficulty_rating from /api/contests/{code}/problems/{pCode} per problem
+//   3. User solved: scraped from /recent/user?user_handle={handle} (HTML table,
+//      filtered to this contest code — scores like (100) = accepted)
 async function getCodechefDetail(contestCode, email, dbQuery) {
-  // Parallel: contest info + DB data for this user + this contest
+  const CC_HEADERS = {
+    ...HEADERS,
+    'Referer': `https://www.codechef.com/${contestCode}`,
+    'Accept':  'application/json, text/html, */*',
+  };
+
+  // ── 1. Parallel: contest info + DB row ──
   const [contestRes, dbRes] = await Promise.all([
     axios.get(`${CC_API}/api/contests/${contestCode}`, {
-      headers: {
-        ...HEADERS,
-        'Referer': 'https://www.codechef.com',
-      },
-      timeout: 15000,
+      headers: CC_HEADERS, timeout: 15000,
     }).catch(e => { console.warn('[CC contest]', e.message); return null; }),
 
     dbQuery(
@@ -129,11 +130,10 @@ async function getCodechefDetail(contestCode, email, dbQuery) {
     ).catch(() => null),
   ]);
 
-  // Parse problem list from the public contest API
+  // ── 2. Parse problem list ──
   const raw = contestRes?.data;
   let problems = [];
-  if (raw?.problems && typeof raw.problems === 'object') {
-    // Sort by problem index if available, else alphabetically
+  if (raw?.problems && typeof raw.problems === 'object' && !Array.isArray(raw.problems)) {
     const entries = Object.entries(raw.problems);
     entries.sort((a, b) => {
       const ia = a[1].index || a[0];
@@ -141,66 +141,113 @@ async function getCodechefDetail(contestCode, email, dbQuery) {
       return ia < ib ? -1 : ia > ib ? 1 : 0;
     });
     problems = entries.map(([code, p], i) => ({
-      index:  p.index || String.fromCharCode(65 + i),  // A, B, C...
+      index:  p.index || String.fromCharCode(65 + i),
       code,
       name:   p.name || code,
       tags:   p.categories || [],
       url:    `https://www.codechef.com/problems/${code}`,
       successfulSubmissions: p.successful_submissions || null,
+      accuracy: p.accuracy || null,
     }));
   }
 
   const dbRow = dbRes?.rows?.[0];
   const handle = dbRow?.username || '';
 
-  // Try CC rankings API to find the user's per-problem results
-  // Format: /api/rankings/<contest>?page=1&itemsPerPage=10&order=asc&sortBy=rank&search=<username>
-  let rankingRow = null;
+  // ── 3. Fetch problem difficulty_rating in parallel ──
+  // GET /api/contests/{contestCode}/problems/{problemCode} → { difficulty_rating }
+  if (problems.length > 0) {
+    await Promise.all(problems.map(async p => {
+      try {
+        const r = await axios.get(
+          `${CC_API}/api/contests/${contestCode}/problems/${p.code}`,
+          { headers: CC_HEADERS, timeout: 8000 }
+        );
+        const dr = r.data?.difficulty_rating;
+        // -1 means unrated; positive number is the actual difficulty rating
+        p.difficulty_rating = (dr != null && Number(dr) > 0) ? Number(dr) : null;
+      } catch {
+        p.difficulty_rating = null;
+      }
+    }));
+  }
+
+  // ── 4. Scrape user submissions from /recent/user to find which problems solved ──
+  // The endpoint returns HTML with rows: [time, problem_code, score, language, view]
+  // Links embed the contest code e.g. href="/START242D/problems/EQMNG"
+  let solved = {};
   if (handle) {
     try {
-      const rankRes = await axios.get(
-        `${CC_API}/api/rankings/${contestCode}`,
-        {
-          params: {
-            page: 1,
-            itemsPerPage: 50,
-            order: 'asc',
-            sortBy: 'rank',
-            search: handle,
-          },
-          headers: { ...HEADERS, 'Referer': 'https://www.codechef.com' },
-          timeout: 15000,
-        }
-      );
-      const rankList = rankRes.data?.list || rankRes.data?.rankings || [];
-      rankingRow = rankList.find(r =>
-        (r.user_handle || r.username || '').toLowerCase() === handle.toLowerCase()
-      ) || rankList[0] || null;
+      const MAX_PAGES = 5; // Each page = 20 rows, 5 pages = 100 recent submissions
+      let page = 0;
+      let found = false;
+
+      while (page < MAX_PAGES) {
+        const recentRes = await axios.get(`${CC_API}/recent/user`, {
+          params: { page, user_handle: handle },
+          headers: { ...CC_HEADERS, 'Accept': 'application/json' },
+          timeout: 10000,
+        });
+
+        const html = recentRes.data?.content || '';
+        if (!html || html.trim() === '<') break;
+
+        const $ = cheerio.load(html);
+        let rowsOnPage = 0;
+
+        $('table tr').each((_, row) => {
+          const cells = $(row).find('td');
+          if (cells.length < 3) return;
+
+          const linkEl    = $(cells[1]).find('a').first();
+          const href      = linkEl.attr('href') || '';
+          const probCode  = href.split('/problems/')[1] || $(cells[1]).text().trim();
+          const scoreText = $(cells[2]).text().trim(); // e.g. "(100)" or "(0)"
+          const lang      = $(cells[3]).text().trim();
+
+          // Only count submissions for THIS contest
+          if (!href.includes(`/${contestCode}/`)) return;
+
+          rowsOnPage++;
+          found = true;
+
+          // Score > 0 means at least partial credit (for starters, 100 = full AC)
+          const scoreMatch = scoreText.match(/\((\d+)\)/);
+          const score = scoreMatch ? parseInt(scoreMatch[1]) : 0;
+
+          if (!solved[probCode]) {
+            solved[probCode] = { accepted: false, attempts: 0, score: 0 };
+          }
+          solved[probCode].attempts++;
+          if (score > 0 && score > (solved[probCode].score || 0)) {
+            solved[probCode].score    = score;
+            solved[probCode].accepted = score >= 100; // 100 = full AC in IOI-style
+          }
+        });
+
+        // If we already found this contest's rows and next page has none, stop
+        if (found && rowsOnPage === 0) break;
+        // If we never find this contest on several pages, stop early
+        if (!found && page >= 2) break;
+        page++;
+
+        // Small delay between pages
+        if (page < MAX_PAGES) await new Promise(r => setTimeout(r, 300));
+      }
     } catch (e) {
-      console.warn('[CC rankings]', e.message);
+      console.warn('[CC recent/user]', e.message);
     }
   }
 
-  // Build solved map
-  // If rankingRow has per-problem results use them, otherwise fall back to count from DB
-  const solved = {};
-  if (rankingRow?.problems) {
-    // Format: { PROBLEMCODE: { score, totalAttempts, pendingAttempts, ... } }
-    Object.entries(rankingRow.problems).forEach(([code, pr]) => {
-      solved[code] = {
-        accepted: (pr.score || 0) > 0 || pr.result === 'AC',
-        attempts: pr.totalAttempts || pr.wrongAttempts || 0,
-        score:    pr.score || null,
-        penalty:  pr.penalty || null,
-      };
-    });
-  } else if (dbRow?.problems_solved_count > 0) {
-    // We know count but not which ones — mark first N as solved (best effort)
+  // Fallback: if recent/user had no data but DB has count, mark first N as solved
+  if (Object.keys(solved).length === 0 && (dbRow?.problems_solved_count || 0) > 0) {
     const numSolved = Number(dbRow.problems_solved_count);
     problems.slice(0, numSolved).forEach(p => {
-      solved[p.code] = { accepted: true, attempts: 1 };
+      solved[p.code] = { accepted: true, attempts: 1, score: 100 };
     });
   }
+
+  const solvedCount = Object.values(solved).filter(s => s.accepted).length;
 
   return {
     platform:    'codechef',
@@ -209,24 +256,23 @@ async function getCodechefDetail(contestCode, email, dbQuery) {
     handle,
     problems,
     solved,
-    submissions: [],  // CC submissions API requires auth — not available
+    submissions: [],
     myData: dbRow ? {
       rank:           dbRow.rank_achieved,
-      problemsSolved: dbRow.problems_solved_count,
+      problemsSolved: dbRow.problems_solved_count || solvedCount,
       ratingAfter:    dbRow.rating_after_contest,
       ratingChange:   dbRow.rating_change,
       division:       dbRow.division,
     } : null,
-    note: rankingRow
-      ? null
-      : (handle
-          ? `Submission details require CodeChef authentication. Solved count from our database: ${dbRow?.problems_solved_count ?? '?'} problems.`
-          : 'CodeChef submission details require authentication.'),
+    note: handle
+      ? `Solved ${solvedCount}/${problems.length} problems.`
+      : 'CodeChef submission details require a synced profile.',
     platformUrl: `https://www.codechef.com/${contestCode}`,
   };
 }
 
 // ── LEETCODE ──────────────────────────────────────────────────────────────────
+
 async function getLeetcodeDetail(contestSlug, email, dbQuery) {
   const LC_GQL = 'https://leetcode.com/graphql/';
   const LC_HEADERS = {

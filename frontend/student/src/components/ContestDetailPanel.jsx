@@ -68,6 +68,16 @@ function cfRatingColor(rating) {
   return '#ff0000'                       // red    — Grandmaster+
 }
 
+// ── CC Difficulty Color (CodeChef uses numeric ratings per problem) ─────────────
+function ccDiffColor(rating) {
+  if (!rating) return 'var(--fg-muted)'
+  if (rating < 500)  return '#22c55e'   // green  — Easy
+  if (rating < 1000) return '#eab308'   // yellow — Medium
+  if (rating < 1500) return '#3b82f6'   // blue   — Hard
+  if (rating < 2000) return '#f97316'   // orange — Very Hard
+  return '#ef4444'                       // red    — Extreme
+}
+
 // ── Problems Tab ─────────────────────────────────────────────────────────────
 function ProblemsTab({ data, solvedCount }) {
   const { problems, solved, platform } = data
@@ -134,9 +144,22 @@ function ProblemsTab({ data, solvedCount }) {
                     ★ {p.rating}
                   </span>
                 )}
+                {/* CC: difficulty_rating badge */}
+                {p.difficulty_rating && (
+                  <span className="cdp-tag cdp-rating-tag" style={{
+                    color: ccDiffColor(p.difficulty_rating),
+                    background: `${ccDiffColor(p.difficulty_rating)}18`,
+                    borderColor: `${ccDiffColor(p.difficulty_rating)}40`,
+                    fontWeight: 700,
+                  }}>
+                    ★ {p.difficulty_rating}
+                  </span>
+                )}
                 {/* LC: Contest score (3/4/5/7 pts) */}
                 {p.points && <span className="cdp-tag">⚡ {p.points}pts</span>}
-                {/* CF/CC: Tags */}
+                {/* CC/CF: accuracy */}
+                {p.accuracy != null && <span className="cdp-tag" style={{ color: 'var(--fg-muted)' }}>{p.accuracy.toFixed(0)}% acc</span>}
+                {/* CF/CC: Topic tags */}
                 {(p.tags || []).slice(0, 3).map(t => (
                   <span key={t} className="cdp-tag">{t}</span>
                 ))}
@@ -147,12 +170,15 @@ function ProblemsTab({ data, solvedCount }) {
             <div className="cdp-prob-status">
               {isAc ? (
                 <span className="cdp-verdict cdp-v-ac">✓ Solved</span>
+              ) : result.score > 0 ? (
+                <span className="cdp-verdict cdp-v-pa">◑ {result.score} pts</span>
               ) : attempts > 0 ? (
                 <span className="cdp-verdict cdp-v-wa">✗ {attempts} att.</span>
               ) : (
                 <span className="cdp-verdict cdp-v-none">— Not tried</span>
               )}
             </div>
+
           </div>
         )
       })}
