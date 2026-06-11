@@ -1,13 +1,17 @@
 // src/modules/leaderboard/leaderboard.routes.js
-const { Router } = require('express');
+const express = require('express');
+const router  = express.Router();
+const ctrl    = require('./leaderboard.controller');
 const authenticate = require('../../middleware/authenticate');
-const ctrl = require('./leaderboard.controller');
 
-const router = Router();
+// ── New typed leaderboards (no auth required — publicly readable) ──────────────
+// NOTE: These specific routes MUST come before the /:platform wildcard route.
+router.get('/placements', ctrl.getPlacementsLeaderboard);
+router.get('/weekly',     ctrl.getWeeklyLeaderboard);
+router.get('/monthly',    ctrl.getMonthlyLeaderboard);
 
-router.use(authenticate);
-
-// GET /api/leaderboard/:platform?filter=all|contest|consistency|problems&page=1&limit=50
-router.get('/:platform', ctrl.getLeaderboard);
+// ── Original platform leaderboard ─────────────────────────────────────────────
+// GET /api/leaderboard/:platform?filter=all|contest|consistency|problems&page=1
+router.get('/:platform', authenticate, ctrl.getLeaderboard);
 
 module.exports = router;

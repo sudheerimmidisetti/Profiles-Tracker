@@ -92,8 +92,18 @@ export const handlersAPI = {
 
 // ── Leaderboard ───────────────────────────────────────
 export const leaderboardAPI = {
+  // Original platform leaderboard
   get: (platform, filter = 'all', page = 1, limit = 50) =>
     api.get(`/api/leaderboard/${platform}`, { params: { filter, page, limit } }),
+  // Placements (6-month rolling)
+  placements: (page = 1, limit = 50) =>
+    api.get('/api/leaderboard/placements', { params: { page, limit } }),
+  // Weekly (current week or specific week)
+  weekly: (week = null, page = 1, limit = 50) =>
+    api.get('/api/leaderboard/weekly', { params: { week, page, limit } }),
+  // Monthly (current month or specific YYYY-MM)
+  monthly: (month = null, page = 1, limit = 50) =>
+    api.get('/api/leaderboard/monthly', { params: { month, page, limit } }),
 }
 
 // ── Analytics ─────────────────────────────────────────

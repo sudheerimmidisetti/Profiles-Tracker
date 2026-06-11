@@ -6,7 +6,7 @@ async function getLeaderboard(req, res, next) {
   try {
     const { platform } = req.params;
     const filter = (req.query.filter || 'all').toLowerCase();
-    const page   = Math.max(1,  parseInt(req.query.page  || '1',  10));
+    const page   = Math.max(1,   parseInt(req.query.page  || '1',  10));
     const limit  = Math.min(100, parseInt(req.query.limit || '50', 10));
 
     const result = await leaderboardService.getLeaderboard(platform, filter, page, limit);
@@ -16,4 +16,42 @@ async function getLeaderboard(req, res, next) {
   }
 }
 
-module.exports = { getLeaderboard };
+// GET /api/leaderboard/placements?page=1&limit=50
+async function getPlacementsLeaderboard(req, res, next) {
+  try {
+    const page  = Math.max(1,   parseInt(req.query.page  || '1',  10));
+    const limit = Math.min(100, parseInt(req.query.limit || '50', 10));
+    const result = await leaderboardService.getPlacementsLeaderboard(page, limit);
+    res.status(200).json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/leaderboard/weekly?week=2025-06-09&page=1&limit=50
+async function getWeeklyLeaderboard(req, res, next) {
+  try {
+    const week  = req.query.week || null;
+    const page  = Math.max(1,   parseInt(req.query.page  || '1',  10));
+    const limit = Math.min(100, parseInt(req.query.limit || '50', 10));
+    const result = await leaderboardService.getWeeklyLeaderboard(week, page, limit);
+    res.status(200).json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/leaderboard/monthly?month=2025-06&page=1&limit=50
+async function getMonthlyLeaderboard(req, res, next) {
+  try {
+    const month = req.query.month || null;
+    const page  = Math.max(1,   parseInt(req.query.page  || '1',  10));
+    const limit = Math.min(100, parseInt(req.query.limit || '50', 10));
+    const result = await leaderboardService.getMonthlyLeaderboard(month, page, limit);
+    res.status(200).json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getLeaderboard, getPlacementsLeaderboard, getWeeklyLeaderboard, getMonthlyLeaderboard };
