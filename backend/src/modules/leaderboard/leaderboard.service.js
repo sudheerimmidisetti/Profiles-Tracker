@@ -103,10 +103,9 @@ async function getPlacementsLeaderboard(page = 1, limit = 50) {
   if (emails.length === 0) return { page, limit, total: 0, data: [] };
 
   const [subRes, lcContRes, ccContRes, cfContRes, hrRes] = await Promise.all([
-    // AC submissions in window (all platforms)
+    // AC submissions in window (all platforms) — only columns that actually exist
     query(
-      `SELECT student_email, platform, problem_id, difficulty_tag,
-              acceptance_rate, total_submissions, submitted_at
+      `SELECT student_email, platform, problem_id, submitted_at
        FROM student_submissions
        WHERE student_email = ANY($1)
          AND status = 'AC'
@@ -147,7 +146,8 @@ async function getPlacementsLeaderboard(page = 1, limit = 50) {
     ),
   ]);
 
-  // Also fetch CF problem ratings from recent_ac_submissions JSON (best effort)
+  // Fetch CF problem ratings from recent_ac_submissions JSON (best effort)
+  // This JSONB column stores [{problemId, problemRating, ...}] for CF solved problems
   const cfProfileRes = await query(
     `SELECT student_email, recent_ac_submissions FROM codeforces_profiles WHERE student_email = ANY($1)`,
     [emails]
@@ -157,34 +157,32 @@ async function getPlacementsLeaderboard(page = 1, limit = 50) {
   const byEmail = {};
   for (const s of students) byEmail[s.email] = { ...s, lcSolves: [], ccSolves: [], cfSolves: [], lcContests: [], ccContests: [], cfContests: [], hrProfile: null };
 
-  // CF problem rating lookup from recent_ac_submissions JSON
-  const cfProbRating = {}; // problem_id → cf_rating
+  // Build CF problem rating lookup: problem_id → cf_rating
+  const cfProbRating = {};
   for (const row of cfProfileRes.rows) {
-    const subs = typeof row.recent_ac_submissions === 'string'
-      ? JSON.parse(row.recent_ac_submissions)
-      : (row.recent_ac_submissions || []);
-    for (const sub of subs) {
+    let subs = row.recent_ac_submissions;
+    if (typeof subs === 'string') { try { subs = JSON.parse(subs); } catch { subs = []; } }
+    for (const sub of (subs || [])) {
       if (sub.problemId && sub.problemRating) cfProbRating[sub.problemId] = sub.problemRating;
     }
   }
 
   for (const row of subRes.rows) {
     if (!byEmail[row.student_email]) continue;
+    // Build a solve object — difficulty_tag/acceptance_rate not in table yet,
+    // UDG engine will use T3 fallback for LC/CC when those are null.
     const solve = {
-      problem_id: row.problem_id,
-      difficulty_tag: row.difficulty_tag,
-      acceptance_rate: row.acceptance_rate,
-      total_submissions: row.total_submissions,
-      submitted_at: row.submitted_at,
-      cf_rating: cfProbRating[row.problem_id] || 0,
-      cc_rating: 0,
+      problem_id:        row.problem_id,
+      difficulty_tag:    null,   // not yet stored — T3 fallback in UDG
+      acceptance_rate:   null,
+      total_submissions: null,
+      submitted_at:      row.submitted_at,
+      cf_rating:         cfProbRating[row.problem_id] || 0,
+      cc_rating:         0,
     };
     if (row.platform === 'leetcode')   byEmail[row.student_email].lcSolves.push(solve);
     if (row.platform === 'codechef')   byEmail[row.student_email].ccSolves.push(solve);
-    if (row.platform === 'codeforces') {
-      solve.cf_rating = cfProbRating[row.problem_id] || 0;
-      byEmail[row.student_email].cfSolves.push(solve);
-    }
+    if (row.platform === 'codeforces') byEmail[row.student_email].cfSolves.push(solve);
   }
   for (const row of lcContRes.rows)   byEmail[row.student_email]?.lcContests.push(row);
   for (const row of ccContRes.rows)   byEmail[row.student_email]?.ccContests.push({ ...row, rating_change: row.rating_change });
@@ -208,19 +206,19 @@ async function getPlacementsLeaderboard(page = 1, limit = 50) {
     });
 
     return {
-      email:      s.email,
-      full_name:  s.full_name,
+      email:       s.email,
+      full_name:   s.full_name,
       roll_number: s.roll_number,
-      branch:     s.branch,
-      lc_handle:  s.lc_handle,
-      cc_handle:  s.cc_handle,
-      cf_handle:  s.cf_handle,
-      hr_handle:  s.hr_handle,
-      total:      result.total,
-      lc:         result.lc,
-      cc:         result.cc,
-      cf:         result.cf,
-      hr:         result.hr,
+      branch:      s.branch,
+      lc_handle:   s.lc_handle,
+      cc_handle:   s.cc_handle,
+      cf_handle:   s.cf_handle,
+      hr_handle:   s.hr_handle,
+      total:       result.total,
+      lc:          result.lc,
+      cc:          result.cc,
+      cf:          result.cf,
+      hr:          result.hr,
     };
   });
 
@@ -228,9 +226,9 @@ async function getPlacementsLeaderboard(page = 1, limit = 50) {
   scored.sort((a, b) => b.total - a.total);
   scored.forEach((s, i) => { s.rank = i + 1; });
 
-  // 5. Upsert into placements_board cache
-  for (const s of scored) {
-    await query(
+  // 5. Upsert into placements_board cache (non-fatal if table doesn't exist yet)
+  const upsertPromises = scored.map(s =>
+    query(
       `INSERT INTO placements_board
          (student_email, computed_at, lc_score, cc_score, cf_score, hr_score, total_score,
           lc_breakdown, cc_breakdown, cf_breakdown, hr_breakdown)
@@ -243,8 +241,9 @@ async function getPlacementsLeaderboard(page = 1, limit = 50) {
          cf_breakdown = EXCLUDED.cf_breakdown, hr_breakdown = EXCLUDED.hr_breakdown`,
       [s.email, s.lc.score, s.cc.score, s.cf.score, s.hr.score, s.total,
        JSON.stringify(s.lc), JSON.stringify(s.cc), JSON.stringify(s.cf), JSON.stringify(s.hr)]
-    ).catch(() => {}); // non-fatal
-  }
+    ).catch(() => {})
+  );
+  await Promise.allSettled(upsertPromises);
 
   const page_data = scored.slice(offset, offset + limit);
   return { page, limit, total: scored.length, data: page_data };
@@ -372,7 +371,6 @@ async function getWeeklyLeaderboard(weekParam, page = 1, limit = 50) {
 // ─────────────────────────────────────────────────────────────────────────────
 async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50) {
   const offset  = (page - 1) * limit;
-  // monthParam = 'YYYY-MM', default = current month
   const now     = new Date();
   const [yr, mo] = monthParam
     ? monthParam.split('-').map(Number)
@@ -382,6 +380,8 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50) {
 
   const monthStart = new Date(year, month, 1).toISOString();
   const monthEnd   = new Date(year, month + 1, 1).toISOString();
+  const monthStartTs = Math.floor(new Date(year, month, 1).getTime() / 1000);
+  const monthEndTs   = Math.floor(new Date(year, month + 1, 1).getTime() / 1000);
 
   const studentsRes = await query(
     `SELECT s.email, s.full_name, s.roll_number, s.branch,
@@ -397,42 +397,116 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50) {
   const emails   = students.map(s => s.email);
   if (!emails.length) return { month: `${yr}-${String(mo).padStart(2,'0')}`, page, limit, total: 0, data: [] };
 
-  // Fetch this month's weekly_board scores
-  const weeklyRes = await query(
-    `SELECT student_email, week_start, composite
-     FROM weekly_board
-     WHERE student_email = ANY($1)
-       AND week_start >= $2::date
-       AND week_start <  $3::date`,
-    [emails, monthStart, monthEnd]
-  );
+  // Try to get weekly_board scores (table may not exist yet — fall back gracefully)
+  let weeklyRows = [];
+  try {
+    const weeklyRes = await query(
+      `SELECT student_email, week_start, composite
+       FROM weekly_board
+       WHERE student_email = ANY($1)
+         AND week_start >= $2::date
+         AND week_start <  $3::date`,
+      [emails, monthStart, monthEnd]
+    );
+    weeklyRows = weeklyRes.rows;
+  } catch (_) {
+    // weekly_board table doesn't exist yet — derive contest scores from raw history
+  }
 
-  // Fetch this month's solves
-  const solvesRes = await query(
-    `SELECT student_email, platform, problem_id, difficulty_tag,
-            acceptance_rate, total_submissions, submitted_at
-     FROM student_submissions
-     WHERE student_email = ANY($1)
-       AND status = 'AC'
-       AND submitted_at >= $2
-       AND submitted_at <  $3`,
-    [emails, monthStart, monthEnd]
-  );
+  // If no weekly_board rows, derive weekly contest composites from raw contest history
+  // This ensures monthly works even before weekly_board is populated.
+  const [lcContRes, ccContRes, cfContRes, solvesRes] = await Promise.all([
+    query(
+      `SELECT student_email, contest_time, rank_achieved, problems_solved, total_problems,
+              finish_time_seconds, rating_after_contest
+       FROM leetcode_contest_history
+       WHERE student_email = ANY($1)
+         AND contest_time >= $2 AND contest_time < $3`,
+      [emails, monthStartTs, monthEndTs]
+    ),
+    query(
+      `SELECT student_email, contest_date, rank_achieved, problems_solved_count,
+              rating_change, division
+       FROM codechef_contest_history
+       WHERE student_email = ANY($1)
+         AND contest_date >= $2 AND contest_date < $3`,
+      [emails, monthStart, monthEnd]
+    ),
+    query(
+      `SELECT student_email, timestamp_seconds, rank_achieved, problems_solved, rating_change
+       FROM codeforces_contest_history
+       WHERE student_email = ANY($1)
+         AND timestamp_seconds >= $2 AND timestamp_seconds < $3`,
+      [emails, monthStartTs, monthEndTs]
+    ),
+    // Solves — only columns that exist
+    query(
+      `SELECT student_email, platform, problem_id, submitted_at
+       FROM student_submissions
+       WHERE student_email = ANY($1)
+         AND status = 'AC'
+         AND submitted_at >= $2
+         AND submitted_at <  $3`,
+      [emails, monthStart, monthEnd]
+    ),
+  ]);
 
   // Group by email
   const byEmail = {};
-  for (const s of students) byEmail[s.email] = { ...s, weeklyScores: {}, solves: [] };
-  for (const r of weeklyRes.rows) {
+  for (const s of students) byEmail[s.email] = {
+    ...s, weeklyScores: {}, solves: [],
+    lcContests: [], ccContests: [], cfContests: [],
+  };
+
+  // Populate from weekly_board if available
+  for (const r of weeklyRows) {
     if (byEmail[r.student_email]) {
-      byEmail[r.student_email].weeklyScores[r.week_start.toISOString().slice(0,10)] = parseFloat(r.composite);
+      const wk = r.week_start instanceof Date
+        ? r.week_start.toISOString().slice(0,10)
+        : String(r.week_start).slice(0,10);
+      byEmail[r.student_email].weeklyScores[wk] = parseFloat(r.composite);
     }
   }
-  for (const r of solvesRes.rows) {
-    byEmail[r.student_email]?.solves.push(r);
-  }
+
+  // Build contest arrays for fallback scoring
+  for (const r of lcContRes.rows)  byEmail[r.student_email]?.lcContests.push(r);
+  for (const r of ccContRes.rows)  byEmail[r.student_email]?.ccContests.push(r);
+  for (const r of cfContRes.rows)  byEmail[r.student_email]?.cfContests.push(r);
+  for (const r of solvesRes.rows)  byEmail[r.student_email]?.solves.push(r);
 
   const scored = students.map(s => {
     const d = byEmail[s.email];
+
+    // If no weekly_board scores yet, derive a rough weekly composite from contest history
+    // Group contests by ISO week
+    if (Object.keys(d.weeklyScores).length === 0) {
+      const allContests = [
+        ...d.lcContests.map(c => ({ ts: c.contest_time * 1000, rc: c.rating_after_contest - (c.prev_rating || c.rating_after_contest), ps: c.problems_solved || 0, tp: c.total_problems || 4 })),
+        ...d.cfContests.map(c => ({ ts: c.timestamp_seconds * 1000, rc: c.rating_change || 0, ps: c.problems_solved || 0, tp: 5 })),
+        ...d.ccContests.map(c => ({ ts: new Date(c.contest_date).getTime(), rc: c.rating_change || 0, ps: c.problems_solved_count || 0, tp: 5 })),
+      ];
+      // Group by week
+      const weekGroups = {};
+      for (const c of allContests) {
+        if (!c.ts) continue;
+        const d2 = new Date(c.ts);
+        const day = d2.getDay();
+        const monday = new Date(d2); monday.setDate(d2.getDate() - (day === 0 ? 6 : day - 1));
+        const wk = monday.toISOString().slice(0,10);
+        if (!weekGroups[wk]) weekGroups[wk] = [];
+        weekGroups[wk].push(c);
+      }
+      for (const [wk, contests] of Object.entries(weekGroups)) {
+        // Rough composite: average of per-contest proxy scores
+        const scores = contests.map(c => {
+          const ratingNorm = 30 + 30 * Math.tanh((c.rc || 0) / 150);
+          const solveRatio = c.tp > 0 ? Math.min(1, (c.ps || 0) / c.tp) : 0;
+          return Math.min(100, ratingNorm + 30 * solveRatio);
+        });
+        d.weeklyScores[wk] = scores.reduce((a, b) => a + b, 0) / scores.length;
+      }
+    }
+
     const result = computeMonthlyScore({
       weeklyScores: d.weeklyScores,
       solves:       d.solves,
@@ -453,10 +527,10 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50) {
   scored.sort((a, b) => b.monthlyScore - a.monthlyScore);
   scored.forEach((s, i) => { s.rank = i + 1; });
 
-  // Upsert monthly_board
+  // Upsert monthly_board (non-fatal if table doesn't exist)
   const monthDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-  for (const s of scored) {
-    await query(
+  await Promise.allSettled(scored.map(s =>
+    query(
       `INSERT INTO monthly_board
          (student_email, month, contest_pts, practice_pts, month_udg, active_weeks, monthly_score, eligible)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -465,8 +539,8 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50) {
          month_udg = EXCLUDED.month_udg, active_weeks = EXCLUDED.active_weeks,
          monthly_score = EXCLUDED.monthly_score, eligible = EXCLUDED.eligible`,
       [s.email, monthDate, s.contestPts, s.practicePts, s.monthUdg, s.activeWeeks, s.monthlyScore, s.eligible]
-    ).catch(() => {});
-  }
+    ).catch(() => {})
+  ));
 
   return {
     month:  `${yr}-${String(mo).padStart(2, '0')}`,

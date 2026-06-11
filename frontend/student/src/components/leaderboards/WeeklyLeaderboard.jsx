@@ -1,42 +1,63 @@
-// WeeklyLeaderboard.jsx
-// This week's contest performers only.
-// Formula: Weekly = 0.35×LC + 0.30×CC + 0.35×CF (0 if not attended)
-// Award eligibility: ≥ 2 platforms attended
-
+// WeeklyLeaderboard.jsx — clean SaaS-style weekly contest leaderboard
 import { useState, useEffect } from 'react'
 import { leaderboardAPI } from '../../api/api'
 import './leaderboard.shared.css'
 
-/** Get Monday of the current week as YYYY-MM-DD */
 function currentWeekStart() {
   const now = new Date()
   const day = now.getDay()
   const monday = new Date(now)
   monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1))
+  monday.setHours(0, 0, 0, 0)
   return monday.toISOString().slice(0, 10)
 }
 
-/** List of last 8 Monday dates for the week picker */
 function recentWeeks() {
   const weeks = []
-  const cur = new Date(currentWeekStart())
+  const base = new Date(currentWeekStart())
   for (let i = 0; i < 8; i++) {
-    const d = new Date(cur)
-    d.setDate(cur.getDate() - i * 7)
+    const d = new Date(base)
+    d.setDate(base.getDate() - i * 7)
     weeks.push(d.toISOString().slice(0, 10))
   }
   return weeks
 }
 
-function RankBadge({ rank }) {
-  const cls = rank === 1 ? 'lb-rank-1' : rank === 2 ? 'lb-rank-2' : rank === 3 ? 'lb-rank-3' : 'lb-rank-n'
-  return <div className={`lb-rank-badge ${cls}`}>{rank <= 3 ? ['🥇','🥈','🥉'][rank - 1] : rank}</div>
+function fmtWeekRange(w) {
+  const start = new Date(w)
+  const end   = new Date(w); end.setDate(start.getDate() + 6)
+  const opts   = { day: 'numeric', month: 'short' }
+  return `${start.toLocaleDateString('en-IN', opts)} – ${end.toLocaleDateString('en-IN', opts)}`
 }
 
-function ScoreBar({ value, max = 100 }) {
+function RankBadge({ rank }) {
+  const medals = ['🥇', '🥈', '🥉']
+  if (rank <= 3) {
+    return <span style={{ fontSize: 20 }}>{medals[rank - 1]}</span>
+  }
   return (
-    <div className="lb-score-bar">
-      <div className="lb-score-bar-fill score-weekly" style={{ width: `${Math.min(100, (value / max) * 100)}%` }} />
+    <div style={{
+      width: 32, height: 32, borderRadius: '50%',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(255,255,255,0.06)', color: 'var(--fg-muted)',
+      fontSize: 12, fontWeight: 700, flexShrink: 0,
+    }}>{rank}</div>
+  )
+}
+
+function PlatformScore({ label, value, color }) {
+  const attended = value > 0
+  return (
+    <div style={{ textAlign: 'center', minWidth: 52 }}>
+      <div style={{ fontSize: 10, color: 'var(--fg-muted)', marginBottom: 3, fontWeight: 500 }}>
+        {label}
+      </div>
+      <div style={{
+        fontSize: 15, fontWeight: 700,
+        color: attended ? color : 'rgba(255,255,255,0.15)',
+      }}>
+        {attended ? value.toFixed(1) : '—'}
+      </div>
     </div>
   )
 }
@@ -44,82 +65,140 @@ function ScoreBar({ value, max = 100 }) {
 function WeeklyRow({ row, rank }) {
   const [showTip, setShowTip] = useState(false)
 
+  const composite = row.composite ?? 0
+  const barWidth  = `${Math.min(100, composite)}%`
+
   return (
     <div
       className="lb-row"
+      style={{ gap: 14, cursor: 'pointer' }}
       onMouseEnter={() => setShowTip(true)}
       onMouseLeave={() => setShowTip(false)}
     >
-      <RankBadge rank={rank} />
+      {/* Rank */}
+      <div style={{ width: 32, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
+        <RankBadge rank={rank} />
+      </div>
 
-      <div className="lb-info">
-        <div className="lb-name">{row.full_name}</div>
-        <div className="lb-sub">{row.roll_number} · {row.branch}</div>
-        <div className="lb-handles">
-          {row.lc_handle && <span className="lb-handle lb-plat-lc">LC: {row.lc_handle}</span>}
-          {row.cc_handle && <span className="lb-handle lb-plat-cc">CC: {row.cc_handle}</span>}
-          {row.cf_handle && <span className="lb-handle lb-plat-cf">CF: {row.cf_handle}</span>}
+      {/* Identity */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {row.full_name}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 1 }}>
+          {row.roll_number}{row.branch ? ` · ${row.branch}` : ''}
+        </div>
+        {/* Composite bar */}
+        <div style={{ height: 3, borderRadius: 99, background: 'rgba(255,255,255,0.07)', marginTop: 6, overflow: 'hidden' }}>
+          <div style={{
+            height: '100%', borderRadius: 99, width: barWidth,
+            background: 'linear-gradient(90deg, #6366f1, #8b5cf6)',
+            transition: 'width 0.5s ease',
+          }} />
         </div>
       </div>
 
-      {/* Platform scores */}
-      <div style={{ display: 'flex', gap: 6 }}>
-        <span className="lb-plat-pill lb-plat-lc" title="LeetCode score">
-          LC {row.lcScore > 0 ? row.lcScore.toFixed(1) : '—'}
-        </span>
-        <span className="lb-plat-pill lb-plat-cc" title="CodeChef score">
-          CC {row.ccScore > 0 ? row.ccScore.toFixed(1) : '—'}
-        </span>
-        <span className="lb-plat-pill lb-plat-cf" title="Codeforces score">
-          CF {row.cfScore > 0 ? row.cfScore.toFixed(1) : '—'}
-        </span>
+      {/* Per-platform scores */}
+      <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
+        <PlatformScore label="LC"  value={row.lcScore ?? 0}  color="#fbbf24" />
+        <PlatformScore label="CC"  value={row.ccScore ?? 0}  color="#34d399" />
+        <PlatformScore label="CF"  value={row.cfScore ?? 0}  color="#60a5fa" />
       </div>
 
-      {/* Eligible badge */}
-      <span className={row.eligible ? 'lb-eligible' : 'lb-ineligible'}>
-        {row.eligible ? '✓ Eligible' : `${row.platformsAttended}/3 platforms`}
-      </span>
+      {/* Divider */}
+      <div style={{ width: 1, height: 36, background: 'rgba(255,255,255,0.07)', flexShrink: 0 }} />
 
-      {/* Composite score */}
-      <div className="lb-score-section">
-        <div className="lb-score-value" style={{ color: '#a5b4fc' }}>{(row.composite ?? 0).toFixed(1)}</div>
-        <div className="lb-score-label">/ 100</div>
-        <ScoreBar value={row.composite ?? 0} />
+      {/* Composite + eligibility */}
+      <div style={{ textAlign: 'right', minWidth: 72 }}>
+        <div style={{ fontSize: 22, fontWeight: 800, color: '#a5b4fc', lineHeight: 1 }}>
+          {composite.toFixed(1)}
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--fg-muted)', marginTop: 2 }}>
+          {row.eligible
+            ? <span style={{ color: '#4ade80', fontWeight: 600 }}>✓ Award</span>
+            : <span style={{ color: 'rgba(255,255,255,0.25)' }}>{row.platformsAttended}/3 plat.</span>
+          }
+        </div>
       </div>
 
       {/* Tooltip */}
       {showTip && (
-        <div className="lb-tooltip">
-          <div className="lb-tooltip-title">Weekly Score Details</div>
-          <div className="lb-tooltip-row"><span>LeetCode (×0.35)</span><span>{(row.lcScore ?? 0).toFixed(2)}</span></div>
-          <div className="lb-tooltip-row"><span>CodeChef (×0.30)</span><span>{(row.ccScore ?? 0).toFixed(2)}</span></div>
-          <div className="lb-tooltip-row"><span>Codeforces (×0.35)</span><span>{(row.cfScore ?? 0).toFixed(2)}</span></div>
-          <div className="lb-tooltip-section">
-            <div className="lb-tooltip-row" style={{ fontWeight:700 }}>
-              <span>Composite</span><span>{(row.composite ?? 0).toFixed(2)}</span>
-            </div>
-            <div className="lb-tooltip-row">
-              <span>Platforms attended</span><span>{row.platformsAttended}/3</span>
-            </div>
-            <div className="lb-tooltip-row">
-              <span>Award eligible?</span>
-              <span style={{ color: row.eligible ? '#4ade80' : '#f87171' }}>
-                {row.eligible ? 'Yes (≥2 platforms)' : 'No'}
-              </span>
-            </div>
+        <div className="lb-tooltip" style={{ minWidth: 240 }}>
+          <div className="lb-tooltip-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Weekly Breakdown</span>
+            <span style={{ color: '#a5b4fc' }}>{composite.toFixed(2)}</span>
           </div>
-          <div className="lb-tooltip-section" style={{ fontSize:11, color:'var(--fg-muted)' }}>
-            Score = 0 if platform not attended · Proxy used if no live standings
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 16px', fontSize: 12 }}>
+            <span style={{ color: 'var(--fg-muted)' }}>LeetCode (×0.35)</span>
+            <span style={{ color: (row.lcScore ?? 0) > 0 ? '#fbbf24' : 'rgba(255,255,255,0.25)', textAlign:'right', fontWeight: 600 }}>
+              {(row.lcScore ?? 0) > 0 ? (row.lcScore ?? 0).toFixed(2) : 'DNS'}
+            </span>
+            <span style={{ color: 'var(--fg-muted)' }}>CodeChef (×0.30)</span>
+            <span style={{ color: (row.ccScore ?? 0) > 0 ? '#34d399' : 'rgba(255,255,255,0.25)', textAlign:'right', fontWeight: 600 }}>
+              {(row.ccScore ?? 0) > 0 ? (row.ccScore ?? 0).toFixed(2) : 'DNS'}
+            </span>
+            <span style={{ color: 'var(--fg-muted)' }}>Codeforces (×0.35)</span>
+            <span style={{ color: (row.cfScore ?? 0) > 0 ? '#60a5fa' : 'rgba(255,255,255,0.25)', textAlign:'right', fontWeight: 600 }}>
+              {(row.cfScore ?? 0) > 0 ? (row.cfScore ?? 0).toFixed(2) : 'DNS'}
+            </span>
           </div>
+
+          <div style={{
+            marginTop: 10, paddingTop: 10,
+            borderTop: '1px solid rgba(255,255,255,0.07)',
+            display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 16px', fontSize: 12
+          }}>
+            <span style={{ color: 'var(--fg-muted)' }}>Platforms attended</span>
+            <span style={{ textAlign:'right', fontWeight:600 }}>{row.platformsAttended} / 3</span>
+            <span style={{ color: 'var(--fg-muted)' }}>Award eligible?</span>
+            <span style={{ color: row.eligible ? '#4ade80' : '#f87171', textAlign:'right', fontWeight:600 }}>
+              {row.eligible ? 'Yes' : 'No (need ≥2)'}
+            </span>
+          </div>
+
+          {row.lc_handle && (
+            <div style={{
+              marginTop: 10, paddingTop: 8,
+              borderTop: '1px solid rgba(255,255,255,0.07)',
+              display: 'flex', gap: 8, flexWrap: 'wrap'
+            }}>
+              {row.lc_handle && <span className="lb-handle lb-plat-lc">LC: {row.lc_handle}</span>}
+              {row.cc_handle && <span className="lb-handle lb-plat-cc">CC: {row.cc_handle}</span>}
+              {row.cf_handle && <span className="lb-handle lb-plat-cf">CF: {row.cf_handle}</span>}
+            </div>
+          )}
         </div>
       )}
     </div>
   )
 }
 
+function WeeklyHeader({ week }) {
+  const thisWeek = currentWeekStart()
+  const isNow    = week === thisWeek
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '8px 14px', borderRadius: 8, marginBottom: 16,
+      background: 'rgba(99,102,241,0.07)',
+      border: '1px solid rgba(99,102,241,0.18)',
+    }}>
+      <div style={{ width: 8, height: 8, borderRadius: '50%', background: isNow ? '#4ade80' : '#6366f1', flexShrink: 0 }} />
+      <div style={{ fontSize: 13, color: 'var(--fg-muted)' }}>
+        {isNow ? <strong style={{ color: 'var(--fg)' }}>Live week</strong> : 'Past week'} ·{' '}
+        <strong style={{ color: 'var(--fg)' }}>{fmtWeekRange(week)}</strong>
+      </div>
+      <div style={{ marginLeft: 'auto', fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
+        Proxy scoring · 0.35×LC + 0.30×CC + 0.35×CF
+      </div>
+    </div>
+  )
+}
+
 export default function WeeklyLeaderboard() {
-  const weeks   = recentWeeks()
-  const [selectedWeek, setSelectedWeek] = useState(weeks[0])
+  const weeks          = recentWeeks()
+  const [selWeek, setSelWeek] = useState(weeks[0])
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState('')
@@ -128,69 +207,85 @@ export default function WeeklyLeaderboard() {
   useEffect(() => {
     setLoading(true)
     setError('')
-    leaderboardAPI.weekly(selectedWeek, page, 50)
+    leaderboardAPI.weekly(selWeek, page, 50)
       .then(r => setData(r.data))
-      .catch(e => setError(e.response?.data?.message || 'Failed to load weekly leaderboard'))
+      .catch(e => setError(e.response?.data?.message || 'Failed to load'))
       .finally(() => setLoading(false))
-  }, [selectedWeek, page])
+  }, [selWeek, page])
 
   const rows  = data?.data  || []
   const total = data?.total || 0
   const pages = Math.ceil(total / 50)
 
-  const fmtWeek = (w) => {
-    const d = new Date(w)
-    const end = new Date(d); end.setDate(d.getDate() + 6)
-    return `${d.toLocaleDateString('en-IN', { day:'numeric', month:'short' })} – ${end.toLocaleDateString('en-IN', { day:'numeric', month:'short' })}`
-  }
-
   return (
     <div className="card">
-      <div className="lb-header">
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
-          <div className="lb-title">⚡ Weekly Performers</div>
-          <div className="lb-subtitle">
-            Contest performance only · 0.35×LC + 0.30×CC + 0.35×CF · Award needs ≥2 platforms
+          <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--fg)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            ⚡ Weekly Performers
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--fg-muted)', marginTop: 3 }}>
+            Contest performance only · Award requires ≥ 2 platforms
           </div>
         </div>
 
-        {/* Week picker */}
+        {/* Week selector */}
         <select
-          value={selectedWeek}
-          onChange={e => { setSelectedWeek(e.target.value); setPage(1) }}
-          style={{ padding:'6px 12px', borderRadius:8, background:'rgba(255,255,255,0.06)',
-            border:'1px solid rgba(255,255,255,0.12)', color:'var(--fg)', fontSize:13 }}
+          value={selWeek}
+          onChange={e => { setSelWeek(e.target.value); setPage(1) }}
+          style={{
+            padding: '7px 12px', borderRadius: 8,
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            color: 'var(--fg)', fontSize: 13, cursor: 'pointer',
+          }}
         >
-          {weeks.map(w => (
+          {weeks.map((w, i) => (
             <option key={w} value={w}>
-              {w === weeks[0] ? `This week (${fmtWeek(w)})` : fmtWeek(w)}
+              {i === 0 ? `This week · ${fmtWeekRange(w)}` : fmtWeekRange(w)}
             </option>
           ))}
         </select>
       </div>
 
-      {/* Current week info bar */}
-      <div style={{
-        background:'rgba(99,102,241,0.08)', border:'1px solid rgba(99,102,241,0.2)',
-        borderRadius:8, padding:'8px 14px', marginBottom:16, fontSize:12, color:'var(--fg-muted)'
-      }}>
-        📅 Week of <strong style={{ color:'var(--fg)' }}>{fmtWeek(selectedWeek)}</strong>
-        {' · '}Scores use rating-change proxy until live standings are scraped
-      </div>
+      {/* Week context bar */}
+      <WeeklyHeader week={selWeek} />
 
+      {/* Column labels */}
+      {!loading && rows.length > 0 && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '46px 1fr 180px 1px 80px',
+          gap: 14, paddingBottom: 8,
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          marginBottom: 8,
+        }}>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', textAlign:'center' }}>#</div>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>STUDENT</div>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', display:'flex', justifyContent:'space-around' }}>
+            <span>LC</span><span>CC</span><span>CF</span>
+          </div>
+          <div />
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', textAlign:'right' }}>SCORE</div>
+        </div>
+      )}
+
+      {/* Rows */}
       {loading ? (
         <div className="lb-loading"><div className="spinner" /> Loading…</div>
       ) : error ? (
         <div className="lb-error">{error}</div>
       ) : rows.length === 0 ? (
-        <div className="lb-empty">
-          No contest data for this week yet.<br />
-          <span style={{ fontSize:12, marginTop:8, display:'block' }}>
-            Make sure profiles are synced after contests end.
-          </span>
+        <div className="lb-empty" style={{ padding: 48 }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>📭</div>
+          <div style={{ fontWeight: 600, color: 'var(--fg)', marginBottom: 6 }}>No contest data this week</div>
+          <div style={{ fontSize: 12, color: 'var(--fg-muted)' }}>
+            Contest results appear after profiles are synced post-contest.
+          </div>
         </div>
       ) : (
-        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {rows.map((row, i) => (
             <WeeklyRow key={row.email} row={row} rank={(page - 1) * 50 + i + 1} />
           ))}
@@ -199,9 +294,9 @@ export default function WeeklyLeaderboard() {
 
       {pages > 1 && (
         <div className="lb-pagination">
-          <button className="lb-page-btn" onClick={() => setPage(p => p - 1)} disabled={page === 1}>‹ Prev</button>
-          <span className="lb-page-info">Page {page} of {pages}</span>
-          <button className="lb-page-btn" onClick={() => setPage(p => p + 1)} disabled={page === pages}>Next ›</button>
+          <button className="lb-page-btn" onClick={() => setPage(p => p - 1)} disabled={page === 1}>‹</button>
+          <span className="lb-page-info">{page} / {pages}</span>
+          <button className="lb-page-btn" onClick={() => setPage(p => p + 1)} disabled={page === pages}>›</button>
         </div>
       )}
     </div>

@@ -23,11 +23,12 @@ function lcTier(tag, acceptanceRate, totalSubmissions = 999999) {
   const subs = Number(totalSubmissions);
   const t    = (tag || '').toLowerCase();
 
-  // Low-data guard: trust tag alone
+  // Low-data guard: trust tag alone (or T3 default if no tag either)
   if (subs < 1000) {
     if (t === 'easy')   return 2;
     if (t === 'medium') return 4;
-    /* hard */          return 5;
+    if (t === 'hard')   return 5;
+    return 3;  // no tag at all → T3 (conservative median default)
   }
 
   if (t === 'easy') {
