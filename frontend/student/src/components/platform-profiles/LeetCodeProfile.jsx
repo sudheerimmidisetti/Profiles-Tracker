@@ -15,8 +15,13 @@ function fmt(n) {
 }
 
 function relativeTime(ts) {
-  if (!ts) return ''
-  const d = typeof ts === 'string' ? new Date(ts) : new Date(Number(ts) * 1000)
+  if (!ts) return '—'
+  const num = Number(ts)
+  // If ts is a string like "null" or non-numeric, Number() returns NaN
+  const d = !isNaN(num) && num > 1e9
+    ? new Date(num * 1000)           // Unix second timestamp
+    : new Date(ts)                   // ISO string
+  if (isNaN(d)) return '—'
   const diff = (Date.now() - d) / 1000
   if (diff < 60)    return 'Just now'
   if (diff < 3600)  return `${Math.floor(diff/60)}m ago`
@@ -25,8 +30,10 @@ function relativeTime(ts) {
 }
 
 function fmtDate(str) {
-  if (!str) return ''
-  return new Date(str).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })
+  if (!str) return '—'
+  const d = new Date(str)
+  if (isNaN(d)) return '—'
+  return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function fmtTime(sec) {

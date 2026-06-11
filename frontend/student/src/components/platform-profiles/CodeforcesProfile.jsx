@@ -101,7 +101,10 @@ function cfToChartPoints(contests) {
       contestName:   c.contest_name ?? c.contestName ?? '',
       rank:          c.rank_achieved ?? c.rankAchieved ?? null,
       division:      c.division ?? null,
-      problemsSolved: null,
+      // Map problems_solved from DB — format as "X / Y" like LeetCode
+      problemsSolved: c.problems_solved != null
+        ? `${c.problems_solved}${c.total_problems ? ' / ' + c.total_problems : ''}`
+        : null,
       contestType:   null,
     }))
 }
@@ -533,16 +536,25 @@ export default function CodeforcesProfile({ data, onBack }) {
       {/* ════ CONTESTS TAB ════ */}
       {tab === 'Contests' && (
         <div className="lcp-body">
-          {/* KPI strip */}
+          {/* KPI strip — contest-specific metrics */}
           <div className="lcp-kpis" style={{ borderRadius:12, border:'1px solid var(--border)', overflow:'hidden' }}>
-            {[
-              { val: Math.round(d.current_rating)||'—', sub: 'Current Rating' },
-              { val: Math.round(d.max_rating)||'—',     sub: 'Peak Rating' },
-              { val: fmt(contests?.length),             sub: 'Total Contests' },
-              { val: bestRank ? `#${fmt(bestRank)}` : '—', sub: 'Best Rank' },
-            ].map(k => (
+            {(() => {
+              const deltas = (contests||[]).map(c => c.rating_change || 0)
+              const gains  = deltas.filter(x => x > 0)
+              const bestGain = gains.length ? Math.max(...gains) : 0
+              const avgChange = deltas.length
+                ? Math.round(deltas.reduce((a,b) => a+b, 0) / deltas.length)
+                : 0
+              return [
+                { val: fmt(contests?.length),                    sub: 'Total Contests' },
+                { val: bestRank ? `#${fmt(bestRank)}` : '—',   sub: 'Best Rank' },
+                { val: bestGain ? `+${bestGain}` : '—',        sub: 'Best Rating Gain' },
+                { val: avgChange >= 0 ? `+${avgChange}` : String(avgChange), sub: 'Avg Rating Δ',
+                  color: avgChange >= 0 ? '#22c55e' : '#ef4444' },
+              ]
+            })().map(k => (
               <div key={k.sub} className="lcp-kpi">
-                <div className="lcp-kpi-val">{k.val}</div>
+                <div className="lcp-kpi-val" style={k.color ? { color: k.color } : {}}>{k.val}</div>
                 <div className="lcp-kpi-sub">{k.sub}</div>
               </div>
             ))}

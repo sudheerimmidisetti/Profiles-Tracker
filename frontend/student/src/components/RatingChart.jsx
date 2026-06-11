@@ -36,6 +36,20 @@ function formatFullDate(ms) {
   const d = new Date(ms)
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
+// ── CF Rank title from rating ──────────────────────────────────────────
+function cfRankTitle(rating) {
+  if (!rating || rating <= 0) return null
+  if (rating < 1200) return { title: 'Newbie',           color: '#808080' }
+  if (rating < 1400) return { title: 'Pupil',            color: '#008000' }
+  if (rating < 1600) return { title: 'Specialist',       color: '#03a89e' }
+  if (rating < 1900) return { title: 'Expert',           color: '#0000ff' }
+  if (rating < 2100) return { title: 'Candidate Master', color: '#aa00aa' }
+  if (rating < 2400) return { title: 'Master',           color: '#ff8c00' }
+  if (rating < 2600) return { title: 'International Master', color: '#ff8c00' }
+  if (rating < 3000) return { title: 'Grandmaster',      color: '#ff0000' }
+  return { title: 'Legendary Grandmaster', color: '#ff0000' }
+}
+
 
 // ── Custom Tooltip ───────────────────────────────────────────────────────────
 function CustomTooltip({ active, payload }) {
@@ -43,6 +57,8 @@ function CustomTooltip({ active, payload }) {
   const p  = payload[0].payload
   const up = (p.ratingChange ?? 0) >= 0
   const col = up ? '#22c55e' : '#ef4444'
+  // CF rank title from rating
+  const cfRank = p.platform === 'codeforces' ? cfRankTitle(p.rating) : null
 
   return (
     <div className="rc-tooltip">
@@ -57,6 +73,14 @@ function CustomTooltip({ active, payload }) {
           <span className="rc-tt-delta" style={{ color: col }}>
             {up ? '▲' : '▼'} {Math.abs(Math.round(p.ratingChange))}
           </span>
+        )}
+        {/* CF rank title badge */}
+        {cfRank && (
+          <span style={{
+            fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px',
+            borderRadius: 6, background: `${cfRank.color}22`,
+            color: cfRank.color, marginLeft: 6,
+          }}>{cfRank.title}</span>
         )}
       </div>
 
@@ -91,12 +115,7 @@ function CustomTooltip({ active, payload }) {
             <span className="rc-tt-v" style={{ color:'#f89f1b' }}>{'★'.repeat(p.stars)}</span>
           </div>
         )}
-        {p.contestType && (
-          <div className="rc-tt-row">
-            <span className="rc-tt-k">Type</span>
-            <span className="rc-tt-v">{p.contestType}</span>
-          </div>
-        )}
+        {/* contestType row intentionally removed — shown as badge in contest table */}
         {p.finishTime != null && (
           <div className="rc-tt-row">
             <span className="rc-tt-k">Finish Time</span>
@@ -130,15 +149,20 @@ export default function RatingChart({ points = [], platform = 'codeforces', heig
   const [crosshair, setCrosshair] = useState(null)
   const colors = PLATFORM_COLORS[platform] || PLATFORM_COLORS.codeforces
 
-  // Filter by selected time range
+  // Filter by selected time range + inject platform into each point for tooltip
   const filtered = useMemo(() => {
     if (!points.length) return []
     const rangeInfo = RANGES.find(r => r.label === range)
-    if (!rangeInfo?.months) return points
-    const cutoff = Date.now() - rangeInfo.months * 30 * 24 * 3600 * 1000
-    const f = points.filter(p => p.date >= cutoff)
-    return f.length >= 2 ? f : points.slice(-Math.max(2, Math.ceil(points.length * 0.2)))
-  }, [points, range])
+    const base = rangeInfo?.months
+      ? (() => {
+          const cutoff = Date.now() - rangeInfo.months * 30 * 24 * 3600 * 1000
+          const f = points.filter(p => p.date >= cutoff)
+          return f.length >= 2 ? f : points.slice(-Math.max(2, Math.ceil(points.length * 0.2)))
+        })()
+      : points
+    // Inject platform so CustomTooltip can show CF rank title
+    return base.map(p => ({ ...p, platform }))
+  }, [points, range, platform])
 
   // Min/max for domain with padding
   const { minR, maxR, minDate, maxDate } = useMemo(() => {

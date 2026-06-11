@@ -11,13 +11,17 @@ function generateOTP() {
 
 /**
  * Generate an 8-character alphanumeric verification code (uppercase)
- * e.g. "AC89X77P"
+ * First character is always a LETTER (LeetCode display name cannot start with a digit)
+ * e.g. "AC89X77P", "BZ3K9M2Q"
  */
 function generateVerificationCode() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let code = '';
-  for (let i = 0; i < 8; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  const LETTERS  = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const ALPHANUM  = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  // First char: letter only
+  let code = LETTERS.charAt(Math.floor(Math.random() * LETTERS.length));
+  // Remaining 7 chars: letters + digits
+  for (let i = 1; i < 8; i++) {
+    code += ALPHANUM.charAt(Math.floor(Math.random() * ALPHANUM.length));
   }
   return code;
 }

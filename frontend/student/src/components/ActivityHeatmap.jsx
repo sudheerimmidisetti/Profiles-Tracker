@@ -10,6 +10,14 @@ const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov
 const FULL_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const DAYS_ABBR = ['S','M','T','W','T','F','S']
 
+// ── Local ISO date string (avoids UTC offset bug) ────────────────────────────
+// toISOString() always uses UTC; for IST (+5:30) midnight local = 18:30 UTC prev day.
+// We always want the LOCAL date the user sees, not the UTC equivalent.
+function localISO(d) {
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
 // ── Parse any format into { 'YYYY-MM-DD': count } ─────────────────────────────
 function parseCalendar(calendar) {
   const map = {}
@@ -35,10 +43,11 @@ function parseCalendar(calendar) {
     Object.entries(raw).forEach(([key, cnt]) => {
       const num = Number(key)
       const dt  = !isNaN(num) && num > 1e9
-        ? new Date(num * 1000)
+        ? new Date(num * 1000)   // Unix timestamp → local Date
         : new Date(key)
       if (!isNaN(dt)) {
-        const iso = dt.toISOString().slice(0, 10)
+        // Use local date string — NOT toISOString() which would give UTC date
+        const iso = localISO(dt)
         map[iso] = (map[iso] || 0) + (parseInt(cnt) || 0)
       }
     })
@@ -73,11 +82,11 @@ function buildGrid(year, map) {
   const gridEnd = new Date(yearEnd)
   while (gridEnd.getDay() !== 6) gridEnd.setDate(gridEnd.getDate() + 1)
 
-  // Build all days
+  // Build all days using LOCAL date strings (not UTC)
   const allDays = []
   const cur = new Date(gridStart)
   while (cur <= gridEnd) {
-    const iso = cur.toISOString().slice(0, 10)
+    const iso = localISO(cur)   // ← local date, not UTC
     allDays.push({
       iso,
       date:   new Date(cur),
@@ -311,7 +320,7 @@ export default function ActivityHeatmap({
     for (let i = 0; i < 365; i++) {
       const d = new Date(today)
       d.setDate(d.getDate() - i)
-      if ((dayMap[d.toISOString().slice(0, 10)] || 0) > 0) s++
+      if ((dayMap[localISO(d)] || 0) > 0) s++   // ← local date
       else if (i > 0) break
     }
     return s
@@ -356,22 +365,18 @@ export default function ActivityHeatmap({
           </div>
         </div>
 
-        {/* Year pills */}
-        {years.length > 1 && (
-          <div className="ahm-year-pills">
+        {/* Year dropdown */}
+        {years.length > 0 && (
+          <select
+            className="ahm-year-select"
+            value={selYear}
+            onChange={e => setSelYear(e.target.value)}
+            style={{ '--ahm-sel-color': color }}
+          >
             {years.map(y => (
-              <button
-                key={y}
-                className={`ahm-year-btn${y === selYear ? ' active' : ''}`}
-                style={y === selYear
-                  ? { borderColor: color, color, background: `color-mix(in srgb, ${color} 12%, transparent)` }
-                  : {}}
-                onClick={() => setSelYear(y)}
-              >
-                {y}
-              </button>
+              <option key={y} value={y}>{y}</option>
             ))}
-          </div>
+          </select>
         )}
       </div>
 

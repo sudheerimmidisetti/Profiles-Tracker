@@ -59,8 +59,9 @@ function fmtDate(str) {
   if (!str) return '—'
   // Use only YYYY-MM-DD to avoid UTC→local timezone shift adding +1 day
   const dateOnly = String(str).slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) return '—'
   const d = new Date(dateOnly + 'T00:00:00')
-  if (isNaN(d)) return str
+  if (isNaN(d)) return '—'
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
@@ -100,8 +101,11 @@ function ccToChartPoints(contests) {
       contestName:   c.contest_name ?? '',
       rank:          c.rank_achieved ?? null,
       division:      c.division ?? null,
-      problemsSolved: c.problems_solved_count ?? null,
-      contestType:   c.contest_type ?? null,
+      // Only show problemsSolved in tooltip when we have actual data (not always 0)
+      problemsSolved: (c.problems_solved_count != null && (c.problems_solved_count > 0 || c.total_problems > 0))
+        ? `${c.problems_solved_count}${c.total_problems ? ' / ' + c.total_problems : ''}`
+        : null,
+      contestType:   null,   // removed from tooltip (still shown as badge in table)
       stars:         si.stars,
     }
   })
@@ -561,16 +565,25 @@ export default function CodeChefProfile({ data, onBack }) {
       {/* ════ CONTESTS TAB ════ */}
       {tab === 'Contests' && (
         <div className="lcp-body">
-          {/* KPI strip */}
+          {/* KPI strip — contest-specific metrics */}
           <div className="lcp-kpis" style={{ borderRadius:12, border:'1px solid var(--border)', overflow:'hidden' }}>
-            {[
-              { val: fmt(d.current_rating),    sub: 'Current Rating' },
-              { val: fmt(d.highest_rating),    sub: 'Peak Rating' },
-              { val: fmt(contestsParticipated), sub: 'Total Contests' },
-              { val: bestRank ? `#${fmt(bestRank)}` : '—', sub: 'Best Rank' },
-            ].map(k => (
+            {(() => {
+              const deltas = (contests||[]).map(c => c.rating_change || 0)
+              const gains  = deltas.filter(x => x > 0)
+              const bestGain = gains.length ? Math.max(...gains) : 0
+              const avgChange = deltas.length
+                ? Math.round(deltas.reduce((a,b) => a+b, 0) / deltas.length)
+                : 0
+              return [
+                { val: fmt(contestsParticipated),               sub: 'Total Contests' },
+                { val: bestRank ? `#${fmt(bestRank)}` : '—',   sub: 'Best Rank' },
+                { val: bestGain ? `+${bestGain}` : '—',        sub: 'Best Rating Gain' },
+                { val: avgChange >= 0 ? `+${avgChange}` : String(avgChange), sub: 'Avg Rating Δ',
+                  color: avgChange >= 0 ? '#22c55e' : '#ef4444' },
+              ]
+            })().map(k => (
               <div key={k.sub} className="lcp-kpi">
-                <div className="lcp-kpi-val">{k.val}</div>
+                <div className="lcp-kpi-val" style={k.color ? { color: k.color } : {}}>{k.val}</div>
                 <div className="lcp-kpi-sub">{k.sub}</div>
               </div>
             ))}

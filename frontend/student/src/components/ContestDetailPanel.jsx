@@ -383,9 +383,11 @@ export default function ContestDetailPanel({ contest, platform, email, onClose }
   const color = PLATFORM_COLORS[platform] || '#888'
   const contestName = data?.contestName || contest.contest_name || contest.contest_title || contestId
 
-  // Solved count: prefer live data.solved, then myData, then stored value
-  const liveSolvedCount = data?.solved
-    ? Object.values(data.solved).filter(s => s.accepted).length
+  // Solved count: only use live data.solved when it has actual problem entries
+  // Empty {} evaluates to 0 and incorrectly overrides contest.problems_solved
+  const solvedEntries = data?.solved ? Object.values(data.solved) : []
+  const liveSolvedCount = solvedEntries.length > 0
+    ? solvedEntries.filter(s => s.accepted).length
     : null
   const solvedVal = liveSolvedCount != null
     ? liveSolvedCount
