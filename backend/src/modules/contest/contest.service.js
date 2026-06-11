@@ -228,7 +228,20 @@ async function getCodechefDetail(contestCode, email, dbQuery) {
 
 // ── LEETCODE ──────────────────────────────────────────────────────────────────
 async function getLeetcodeDetail(contestSlug, email, dbQuery) {
-  // Get contest history row from DB
+  const LC_GQL = 'https://leetcode.com/graphql/';
+  const LC_HEADERS = {
+    ...HEADERS,
+    'Content-Type': 'application/json',
+    Referer: 'https://leetcode.com',
+    Origin:  'https://leetcode.com',
+  };
+
+  async function lcGql(query, variables = {}) {
+    const r = await axios.post(LC_GQL, { query, variables }, { headers: LC_HEADERS, timeout: 10000 });
+    return r.data?.data || {};
+  }
+
+  // ── 1. Contest history from DB ──
   const dbRes = await dbQuery(
     `SELECT ch.*, lp.username
      FROM leetcode_contest_history ch
@@ -241,44 +254,76 @@ async function getLeetcodeDetail(contestSlug, email, dbQuery) {
   );
   const row = dbRes?.rows?.[0];
 
-  // Fetch problem list from LeetCode public GraphQL (no auth needed)
-  let problems = [];
+  // ── 2. Fetch problem list — 'difficulty' is NOT on ContestQuestionNode, use credit ──
+  let questions = [];
   try {
-    const gqlRes = await axios.post(
-      'https://leetcode.com/graphql/',
-      {
-        query: `query contestInfo($titleSlug: String!) {
-          contest(titleSlug: $titleSlug) {
-            title
-            questions { title titleSlug difficulty credit }
-          }
-        }`,
-        variables: { titleSlug: contestSlug },
-      },
-      {
-        headers: {
-          ...HEADERS,
-          'Content-Type': 'application/json',
-          Referer: 'https://leetcode.com',
-          Origin:  'https://leetcode.com',
-        },
-        timeout: 10000,
-      }
+    const d = await lcGql(
+      `query contestInfo($titleSlug: String!) {
+         contest(titleSlug: $titleSlug) {
+           title
+           questions { title titleSlug credit }
+         }
+       }`,
+      { titleSlug: contestSlug }
     );
-    const questions = gqlRes.data?.data?.contest?.questions || [];
-    problems = questions.map((q, i) => ({
-      index:      String.fromCharCode(65 + i),
-      slug:       q.titleSlug,
-      name:       q.title,
-      difficulty: q.difficulty,
-      points:     q.credit,
-      url:        `https://leetcode.com/problems/${q.titleSlug}/`,
-    }));
+    questions = d?.contest?.questions || [];
   } catch (e) {
-    console.warn('[LC graphql]', e.message);
+    console.warn('[LC contest]', e.message);
   }
 
-  const numSolved = Number(row?.problems_solved) || 0;
+  // ── 3. Fetch per-problem difficulty in parallel (Easy / Medium / Hard) ──
+  const diffMap = {};
+  await Promise.all(questions.map(async q => {
+    try {
+      const d = await lcGql(
+        `query q($slug: String!) { question(titleSlug: $slug) { difficulty } }`,
+        { slug: q.titleSlug }
+      );
+      diffMap[q.titleSlug] = d?.question?.difficulty || null;
+    } catch { diffMap[q.titleSlug] = null; }
+  }));
+
+  const problems = questions.map((q, i) => ({
+    index:      String.fromCharCode(65 + i),
+    slug:       q.titleSlug,
+    name:       q.title,
+    difficulty: diffMap[q.titleSlug] || null,  // Easy / Medium / Hard
+    points:     q.credit,                       // Contest score weight (3/4/5/7)
+    url:        `https://leetcode.com/problems/${q.titleSlug}/`,
+  }));
+
+  // ── 4. Check student_submissions table to find which problems user solved ──
+  // student_submissions stores titleSlug as problem_id for LC
+  let solved = {};
+  const slugs = problems.map(p => p.slug).filter(Boolean);
+  if (email && slugs.length > 0) {
+    try {
+      const subsRes = await dbQuery(
+        `SELECT problem_id, submitted_at FROM student_submissions
+         WHERE student_email = $1
+           AND platform = 'leetcode'
+           AND problem_id = ANY($2)
+         ORDER BY submitted_at ASC`,
+        [email, slugs]
+      );
+      // Mark each matched problem as solved
+      for (const sub of (subsRes?.rows || [])) {
+        solved[sub.problem_id] = { accepted: true, attempts: 1 };
+      }
+    } catch (e) {
+      console.warn('[LC solved-check]', e.message);
+    }
+  }
+
+  // Also build solved map indexed by A/B/C/D for the ProblemsTab component
+  // which uses problem.index as the key
+  const solvedByIndex = {};
+  problems.forEach(p => {
+    const bySlug = solved[p.slug];
+    if (bySlug) solvedByIndex[p.index] = bySlug;
+  });
+
+  const numSolved = Number(row?.problems_solved) || Object.keys(solvedByIndex).length;
 
   return {
     platform:     'leetcode',
@@ -287,7 +332,7 @@ async function getLeetcodeDetail(contestSlug, email, dbQuery) {
     handle:       row?.username || '',
     problems,
     submissions:  [],
-    solved:       {},  // LC requires auth for per-problem verdicts
+    solved:       solvedByIndex,  // Now populated from student_submissions DB!
     myData: row ? {
       rank:           row.rank_achieved,
       problemsSolved: numSolved,
@@ -296,9 +341,12 @@ async function getLeetcodeDetail(contestSlug, email, dbQuery) {
       rating:         row.rating_after_contest,
       trendDirection: row.trend_direction,
     } : null,
-    note: `Solved ${numSolved}/${row?.total_problems ?? problems.length} problems. Submission details require LeetCode login.`,
+    note: numSolved > 0
+      ? `Solved ${numSolved}/${row?.total_problems ?? problems.length} problems in this contest.`
+      : `Solved ${numSolved}/${row?.total_problems ?? problems.length} problems. Run a sync to update solved status.`,
     platformUrl: `https://leetcode.com/contest/${contestSlug}/`,
   };
 }
+
 
 module.exports = { getCodeforcesDetail, getCodechefDetail, getLeetcodeDetail };

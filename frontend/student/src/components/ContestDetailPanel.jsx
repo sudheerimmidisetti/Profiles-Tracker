@@ -56,6 +56,18 @@ const PLATFORM_LABELS = {
   leetcode:   'LeetCode',
 }
 
+// ── CF Rating Color (matches Codeforces' official color system) ────────────────
+function cfRatingColor(rating) {
+  if (!rating) return 'var(--fg-muted)'
+  if (rating < 1200) return '#808080'   // grey   — Newbie
+  if (rating < 1400) return '#008000'   // green  — Pupil
+  if (rating < 1600) return '#03a89e'   // cyan   — Specialist
+  if (rating < 1900) return '#0000ff'   // blue   — Expert
+  if (rating < 2100) return '#aa00aa'   // violet — Candidate Master
+  if (rating < 2400) return '#ff8c00'   // orange — Master
+  return '#ff0000'                       // red    — Grandmaster+
+}
+
 // ── Problems Tab ─────────────────────────────────────────────────────────────
 function ProblemsTab({ data, solvedCount }) {
   const { problems, solved, platform } = data
@@ -107,11 +119,24 @@ function ProblemsTab({ data, solvedCount }) {
                 {p.name}
               </a>
               <div className="cdp-prob-tags">
+                {/* LC: Easy/Medium/Hard badge */}
                 {p.difficulty && (
                   <span className={`cdp-tag cdp-diff-${p.difficulty.toLowerCase()}`}>{p.difficulty}</span>
                 )}
-                {p.rating && <span className="cdp-tag">★ {p.rating}</span>}
+                {/* CF: Color-coded problem rating */}
+                {p.rating && (
+                  <span className="cdp-tag cdp-rating-tag" style={{
+                    color: cfRatingColor(p.rating),
+                    background: `${cfRatingColor(p.rating)}18`,
+                    borderColor: `${cfRatingColor(p.rating)}40`,
+                    fontWeight: 700,
+                  }}>
+                    ★ {p.rating}
+                  </span>
+                )}
+                {/* LC: Contest score (3/4/5/7 pts) */}
                 {p.points && <span className="cdp-tag">⚡ {p.points}pts</span>}
+                {/* CF/CC: Tags */}
                 {(p.tags || []).slice(0, 3).map(t => (
                   <span key={t} className="cdp-tag">{t}</span>
                 ))}
@@ -134,6 +159,7 @@ function ProblemsTab({ data, solvedCount }) {
     </div>
   )
 }
+
 
 // ── Submissions Tab ──────────────────────────────────────────────────────────
 function SubmissionsTab({ data, onSelectSub, selectedSub }) {
