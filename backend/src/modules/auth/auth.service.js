@@ -71,16 +71,18 @@ async function verifyOTPAndLogin(email, otp) {
 
   // 4. Upsert student row into PostgreSQL
   await query(
-    `INSERT INTO students (email, full_name, roll_number, college, branch, phone)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO students (email, full_name, roll_number, college, branch, phone, passout_year)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (email) DO UPDATE SET
        full_name    = EXCLUDED.full_name,
        roll_number  = EXCLUDED.roll_number,
        college      = EXCLUDED.college,
        branch       = EXCLUDED.branch,
-       phone        = EXCLUDED.phone`,
+       phone        = COALESCE(EXCLUDED.phone, students.phone),
+       passout_year = COALESCE(EXCLUDED.passout_year, students.passout_year)`,
     [email, studentData.full_name, studentData.roll_number,
-     studentData.college, studentData.branch, studentData.phone]
+     studentData.college, studentData.branch,
+     studentData.phone || null, studentData.passout_year || null]
   );
 
   // 5. Generate session
@@ -145,41 +147,64 @@ async function logout(sessionId) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// INTERNAL: Fetch student data from college DB
+// INTERNAL: Fetch student data from Maya college API
+// Endpoint: GET /get-user-by-roll-no-coding-profiles/:roll_no
+// Roll number comes from email prefix (e.g. 23p31a0537 → 23P31A0537)
+// Per API requirement: alphabetic characters must be UPPERCASE
 // ─────────────────────────────────────────────────────────────
+const MAYA_API = 'https://api.maya.adityauniversity.in/node/api/get-user-by-roll-no-coding-profiles';
+
 async function fetchStudentFromCollegeDB(email) {
-  const apiUrl = process.env.COLLEGE_DB_API_URL;
+  // Derive roll number from email prefix and uppercase ALL alpha chars
+  // e.g. "23p31a0537@acet.ac.in" → "23P31A0537"
+  const rollNumber = email.split('@')[0].replace(/[a-z]/g, c => c.toUpperCase());
 
-  if (apiUrl) {
-    try {
-      const { data } = await axios.get(`${apiUrl}/${encodeURIComponent(email)}`, {
-        headers: { 'X-API-Key': process.env.COLLEGE_DB_API_KEY || '' },
-        timeout: 6000
-      });
-      // Expected shape: { full_name, roll_number, college, branch, phone }
-      return data;
-    } catch (err) {
-      logger.warn(`College DB API failed for ${email}: ${err.message}. Using stub.`);
-    }
-  }
-
-  // Stub: derive roll number and college name from email (no college DB needed)
-  const rollNumber = email.split('@')[0].toUpperCase();
-  const domain     = email.split('@')[1]?.toLowerCase() || '';
+  const domain = email.split('@')[1]?.toLowerCase() || '';
   const collegeMap = {
     'acet.ac.in':          'ACET',
     'aec.edu.in':          'AEC',
     'adityauniversity.in': 'Aditya University',
   };
-  const collegeName = collegeMap[domain] || domain.split('.')[0].toUpperCase();
-  logger.warn(`COLLEGE_DB_API_URL not set — stub data used for ${email}`);
-  return {
-    full_name:   'Update Your Name',
-    roll_number: rollNumber,
-    college:     collegeName,
-    branch:      'CSE',
-    phone:       '0000000000'
-  };
+  const collegeFallback = collegeMap[domain] || domain.split('.')[0].toUpperCase();
+
+  try {
+    const { data } = await axios.get(`${MAYA_API}/${rollNumber}`, {
+      timeout: 8000,
+      headers: { 'Accept': 'application/json' },
+    });
+
+    // API response: { _id, first_name, roll_no, email, college, branch: [], passout_year }
+    if (!data || data.message === 'User not found') {
+      throw new Error(`Roll number ${rollNumber} not found in Maya API`);
+    }
+
+    const branch = Array.isArray(data.branch)
+      ? data.branch.join(', ')
+      : (data.branch || 'CSE');
+
+    logger.info(`[CollegeAPI] Fetched profile for ${rollNumber}: ${data.first_name}`);
+    return {
+      full_name:    data.first_name   || 'Unknown',
+      roll_number:  data.roll_no      || rollNumber,
+      college:      data.college      || collegeFallback,
+      branch,
+      passout_year: data.passout_year || null,
+      phone:        null,  // Maya API doesn't return phone
+    };
+  } catch (err) {
+    logger.warn(`[CollegeAPI] Maya API failed for ${rollNumber}: ${err.message} — using stub.`);
+
+    // Graceful fallback: use email-derived data
+    return {
+      full_name:    'Update Your Name',
+      roll_number:  rollNumber,
+      college:      collegeFallback,
+      branch:       'CSE',
+      passout_year: null,
+      phone:        null,
+    };
+  }
 }
+
 
 module.exports = { registerWithOTP, verifyOTPAndLogin, refreshAccessToken, logout };
