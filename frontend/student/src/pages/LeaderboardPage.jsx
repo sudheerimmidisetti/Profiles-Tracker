@@ -1,4 +1,4 @@
-// LeaderboardPage.jsx — 4 tabs: Platform | Placements | Weekly | Monthly
+// LeaderboardPage.jsx
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Header from '../components/Header'
@@ -7,17 +7,21 @@ import PlacementsLeaderboard from '../components/leaderboards/PlacementsLeaderbo
 import WeeklyLeaderboard from '../components/leaderboards/WeeklyLeaderboard'
 import MonthlyLeaderboard from '../components/leaderboards/MonthlyLeaderboard'
 
-const BOARD_TABS = [
-  { id: 'platform',   label: '📊 Platform',   desc: 'Total solved, rating, consistency per platform' },
-  { id: 'placements', label: '🏆 Placements',  desc: '6-month rolling window · 100pt scoring' },
-  { id: 'weekly',     label: '⚡ Weekly',      desc: 'This week\'s contest performance only' },
-  { id: 'monthly',    label: '📅 Monthly',     desc: 'Contest (60%) + Practice (40%) blend' },
+const TABS = [
+  { id: 'platform',   label: 'Platform' },
+  { id: 'placements', label: 'Placements' },
+  { id: 'weekly',     label: 'Weekly' },
+  { id: 'monthly',    label: 'Monthly' },
 ]
+
+const PLATFORMS = ['leetcode', 'codeforces', 'codechef', 'hackerrank']
+const PLAT_LABELS = { leetcode: 'LeetCode', codeforces: 'Codeforces', codechef: 'CodeChef', hackerrank: 'HackerRank' }
 
 export default function LeaderboardPage() {
   const [params, setParams] = useSearchParams()
-  const initTab = BOARD_TABS.find(t => t.id === params.get('tab'))?.id || 'platform'
+  const initTab = TABS.find(t => t.id === params.get('tab'))?.id || 'platform'
   const [activeTab, setActiveTab] = useState(initTab)
+  const [platform,  setPlatform]  = useState('leetcode')
 
   function switchTab(id) {
     setActiveTab(id)
@@ -29,68 +33,45 @@ export default function LeaderboardPage() {
       <Header title="Leaderboard" breadcrumb="Overview" />
       <div className="page">
 
-        {/* Tab bar */}
-        <div className="card" style={{ padding:'12px 16px', marginBottom:0 }}>
-          <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
-            {BOARD_TABS.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => switchTab(tab.id)}
-                style={{
-                  padding:'8px 18px',
-                  borderRadius:8,
-                  border: activeTab === tab.id ? '1px solid rgba(255,255,255,0.2)' : '1px solid transparent',
-                  background: activeTab === tab.id ? 'rgba(255,255,255,0.1)' : 'transparent',
-                  color: activeTab === tab.id ? 'var(--fg)' : 'var(--fg-muted)',
-                  fontSize:13,
-                  fontWeight: activeTab === tab.id ? 700 : 400,
-                  cursor:'pointer',
-                  transition:'all 0.15s',
-                  whiteSpace:'nowrap',
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          {/* Description of active tab */}
-          <div style={{ fontSize:12, color:'var(--fg-muted)', marginTop:8 }}>
-            {BOARD_TABS.find(t => t.id === activeTab)?.desc}
+        {/* Tab selector — uses app's .pills/.pill pattern */}
+        <div className="card" style={{ padding: '10px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+            <div className="pills">
+              {TABS.map(tab => (
+                <button
+                  key={tab.id}
+                  className={`pill${activeTab === tab.id ? ' active' : ''}`}
+                  onClick={() => switchTab(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Platform picker — only shown in Platform tab */}
+            {activeTab === 'platform' && (
+              <div className="pills">
+                {PLATFORMS.map(p => (
+                  <button
+                    key={p}
+                    className={`pill${platform === p ? ' active' : ''}`}
+                    onClick={() => setPlatform(p)}
+                  >
+                    {PLAT_LABELS[p]}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Board content */}
-        {activeTab === 'platform'   && <PlatformTab />}
+        {/* Content */}
+        {activeTab === 'platform'   && <Leaderboard platform={platform} />}
         {activeTab === 'placements' && <PlacementsLeaderboard />}
         {activeTab === 'weekly'     && <WeeklyLeaderboard />}
         {activeTab === 'monthly'    && <MonthlyLeaderboard />}
 
       </div>
-    </>
-  )
-}
-
-function PlatformTab() {
-  const PLATFORMS = ['leetcode', 'codeforces', 'codechef', 'hackerrank']
-  const [platform, setPlatform] = useState('leetcode')
-
-  return (
-    <>
-      {/* Platform picker inside the platform tab */}
-      <div className="card" style={{ padding:'10px 16px' }}>
-        <div className="pills">
-          {PLATFORMS.map(p => (
-            <button
-              key={p}
-              className={`pill${platform === p ? ' active' : ''}`}
-              onClick={() => setPlatform(p)}
-            >
-              {p === 'leetcode' ? 'LeetCode' : p === 'codeforces' ? 'Codeforces' : p === 'codechef' ? 'CodeChef' : 'HackerRank'}
-            </button>
-          ))}
-        </div>
-      </div>
-      <Leaderboard platform={platform} />
     </>
   )
 }
