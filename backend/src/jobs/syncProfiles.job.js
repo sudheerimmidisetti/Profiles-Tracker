@@ -139,10 +139,11 @@ async function upsertSubmissions(email, platform, submissions) {
          (student_email, platform, problem_id, problem_name, status, language, submitted_at, runtime_ms)
        VALUES ${values.join(',')}
        ON CONFLICT (student_email, platform, problem_id) DO UPDATE SET
-         problem_name = COALESCE(NULLIF(EXCLUDED.problem_name, problem_id), student_submissions.problem_name),
+         problem_name = COALESCE(NULLIF(EXCLUDED.problem_name, EXCLUDED.problem_id), student_submissions.problem_name),
          status       = EXCLUDED.status,
          language     = COALESCE(EXCLUDED.language, student_submissions.language)`,
       params
+
 
     ).catch(err => logger.warn(`[SyncJob] upsertSubmissions batch failed: ${err.message}`));
   }
