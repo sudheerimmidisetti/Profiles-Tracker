@@ -45,9 +45,18 @@ function detectContestType(name = '') {
   return 'Contest';
 }
 
-function detectDivision(name = '') {
+function detectDivision(name = '', ratingBefore = 0) {
+  // 1. Try name-based match first (e.g. "Starters 130 Div 2")
   const m = name.match(/div(?:ision)?\s*(\d)/i);
-  return m ? `Div ${m[1]}` : null;
+  if (m) return `Div ${m[1]}`;
+  // 2. Fallback: infer from rating (CodeChef Starter divisions by rating)
+  if (ratingBefore > 0) {
+    if (ratingBefore >= 2500) return 'Div 1';
+    if (ratingBefore >= 2000) return 'Div 2';
+    if (ratingBefore >= 1600) return 'Div 3';
+    return 'Div 4';
+  }
+  return null;
 }
 
 function starsFromRating(rating) {
@@ -275,10 +284,11 @@ async function getFullProfile(username) {
     if (allRatingData) {
       let prevRating = 0;
       allRatingData.forEach((r) => {
-        const rank    = safeInt(r.rank);
-        const rating  = safeInt(r.rating);
-        const change  = prevRating > 0 ? rating - prevRating : 0;
-        prevRating    = rating;
+        const rank        = safeInt(r.rank);
+        const rating      = safeInt(r.rating);
+        const ratingBefore = prevRating;
+        const change      = prevRating > 0 ? rating - prevRating : 0;
+        prevRating        = rating;
         const dateStr = r.end_date || `${r.getyear}-${r.getmonth}-${r.getday}` || null;
 
         contestHistory.push({
@@ -289,7 +299,8 @@ async function getFullProfile(username) {
           ratingChange:       change,
           contestDate:        dateStr,
           contestType:        detectContestType(r.name || ''),
-          division:           detectDivision(r.name || ''),
+          // Pass ratingBefore so detectDivision can infer Div when name lacks it
+          division:           detectDivision(r.name || '', ratingBefore),
           problemsSolvedCount: 0,
         });
         ratingGraph.push({ name: r.name, date: dateStr, rating, rank, ratingChange: change });

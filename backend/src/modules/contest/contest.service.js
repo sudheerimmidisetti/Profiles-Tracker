@@ -96,8 +96,10 @@ async function getCodeforcesDetail(contestId, handle) {
     problems,
     solved,
     submissions,
-    rank:   null,
-    points: null,
+    rank:          null,
+    points:        null,
+    // Live solved count from actual submissions (not from DB which may be stale)
+    problemsSolvedLive: Object.values(solved).filter(s => s.accepted).length,
   };
 }
 
@@ -303,7 +305,10 @@ async function getCodechefDetail(contestCode, email, dbQuery) {
       problemsSolved: finalSolvedCount,
       ratingAfter:    dbRow.rating_after_contest,
       ratingChange:   dbRow.rating_change,
-      division:       dbRow.division,
+      // Include division from DB (may be null if not detected from name)
+      division:       dbRow.division || null,
+      // CC has no finish_time in DB — show total problems instead
+      totalProblems:  problems.length,
     } : null,
     note: handle
       ? `Solved ${finalSolvedCount}/${problems.length} problems in this contest.`
@@ -379,38 +384,83 @@ async function getLeetcodeDetail(contestSlug, email, dbQuery) {
     url:        `https://leetcode.com/problems/${q.titleSlug}/`,
   }));
 
-  // ── 4. Check student_submissions table to find which problems user solved ──
-  // student_submissions stores titleSlug as problem_id for LC
-  let solved = {};
+  // ── 4. Determine which problems user solved in this contest ──
+  // Strategy (in order of priority):
+  //   a) Cross-reference problem slugs with student_submissions filtered to contest time window
+  //   b) Cross-reference with recent_ac_submissions JSON from LC profile (has timestamps)
+  //   c) Fallback: if DB says N problems solved, mark first N by index
+  let solvedByIndex = {};
   const slugs = problems.map(p => p.slug).filter(Boolean);
+  const contestTimeMs = row?.contest_time ? Number(row.contest_time) * 1000 : null;
+
   if (email && slugs.length > 0) {
     try {
+      // a) DB student_submissions — only count if submitted WITHIN contest window
+      //    contest_time is Unix seconds; contests last ~1.5h so use 2h window
+      const windowSql = contestTimeMs
+        ? `AND submitted_at >= to_timestamp($3) AND submitted_at <= to_timestamp($3) + INTERVAL '2 hours'`
+        : '';
+      const params = contestTimeMs
+        ? [email, slugs, Number(row.contest_time)]
+        : [email, slugs];
+
       const subsRes = await dbQuery(
-        `SELECT problem_id, submitted_at FROM student_submissions
+        `SELECT problem_id FROM student_submissions
          WHERE student_email = $1
            AND platform = 'leetcode'
            AND problem_id = ANY($2)
+           ${windowSql}
          ORDER BY submitted_at ASC`,
-        [email, slugs]
+        params
       );
-      // Mark each matched problem as solved
+
       for (const sub of (subsRes?.rows || [])) {
-        solved[sub.problem_id] = { accepted: true, attempts: 1 };
+        const prob = problems.find(p => p.slug === sub.problem_id);
+        if (prob) solvedByIndex[prob.index] = { accepted: true, attempts: 1 };
       }
     } catch (e) {
-      console.warn('[LC solved-check]', e.message);
+      console.warn('[LC solved-check window]', e.message);
     }
   }
 
-  // Also build solved map indexed by A/B/C/D for the ProblemsTab component
-  // which uses problem.index as the key
-  const solvedByIndex = {};
-  problems.forEach(p => {
-    const bySlug = solved[p.slug];
-    if (bySlug) solvedByIndex[p.index] = bySlug;
-  });
+  // b) Cross-reference recent_ac_submissions JSON (already on the profile)
+  if (Object.keys(solvedByIndex).length === 0 && row) {
+    try {
+      const lcProfileRes = await dbQuery(
+        `SELECT recent_ac_submissions FROM leetcode_profiles WHERE student_email = $1 LIMIT 1`,
+        [email]
+      );
+      const recentRaw = lcProfileRes?.rows?.[0]?.recent_ac_submissions;
+      const recentSubs = recentRaw
+        ? (typeof recentRaw === 'string' ? JSON.parse(recentRaw) : recentRaw)
+        : [];
 
-  const numSolved = Number(row?.problems_solved) || Object.keys(solvedByIndex).length;
+      // Filter to submissions near the contest time (±2h window)
+      if (contestTimeMs) {
+        const windowStart = contestTimeMs;
+        const windowEnd   = contestTimeMs + 2 * 60 * 60 * 1000;
+        for (const sub of recentSubs) {
+          const subMs = Number(sub.timestamp) * 1000;
+          if (subMs >= windowStart && subMs <= windowEnd) {
+            const prob = problems.find(p => p.slug === sub.titleSlug);
+            if (prob) solvedByIndex[prob.index] = { accepted: true, attempts: 1 };
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[LC recent_ac cross-ref]', e.message);
+    }
+  }
+
+  // c) Final fallback: DB says N solved — mark first N problems by index
+  const numSolvedDb = Number(row?.problems_solved) || 0;
+  if (Object.keys(solvedByIndex).length === 0 && numSolvedDb > 0) {
+    problems.slice(0, numSolvedDb).forEach(p => {
+      solvedByIndex[p.index] = { accepted: true, attempts: 1 };
+    });
+  }
+
+  const numSolved = Object.values(solvedByIndex).filter(s => s.accepted).length || numSolvedDb;
 
   return {
     platform:     'leetcode',
@@ -419,7 +469,7 @@ async function getLeetcodeDetail(contestSlug, email, dbQuery) {
     handle:       row?.username || '',
     problems,
     submissions:  [],
-    solved:       solvedByIndex,  // Now populated from student_submissions DB!
+    solved:       solvedByIndex,
     myData: row ? {
       rank:           row.rank_achieved,
       problemsSolved: numSolved,
@@ -430,7 +480,7 @@ async function getLeetcodeDetail(contestSlug, email, dbQuery) {
     } : null,
     note: numSolved > 0
       ? `Solved ${numSolved}/${row?.total_problems ?? problems.length} problems in this contest.`
-      : `Solved ${numSolved}/${row?.total_problems ?? problems.length} problems. Run a sync to update solved status.`,
+      : `Solved 0/${row?.total_problems ?? problems.length} problems. Run a sync to update.`,
     platformUrl: `https://leetcode.com/contest/${contestSlug}/`,
   };
 }

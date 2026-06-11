@@ -383,29 +383,46 @@ export default function ContestDetailPanel({ contest, platform, email, onClose }
   const color = PLATFORM_COLORS[platform] || '#888'
   const contestName = data?.contestName || contest.contest_name || contest.contest_title || contestId
 
-  // Solved count: only use live data.solved when it has actual problem entries
-  // Empty {} evaluates to 0 and incorrectly overrides contest.problems_solved
+  // Solved count:
+  //  - CF: use live count from actual submissions fetched by API (data.problemsSolvedLive)
+  //  - LC/CC: use solved map if populated, fallback to myData.problemsSolved
   const solvedEntries = data?.solved ? Object.values(data.solved) : []
-  const liveSolvedCount = solvedEntries.length > 0
-    ? solvedEntries.filter(s => s.accepted).length
-    : null
+  const liveSolvedCount =
+    platform === 'codeforces' && data?.problemsSolvedLive != null
+      ? data.problemsSolvedLive
+      : solvedEntries.length > 0
+        ? solvedEntries.filter(s => s.accepted).length
+        : null
   const solvedVal = liveSolvedCount != null
     ? liveSolvedCount
     : (data?.myData?.problemsSolved ?? contest.problems_solved ?? contest.problems_solved_count ?? '—')
+
+  // Total problems (denominator for Solved display)
+  const totalProblems = data?.problems?.length || data?.myData?.totalProblems
+    || contest.total_problems || null
+  const solvedDisplay = totalProblems
+    ? `${solvedVal} / ${totalProblems}`
+    : String(solvedVal)
 
   // Rating delta
   const delta = contest.rating_change
   const deltaStr = delta != null ? ((delta > 0 ? '+' : '') + delta) : '—'
   const deltaColor = delta > 0 ? '#22c55e' : delta < 0 ? '#ef4444' : 'var(--fg-muted)'
 
+  // Division: from contest object OR from live data.myData (CC stores it there)
+  const divisionVal = contest.division || data?.myData?.division || null
+
+  // Finish time: from contest object (LC) or myData
+  const finishTimeSec = contest.finish_time_seconds || data?.myData?.finishTime || null
+
   // KPI items
   const kpis = [
     { label: 'Rank',         val: contest.rank_achieved ? `#${Number(contest.rank_achieved).toLocaleString()}` : (data?.rank ? `#${data.rank}` : '—') },
     { label: 'Rating After', val: contest.new_rating || contest.rating_after_contest || '—' },
     { label: 'Δ Rating',     val: deltaStr, color: deltaColor },
-    { label: 'Solved',       val: solvedVal },
-    ...(contest.division            ? [{ label: 'Division',    val: contest.division }]                     : []),
-    ...(contest.finish_time_seconds ? [{ label: 'Finish Time', val: fmtTime(contest.finish_time_seconds) }] : []),
+    { label: 'Solved',       val: solvedDisplay },
+    ...(divisionVal    ? [{ label: 'Division',    val: divisionVal }]            : []),
+    ...(finishTimeSec  ? [{ label: 'Finish Time', val: fmtTime(finishTimeSec) }] : []),
   ]
 
   const tabs = ['Problems', 'Submissions']
