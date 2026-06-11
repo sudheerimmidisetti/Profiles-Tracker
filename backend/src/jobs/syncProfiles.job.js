@@ -114,10 +114,29 @@ async function syncStudent(email, handles) {
 async function upsertSubmissions(email, platform, submissions) {
   if (!submissions || submissions.length === 0) return;
 
+  // Deduplicate by problem_id — keep best submission per problem
+  // (AC beats PA beats WA; on tie keep latest timestamp)
+  const statusRank = { AC: 3, PA: 2, WA: 1 };
+  const best = new Map();
+  for (const s of submissions) {
+    const key = s.problem_id;
+    if (!key) continue;
+    const existing = best.get(key);
+    if (!existing) { best.set(key, s); continue; }
+    const newRank = statusRank[s.status] ?? 0;
+    const oldRank = statusRank[existing.status] ?? 0;
+    if (newRank > oldRank) { best.set(key, s); continue; }
+    if (newRank === oldRank) {
+      // keep whichever was submitted later
+      if ((s.submitted_at || '') > (existing.submitted_at || '')) best.set(key, s);
+    }
+  }
+  const unique = Array.from(best.values());
+
   // Batch in groups of 200 to avoid huge query params
   const BATCH = 200;
-  for (let i = 0; i < submissions.length; i += BATCH) {
-    const batch = submissions.slice(i, i + BATCH);
+  for (let i = 0; i < unique.length; i += BATCH) {
+    const batch = unique.slice(i, i + BATCH);
     const values = [];
     const params = [];
     let p = 1;
@@ -143,11 +162,10 @@ async function upsertSubmissions(email, platform, submissions) {
          status       = EXCLUDED.status,
          language     = COALESCE(EXCLUDED.language, student_submissions.language)`,
       params
-
-
     ).catch(err => logger.warn(`[SyncJob] upsertSubmissions batch failed: ${err.message}`));
   }
-  logger.debug(`[SyncJob] Upserted ${submissions.length} ${platform} submissions for ${email}`);
+  logger.debug(`[SyncJob] Upserted ${unique.length} unique ${platform} submissions for ${email} (from ${submissions.length} raw)`);
+
 }
 
 
