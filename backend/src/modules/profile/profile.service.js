@@ -8,7 +8,7 @@ async function getMyProfile(email) {
   // Core student data
   const studentRes = await query(
     `SELECT email, full_name, roll_number, college, branch, phone,
-            is_verified, is_blocklisted, created_at
+            passout_year, is_verified, is_blocklisted, created_at
      FROM students WHERE email = $1`,
     [email]
   );
