@@ -10,10 +10,10 @@ const { syncStudent } = require('./src/jobs/syncProfiles.job');
 const logger = require('./src/utils/logger');
 
 // ─── STUDENT DATA (fill this in) ─────────────────────────────────────────────
-const EMAIL        = '23a91a0560@acet.ac.in';
+const EMAIL        = '23a91a0560@aec.edu.in';
 const FULL_NAME    = 'SHAIK UMAR';
 const ROLL_NUMBER  = '23A91A0560';
-const COLLEGE      = 'ACET';
+const COLLEGE      = 'AEC';
 const BRANCH       = 'CSE';
 const PHONE        = null;           // not required (nullable)
 const PASSOUT_YEAR = 2027;
