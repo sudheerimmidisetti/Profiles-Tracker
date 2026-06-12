@@ -23,15 +23,18 @@ function hashOtp(otp) {
 
 function getTransporter() {
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    host: process.env.SMTP_HOST || 'email-smtp.us-east-1.amazonaws.com',
     port: parseInt(process.env.SMTP_PORT || '587', 10),
-    secure: false,
+    secure: process.env.SMTP_SECURE === 'true',
     auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
+      user: process.env.SMTP_USER,   // AWS SES SMTP access key ID
+      pass: process.env.SMTP_PASS,   // AWS SES SMTP secret
     },
   });
 }
+
+// The verified SES identity to send FROM (must match SES verified email/domain)
+const FROM_ADDRESS = process.env.FROM_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER;
 
 // ── OTP Request ───────────────────────────────────────────────────────────────
 
@@ -64,7 +67,7 @@ async function requestOtp(email) {
   // Send email
   const transporter = getTransporter();
   await transporter.sendMail({
-    from:    `"CPTrack Admin" <${process.env.SMTP_USER}>`,
+    from:    `"CPTrack Admin" <${FROM_ADDRESS}>`,
     to:      normalized,
     subject: '🔐 CPTrack Admin Login OTP',
     html: `
