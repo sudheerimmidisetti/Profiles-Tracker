@@ -73,6 +73,19 @@ function parseJSON(val) {
 
 // Heatmap now uses shared ActivityHeatmap component (imported above)
 
+// ── Derive CodeChef division from name or rating (mirrors backend scraper) ────
+function detectDivision(name = '', ratingBefore = 0) {
+  // 1. Explicit "Division N" or "Div N" in contest name
+  const m = (name || '').match(/div(?:ision)?\s*(\d)/i)
+  if (m) return `Div ${m[1]}`
+  // 2. Rating-band fallback
+  const r = Number(ratingBefore) || 0
+  if (r >= 2500) return 'Div 1'
+  if (r >= 2000) return 'Div 2'
+  if (r >= 1600) return 'Div 3'
+  if (r >     0) return 'Div 4'
+  return null
+}
 
 // ── Convert CC contest history to shared chart format ─────────────────────────
 function ccToChartPoints(contests) {
@@ -92,6 +105,8 @@ function ccToChartPoints(contests) {
   return sorted.map((c, idx) => {
     const ratingBefore = idx > 0 ? sorted[idx - 1].rating_after_contest : null
     const si = starInfo(c.rating_after_contest)
+    // Use stored division; if null, derive it from contest name or prev rating
+    const division = c.division || detectDivision(c.contest_name, ratingBefore)
     return {
       date:          dateOnly(c.contest_date),
       rating:        c.rating_after_contest,
@@ -100,7 +115,7 @@ function ccToChartPoints(contests) {
       label:         c.contest_name ?? '',
       contestName:   c.contest_name ?? '',
       rank:          c.rank_achieved ?? null,
-      division:      c.division ?? null,
+      division,
       // Only show problemsSolved in tooltip when we have actual data (not always 0)
       problemsSolved: (c.problems_solved_count != null && (c.problems_solved_count > 0 || c.total_problems > 0))
         ? `${c.problems_solved_count}${c.total_problems ? ' / ' + c.total_problems : ''}`
