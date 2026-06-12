@@ -76,41 +76,55 @@
 /* ── Tooltip ───────────────────────────────────── */
 .lb-tip {
   position: absolute;
-  z-index: 100;
+  z-index: 999;
   right: 0;
-  top: calc(100% + 4px);
-  min-width: 220px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  box-shadow: 0 8px 24px oklch(0 0 0 / 0.5);
+  top: calc(100% + 6px);
+  min-width: 240px;
+  /* Guaranteed opaque — no bleed-through from rows behind */
+  background: oklch(0.14 0 0);
+  border: 1px solid oklch(0.28 0 0);
+  border-top: 2px solid var(--chart-1);
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow:
+    0 0 0 1px oklch(0 0 0 / 0.6),
+    0 16px 40px oklch(0 0 0 / 0.8),
+    0 4px 12px  oklch(0 0 0 / 0.5);
   pointer-events: none;
+  /* Isolate from parent stacking context */
+  isolation: isolate;
 }
 .lb-tip-title {
-  font-size: 0.72rem;
+  font-size: 0.70rem;
   font-weight: 700;
   color: var(--fg-muted);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-bottom: 8px;
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid oklch(0.22 0 0);
 }
 .lb-tip-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 0.78rem;
-  padding: 3px 0;
-  color: var(--fg-muted);
+  padding: 4px 0;
+  color: oklch(0.6 0 0);
 }
 .lb-tip-row span:last-child {
-  color: var(--fg);
+  color: oklch(0.95 0 0);
   font-weight: 600;
 }
 .lb-tip-divider {
   height: 1px;
-  background: var(--border-subtle);
-  margin: 6px 0;
+  background: oklch(0.22 0 0);
+  margin: 7px 0;
+}
+
+/* Row must create its own stacking context so tooltip floats above siblings */
+.lb-row {
+  isolation: isolate;
 }
 
 /* ── Pagination ────────────────────────────────── */
@@ -239,3 +253,64 @@
 .lb-rows-list > .lb-row:nth-child(4)  { animation-delay: 0.06s; }
 .lb-rows-list > .lb-row:nth-child(5)  { animation-delay: 0.08s; }
 .lb-rows-list > .lb-row:nth-child(n+6){ animation-delay: 0.10s; }
+
+/* ── Grid alignment system ─────────────────────── */
+/* Fixed column widths — used by both header and rows */
+:root {
+  --lb-col-rank:   32px;
+  --lb-col-plat:   42px;   /* per platform score column */
+  --lb-col-mid:    44px;   /* contest/practice col */
+  --lb-col-weeks:  38px;
+  --lb-col-score:  72px;
+  --lb-col-div:    1px;    /* vertical divider */
+}
+
+/* Placements grid: # | Student | LC | CC | CF | HR | | Score */
+.lb-plat-cols {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.lb-plat-col {
+  width: var(--lb-col-plat);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Weekly grid: # | Student(flex) | LC | CC | CF | | Score */
+.lb-week-cols {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.lb-week-col {
+  width: 54px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Monthly grid: # | Student(flex) | Contest | Practice | Weeks | | Score */
+.lb-month-cols {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.lb-month-col {
+  text-align: center;
+  flex-shrink: 0;
+}
+.lb-month-col.contest  { width: 52px; }
+.lb-month-col.practice { width: 52px; }
+.lb-month-col.weeks    { width: 40px; }
+
+/* Shared header label style */
+.lb-col-label {
+  font-size: 0.60rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-subtle);
+}

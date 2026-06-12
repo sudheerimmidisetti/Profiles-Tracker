@@ -36,9 +36,9 @@ function RankCell({ rank }) {
 function PlatScore({ val, color }) {
   const has = val > 0
   return (
-    <div style={{ textAlign: 'center', width: 52 }}>
+    <div className="lb-week-col">
       <div style={{
-        fontSize: '0.95rem',
+        fontSize: '0.92rem',
         fontWeight: 700,
         color: has ? color : 'var(--fg-subtle)',
         lineHeight: 1,
@@ -84,8 +84,8 @@ function WeekRow({ row, rank }) {
         </div>
       </div>
 
-      {/* Platform scores */}
-      <div style={{ display: 'flex', gap: 0, alignItems: 'center' }}>
+      {/* Platform scores — use .lb-week-cols for alignment with header */}
+      <div className="lb-week-cols">
         <PlatScore val={lcScore} color="var(--lc)" />
         <PlatScore val={ccScore} color="var(--cc)" />
         <PlatScore val={cfScore} color="var(--cf)" />
@@ -94,8 +94,8 @@ function WeekRow({ row, rank }) {
       {/* Divider */}
       <div style={{ width: 1, height: 32, background: 'var(--border-subtle)', flexShrink: 0 }} />
 
-      {/* Composite + eligibility */}
-      <div className="lb-score-cell">
+      {/* Composite + eligibility — width matches header score col (72px) */}
+      <div className="lb-score-cell" style={{ width: 72, minWidth: 72 }}>
         <div className="lb-score-num">{composite.toFixed(1)}</div>
         <div className="lb-score-denom">/ 100</div>
         <div style={{ marginTop: 3, textAlign: 'right' }}>
@@ -210,18 +210,19 @@ export default function WeeklyLeaderboard() {
         </>}
       </div>
 
-      {/* Column labels */}
+      {/* Column labels — widths MUST match .lb-week-col (54px) and score cell (72px) */}
       {!loading && rows.length > 0 && (
-        <div className="lb-col-header" style={{ gap: 0 }}>
-          <div style={{ width: 28 }}>#</div>
-          <div style={{ flex: 1, paddingLeft: 12 }}>Student</div>
-          <div style={{ display: 'flex', gap: 0 }}>
-            <div style={{ width: 52, textAlign: 'center' }}>LC</div>
-            <div style={{ width: 52, textAlign: 'center' }}>CC</div>
-            <div style={{ width: 52, textAlign: 'center' }}>CF</div>
+        <div className="lb-col-header" style={{ gap: 12 }}>
+          <div style={{ width: 28, flexShrink: 0 }}>#</div>
+          <div style={{ flex: 1 }}>Student</div>
+          {/* lb-week-cols + lb-week-col = same widths as PlatScore cells */}
+          <div className="lb-week-cols">
+            <div className="lb-week-col lb-col-label">LC</div>
+            <div className="lb-week-col lb-col-label">CC</div>
+            <div className="lb-week-col lb-col-label">CF</div>
           </div>
-          <div style={{ width: 1 }} />
-          <div style={{ width: 68, textAlign: 'right' }}>Score</div>
+          <div style={{ width: 1, flexShrink: 0 }} />
+          <div style={{ width: 72, textAlign: 'right', flexShrink: 0 }} className="lb-col-label">Score</div>
         </div>
       )}
 

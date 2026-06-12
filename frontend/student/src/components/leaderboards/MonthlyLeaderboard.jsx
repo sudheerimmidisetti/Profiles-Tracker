@@ -66,25 +66,25 @@ function MonthRow({ row, rank }) {
         </div>
       </div>
 
-      {/* Contest vs Practice split */}
-      <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-        <div style={{ textAlign: 'center', width: 52 }}>
-          <div style={{ fontSize: '0.62rem', color: 'var(--fg-subtle)', marginBottom: 2, fontWeight: 600 }}>CONTEST</div>
-          <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--chart-1)', lineHeight: 1 }}>
+      {/* Contest vs Practice split — use .lb-month-cols for header alignment */}
+      <div className="lb-month-cols">
+        <div className="lb-month-col contest">
+          <div className="lb-col-label" style={{ marginBottom: 3 }}>Contest</div>
+          <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--chart-1)', lineHeight: 1 }}>
             {contest.toFixed(1)}
           </div>
-          <div style={{ fontSize: '0.62rem', color: 'var(--fg-subtle)' }}>/60</div>
+          <div style={{ fontSize: '0.60rem', color: 'var(--fg-subtle)' }}>/60</div>
         </div>
-        <div style={{ textAlign: 'center', width: 52 }}>
-          <div style={{ fontSize: '0.62rem', color: 'var(--fg-subtle)', marginBottom: 2, fontWeight: 600 }}>PRACTICE</div>
-          <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--chart-2)', lineHeight: 1 }}>
+        <div className="lb-month-col practice">
+          <div className="lb-col-label" style={{ marginBottom: 3 }}>Practice</div>
+          <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--chart-2)', lineHeight: 1 }}>
             {practice.toFixed(1)}
           </div>
-          <div style={{ fontSize: '0.62rem', color: 'var(--fg-subtle)' }}>/40</div>
+          <div style={{ fontSize: '0.60rem', color: 'var(--fg-subtle)' }}>/40</div>
         </div>
-        <div style={{ textAlign: 'center', width: 40 }}>
-          <div style={{ fontSize: '0.62rem', color: 'var(--fg-subtle)', marginBottom: 2, fontWeight: 600 }}>WEEKS</div>
-          <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--fg-muted)', lineHeight: 1 }}>
+        <div className="lb-month-col weeks">
+          <div className="lb-col-label" style={{ marginBottom: 3 }}>Weeks</div>
+          <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--fg-muted)', lineHeight: 1 }}>
             {activeWeeks}
           </div>
         </div>
@@ -94,7 +94,7 @@ function MonthRow({ row, rank }) {
       <div style={{ width: 1, height: 36, background: 'var(--border-subtle)', flexShrink: 0 }} />
 
       {/* Total */}
-      <div className="lb-score-cell">
+      <div className="lb-score-cell" style={{ width: 72, minWidth: 72 }}>
         <div className="lb-score-num">{total.toFixed(1)}</div>
         <div className="lb-score-denom">/ 100</div>
         <ScoreBar value={total} cls="all" />
@@ -205,18 +205,18 @@ export default function MonthlyLeaderboard() {
         <span>Drop-one when W ≥ 4</span>
       </div>
 
-      {/* Column labels */}
+      {/* Column labels — widths match .lb-month-col classes */}
       {!loading && rows.length > 0 && (
-        <div className="lb-col-header" style={{ gap: 0 }}>
-          <div style={{ width: 28 }}>#</div>
-          <div style={{ flex: 1, paddingLeft: 12 }}>Student</div>
-          <div style={{ display: 'flex', gap: 16 }}>
-            <div style={{ width: 52, textAlign: 'center' }}>Contest</div>
-            <div style={{ width: 52, textAlign: 'center' }}>Practice</div>
-            <div style={{ width: 40, textAlign: 'center' }}>Weeks</div>
+        <div className="lb-col-header" style={{ gap: 12 }}>
+          <div style={{ width: 28, flexShrink: 0 }}>#</div>
+          <div style={{ flex: 1 }}>Student</div>
+          <div className="lb-month-cols">
+            <div className="lb-month-col contest lb-col-label">Contest</div>
+            <div className="lb-month-col practice lb-col-label">Practice</div>
+            <div className="lb-month-col weeks lb-col-label">Weeks</div>
           </div>
-          <div style={{ width: 1 }} />
-          <div style={{ width: 68, textAlign: 'right' }}>Score</div>
+          <div style={{ width: 1, flexShrink: 0 }} />
+          <div style={{ width: 72, textAlign: 'right', flexShrink: 0 }} className="lb-col-label">Score</div>
         </div>
       )}
 

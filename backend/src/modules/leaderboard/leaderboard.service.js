@@ -102,7 +102,7 @@ async function getPlacementsLeaderboard(page = 1, limit = 50) {
   const emails = students.map(s => s.email);
   if (emails.length === 0) return { page, limit, total: 0, data: [] };
 
-  const [subRes, lcContRes, ccContRes, cfContRes, hrRes] = await Promise.all([
+  const [subRes, lcContRes, ccContRes, cfContRes, hrRes, lcDiffRes] = await Promise.all([
     // AC submissions in window (all platforms) — only columns that actually exist
     query(
       `SELECT student_email, platform, problem_id, submitted_at
@@ -144,6 +144,13 @@ async function getPlacementsLeaderboard(page = 1, limit = 50) {
        FROM hackerrank_profiles WHERE student_email = ANY($1)`,
       [emails]
     ),
+    // LC difficulty totals — used when student_submissions is capped at 100
+    // and misses hard/medium problems solved earlier
+    query(
+      `SELECT student_email, easy_solved, medium_solved, hard_solved, total_solved
+       FROM leetcode_profiles WHERE student_email = ANY($1)`,
+      [emails]
+    ),
   ]);
 
   // Fetch CF problem ratings from recent_ac_submissions JSON (best effort)
@@ -156,6 +163,17 @@ async function getPlacementsLeaderboard(page = 1, limit = 50) {
   // Index everything by email
   const byEmail = {};
   for (const s of students) byEmail[s.email] = { ...s, lcSolves: [], ccSolves: [], cfSolves: [], lcContests: [], ccContests: [], cfContests: [], hrProfile: null };
+
+  // Build a map of LC difficulty totals from profile
+  const lcDiffMap = {};
+  for (const row of lcDiffRes.rows) {
+    lcDiffMap[row.student_email] = {
+      easy:   row.easy_solved   || 0,
+      medium: row.medium_solved || 0,
+      hard:   row.hard_solved   || 0,
+      total:  row.total_solved  || 0,
+    };
+  }
 
   // Build CF problem rating lookup: problem_id → cf_rating
   const cfProbRating = {};
@@ -184,6 +202,60 @@ async function getPlacementsLeaderboard(page = 1, limit = 50) {
     if (row.platform === 'codechef')   byEmail[row.student_email].ccSolves.push(solve);
     if (row.platform === 'codeforces') byEmail[row.student_email].cfSolves.push(solve);
   }
+
+  // ── LC fairness fix: supplement with difficulty-profile synthetic solves ───
+  // LeetCode's public API only returns last ~100 AC submissions.
+  // Students who solved hard problems earlier are penalised.
+  // Solution: if profile shows more total_solved than we captured,
+  // generate synthetic solve records from the profile's easy/medium/hard counts.
+  // Tier mapping: Easy=T2 (2pts), Medium=T4 (7pts), Hard=T5 (11pts)
+  for (const email of emails) {
+    const d    = byEmail[email];
+    const diff = lcDiffMap[email];
+    if (!diff || diff.total === 0) continue;
+
+    const capturedLC = d.lcSolves.filter(s => !s._synthetic).length;
+    // Only supplement if we captured less than 80% of actual total
+    if (capturedLC >= diff.total * 0.8) continue;
+
+    // Remove any existing LC solves (they're a biased recent sample)
+    // and replace with difficulty-proportional synthetic solves
+    d.lcSolves = d.lcSolves.filter(s => s.platform !== 'leetcode');
+
+    // Spread synthetic solves across the 6-month window
+    const windowMs  = windowStart.getTime();
+    const nowMs     = Date.now();
+    const spanMs    = nowMs - windowMs;
+
+    // Easy → difficulty_tag 'Easy', Medium → 'Medium', Hard → 'Hard'
+    const batches = [
+      { count: diff.easy,   tag: 'Easy',   tier: 2 },
+      { count: diff.medium, tag: 'Medium',  tier: 4 },
+      { count: diff.hard,   tag: 'Hard',    tier: 5 },
+    ];
+
+    let idx = 0;
+    const totalSynth = diff.easy + diff.medium + diff.hard;
+    for (const { count, tag } of batches) {
+      for (let i = 0; i < count; i++) {
+        // Evenly space synthetic submissions across the window
+        const frac = totalSynth > 1 ? idx / (totalSynth - 1) : 0.5;
+        const ts   = new Date(windowMs + frac * spanMs).toISOString();
+        d.lcSolves.push({
+          problem_id:        `synth_${tag}_${i}`,
+          difficulty_tag:    tag,
+          acceptance_rate:   tag === 'Easy' ? 0.6 : tag === 'Medium' ? 0.4 : 0.2,
+          total_submissions: 10000,
+          submitted_at:      ts,
+          cf_rating:         0,
+          cc_rating:         0,
+          _synthetic:        true,
+        });
+        idx++;
+      }
+    }
+  }
+
   for (const row of lcContRes.rows)   byEmail[row.student_email]?.lcContests.push(row);
   for (const row of ccContRes.rows)   byEmail[row.student_email]?.ccContests.push({ ...row, rating_change: row.rating_change });
   for (const row of cfContRes.rows)   byEmail[row.student_email]?.cfContests.push({ ...row, timestamp_seconds: row.timestamp_seconds });
