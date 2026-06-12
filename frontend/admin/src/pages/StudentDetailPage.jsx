@@ -1,31 +1,27 @@
-import { useState, useEffect } from 'react'
+// StudentDetailPage.jsx — Full student profile in admin (all 5 tabs stacked vertically)
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { adminAPI, analyticsAPI } from '../api/api'
+import { adminAPI } from '../api/api'
 import AdminHeader from '../components/AdminHeader'
-import { ArrowLeft, ShieldOff, ShieldCheck, AlertCircle,
-         Trophy, Star, Zap, Code, ExternalLink, RefreshCw, Pencil } from 'lucide-react'
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis,
-  Tooltip, CartesianGrid
+  ArrowLeft, ShieldOff, ShieldCheck, RefreshCw, Pencil, ExternalLink,
+  ChevronDown, ChevronUp, User, Code, Trophy, Star, Zap, AlertCircle,
+  RotateCcw, UserCheck, UserX
+} from 'lucide-react'
+import {
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, AreaChart, Area
 } from 'recharts'
 
-const PLATFORM_COLORS = {
-  leetcode:   'var(--lc)',
-  codeforces: 'var(--cf)',
-  codechef:   'var(--cc)',
-  hackerrank: 'var(--hr)',
-}
-const PLATFORM_LABELS = {
-  leetcode:   'LeetCode',
-  codeforces: 'Codeforces',
-  codechef:   'CodeChef',
-  hackerrank: 'HackerRank',
-}
-const PLATFORM_URLS = {
-  leetcode:   u => `https://leetcode.com/${u}`,
-  codeforces: u => `https://codeforces.com/profile/${u}`,
-  codechef:   u => `https://www.codechef.com/users/${u}`,
-  hackerrank: u => `https://www.hackerrank.com/profile/${u}`,
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const fmtDate  = d => d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
+const fmtNum   = v => typeof v === 'number' ? v.toLocaleString() : (v ?? '—')
+const colorOf  = p => ({ leetcode: 'var(--lc)', codeforces: 'var(--cf)', codechef: 'var(--cc)', hackerrank: 'var(--hr)' })[p] || 'var(--fg)'
+
+const PLATFORM_META = {
+  leetcode:   { label: 'LeetCode',   short: 'LC', icon: '🟡', max: 30, url: u => `https://leetcode.com/${u}` },
+  codeforces: { label: 'Codeforces', short: 'CF', icon: '🔵', max: 20, url: u => `https://codeforces.com/profile/${u}` },
+  codechef:   { label: 'CodeChef',   short: 'CC', icon: '🟤', max: 30, url: u => `https://www.codechef.com/users/${u}` },
+  hackerrank: { label: 'HackerRank', short: 'HR', icon: '🟢', max: 20, url: u => `https://www.hackerrank.com/profile/${u}` },
 }
 
 function DarkTooltip({ active, payload, label }) {
@@ -45,351 +41,507 @@ function DarkTooltip({ active, payload, label }) {
   )
 }
 
-function buildChartData(snapshots) {
-  if (!snapshots) return []
-  // snapshots is { leetcode: [{date, rating, totalSolved}], codeforces: [...], ... }
-  const dateMap = {}
-  const platforms = ['leetcode', 'codeforces', 'codechef', 'hackerrank']
-  for (const [platform, rows] of Object.entries(snapshots)) {
-    for (const row of (rows || [])) {
-      const d = row.date || row.snapshot_date
-      if (!dateMap[d]) dateMap[d] = { date: d }
-      const key = platform === 'leetcode' ? 'lc' : platform === 'codeforces' ? 'cf' : platform === 'codechef' ? 'cc' : 'hr'
-      dateMap[d][key]         = row.rating || null
-      dateMap[d][key + 'Sol'] = row.totalSolved || null
-    }
-  }
-  return Object.values(dateMap)
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(-60)
-    .map(r => ({
-      ...r,
-      date: new Date(r.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
-    }))
-}
-
-function RatingChart({ snapshots }) {
-  const data = buildChartData(snapshots)
-  if (!data.length) return null
-
+// ── Collapsible section wrapper ───────────────────────────────────────────────
+function Section({ title, icon, color, children, defaultOpen = true }) {
+  const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="card">
-      <div className="card-header">
-        <span className="card-title">Rating History</span>
+    <div className="card" style={{ marginBottom: 20 }}>
+      <div
+        className="card-header"
+        style={{ cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+        onClick={() => setOpen(o => !o)}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: '1.2rem' }}>{icon}</span>
+          <span className="card-title" style={{ color }}>{title}</span>
+        </div>
+        {open ? <ChevronUp size={16} color="var(--fg-muted)" /> : <ChevronDown size={16} color="var(--fg-muted)" />}
       </div>
-      <div className="card-body">
-        <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-            <XAxis dataKey="date" tick={{ fill: 'var(--fg-muted)', fontSize: 11 }} tickLine={false} axisLine={false} />
-            <YAxis tick={{ fill: 'var(--fg-muted)', fontSize: 11 }} tickLine={false} axisLine={false} width={40} />
-            <Tooltip content={<DarkTooltip />} />
-            <Line type="monotone" dataKey="lc" name="LeetCode"   stroke="var(--lc)" strokeWidth={2} dot={false} connectNulls />
-            <Line type="monotone" dataKey="cf" name="Codeforces" stroke="var(--cf)" strokeWidth={2} dot={false} connectNulls />
-            <Line type="monotone" dataKey="cc" name="CodeChef"   stroke="var(--cc)" strokeWidth={2} dot={false} connectNulls />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+      {open && <div className="card-body">{children}</div>}
     </div>
   )
 }
 
-function SolvedChart({ snapshots }) {
-  const data = buildChartData(snapshots)
-  if (!data.length) return null
-
+// ── KPI card ─────────────────────────────────────────────────────────────────
+function KPI({ label, value, sub, color }) {
   return (
-    <div className="card">
-      <div className="card-header">
-        <span className="card-title">Problems Solved</span>
-      </div>
-      <div className="card-body">
-        <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-            <XAxis dataKey="date" tick={{ fill: 'var(--fg-muted)', fontSize: 11 }} tickLine={false} axisLine={false} />
-            <YAxis tick={{ fill: 'var(--fg-muted)', fontSize: 11 }} tickLine={false} axisLine={false} width={40} />
-            <Tooltip content={<DarkTooltip />} />
-            <Line type="monotone" dataKey="lcSol" name="LeetCode"   stroke="var(--lc)" strokeWidth={2} dot={false} connectNulls />
-            <Line type="monotone" dataKey="cfSol" name="Codeforces" stroke="var(--cf)" strokeWidth={2} dot={false} connectNulls />
-            <Line type="monotone" dataKey="ccSol" name="CodeChef"   stroke="var(--cc)" strokeWidth={2} dot={false} connectNulls />
-            <Line type="monotone" dataKey="hrSol" name="HackerRank" stroke="var(--hr)" strokeWidth={2} dot={false} connectNulls />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+    <div style={{
+      background: 'var(--muted)', borderRadius: 'var(--radius-sm)',
+      padding: '14px 16px', minWidth: 110
+    }}>
+      <div style={{ fontSize: '0.68rem', color: 'var(--fg-subtle)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
+      <div style={{ fontSize: '1.5rem', fontWeight: 800, color: color || 'var(--fg)', lineHeight: 1.2, marginTop: 4 }}>{value}</div>
+      {sub && <div style={{ fontSize: '0.68rem', color: 'var(--fg-muted)', marginTop: 2 }}>{sub}</div>}
     </div>
   )
 }
 
-export default function StudentDetailPage() {
-  const { email }   = useParams()
-  const navigate    = useNavigate()
-  const [loading,   setLoading]   = useState(true)
-  const [student,   setStudent]   = useState(null)
-  const [platforms, setPlatforms] = useState({})
-  const [snapshots,   setSnapshots]  = useState(null)
-  const [blocking,    setBlocking]   = useState(false)
-  const [syncing,     setSyncing]    = useState(false)
-  const [syncMsg,     setSyncMsg]    = useState('')
-  const [editHandle,  setEditHandle] = useState(null)  // { platform, username }
-  const [editSaving,  setEditSaving] = useState(false)
-  const [editError,   setEditError]  = useState('')
-  const [error,       setError]      = useState('')
+// ── Handle edit modal ─────────────────────────────────────────────────────────
+function HandleEditRow({ platform, handle, onSave }) {
+  const [editing, setEditing] = useState(false)
+  const [val,     setVal]     = useState(handle || '')
+  const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
+  async function save() {
+    if (!val.trim()) return
     setLoading(true)
-    Promise.all([
-      adminAPI.getStudent(decodeURIComponent(email)),
-      analyticsAPI.snapshots(decodeURIComponent(email)).catch(() => null),
-    ]).then(([stuRes, snapRes]) => {
-      setStudent(stuRes.data.data.student)
-      setPlatforms(stuRes.data.data.platforms)
-      setSnapshots(snapRes?.data?.data || null)
-    }).catch(e => {
-      setError(e.response?.data?.message || 'Failed to load student')
-    }).finally(() => setLoading(false))
-  }, [email])
-
-  const handleBlock = async () => {
-    if (!confirm(`Block ${student?.full_name || email} from leaderboards?`)) return
-    setBlocking(true)
-    try {
-      await adminAPI.block(decodeURIComponent(email))
-      setStudent(s => ({ ...s, is_blocklisted: true }))
-    } finally { setBlocking(false) }
+    try { await onSave(platform, val.trim()); setEditing(false) }
+    catch {}
+    finally { setLoading(false) }
   }
 
-  const handleUnblock = async () => {
-    setBlocking(true)
-    try {
-      await adminAPI.unblock(decodeURIComponent(email))
-      setStudent(s => ({ ...s, is_blocklisted: false }))
-    } finally { setBlocking(false) }
-  }
+  const meta = PLATFORM_META[platform]
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+      <span style={{ width: 80, fontSize: '0.8rem', color: colorOf(platform), fontWeight: 600 }}>{meta?.label}</span>
+      {editing ? (
+        <>
+          <input
+            className="form-input"
+            style={{ flex: 1, height: 30, fontSize: '0.82rem' }}
+            value={val}
+            onChange={e => setVal(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && save()}
+            autoFocus
+          />
+          <button className="btn btn-primary" style={{ height: 30, fontSize: '0.78rem', padding: '0 12px' }} onClick={save} disabled={loading}>
+            {loading ? '…' : 'Save'}
+          </button>
+          <button className="btn btn-ghost" style={{ height: 30, fontSize: '0.78rem', padding: '0 10px' }} onClick={() => setEditing(false)}>
+            Cancel
+          </button>
+        </>
+      ) : (
+        <>
+          <span style={{ flex: 1, fontSize: '0.85rem', color: handle ? 'var(--fg)' : 'var(--fg-subtle)' }}>
+            {handle || 'Not linked'}
+          </span>
+          {handle && (
+            <a href={meta?.url?.(handle)} target="_blank" rel="noreferrer" className="icon-btn" title="Open profile">
+              <ExternalLink size={13} />
+            </a>
+          )}
+          <button className="icon-btn" title="Edit handle" onClick={() => setEditing(true)}>
+            <Pencil size={13} />
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
 
-  const handleResync = async () => {
-    setSyncing(true); setSyncMsg('')
+// ── Platform profile card ─────────────────────────────────────────────────────
+function PlatformProfileCard({ email, platform, handles }) {
+  const [data, setData]       = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(null)
+  const meta                  = PLATFORM_META[platform]
+  const handle                = handles[platform]
+
+  const load = useCallback(async () => {
+    if (!handle) { setLoading(false); return }
+    setLoading(true); setError(null)
     try {
-      await adminAPI.syncStudent(decodeURIComponent(email))
-      setSyncMsg('Re-sync started! Data will update in ~30s.')
-      setTimeout(() => setSyncMsg(''), 8000)
+      const res = await adminAPI.getPlatform(email, platform)
+      setData(res.data?.data ?? res.data)
     } catch (e) {
-      setSyncMsg(e.response?.data?.message || 'Sync failed')
-    } finally { setSyncing(false) }
+      setError(e.response?.data?.message || `Failed to load ${meta.label} data`)
+    } finally {
+      setLoading(false)
+    }
+  }, [email, platform, handle])
+
+  useEffect(() => { load() }, [load])
+
+  if (!handle) {
+    return (
+      <div style={{ padding: '20px 0', color: 'var(--fg-subtle)', fontSize: '0.85rem', textAlign: 'center' }}>
+        No {meta.label} handle linked. Edit the handle above to add one.
+      </div>
+    )
   }
 
-  const openEditHandle = (platform, username) => {
-    setEditHandle({ platform, username: username || '' })
-    setEditError('')
-  }
+  if (loading) return <div className="loading-center" style={{ padding: 30 }}><div className="spinner" /></div>
+  if (error)   return <div className="msg msg-error"><AlertCircle size={14} /> {error}</div>
+  if (!data)   return null
 
-  const saveEditHandle = async () => {
-    if (!editHandle?.username?.trim()) { setEditError('Username cannot be empty'); return }
-    setEditSaving(true); setEditError('')
-    try {
-      await adminAPI.updateHandle(decodeURIComponent(email), editHandle.platform, editHandle.username.trim())
-      // Optimistically update local state
-      setPlatforms(prev => ({
-        ...prev,
-        [editHandle.platform]: { ...(prev[editHandle.platform] || {}), username: editHandle.username.trim() }
-      }))
-      setEditHandle(null)
-      setSyncMsg(`Handle updated! Re-sync started in background.`)
-      setTimeout(() => setSyncMsg(''), 8000)
-    } catch (e) {
-      setEditError(e.response?.data?.message || 'Failed to update handle')
-    } finally { setEditSaving(false) }
-  }
+  const base    = data.detail || data.base || {}
+  const detail  = data.detail || {}
+  const contests = data.contests || []
+  const submissions = data.recentAC || data.acSubmissions || []
 
-  const initials = student?.full_name
-    ?.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?'
+  // Build rating chart data
+  const ratingHistory = (data.ratingHistory || contests.map((c, i) => ({
+    name: c.contestTitle || c.contest_name || c.contest_code || `#${i+1}`,
+    rating: c.ratingAfterContest || c.rating_after_contest || c.new_rating,
+    date: c.contestTime ? new Date(c.contestTime * 1000).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : c.contest_date || '',
+  }))).filter(r => r.rating).slice(-20)
 
   return (
-    <>
-      {/* Edit Handle Modal */}
-      {editHandle && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'oklch(0 0 0 / 0.7)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
-        }} onClick={() => setEditHandle(null)}>
-          <div style={{
-            background: 'var(--card)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-lg)', padding: '28px', width: 380, maxWidth: '90vw'
-          }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ fontWeight: 700, marginBottom: 16, fontSize: '1rem' }}>
-              Edit {PLATFORM_LABELS[editHandle.platform]} handle
-            </h3>
-            <p style={{ fontSize: '0.78rem', color: 'var(--fg-muted)', marginBottom: 14 }}>
-              The new handle will be saved and a re-sync will start immediately.
-            </p>
-            <input
-              className="form-input"
-              value={editHandle.username}
-              onChange={e => setEditHandle(h => ({ ...h, username: e.target.value }))}
-              onKeyDown={e => e.key === 'Enter' && saveEditHandle()}
-              placeholder={`${PLATFORM_LABELS[editHandle.platform]} username`}
-              autoFocus
-            />
-            {editError && (
-              <p style={{ fontSize: '0.75rem', color: 'var(--danger)', marginTop: 8 }}>{editError}</p>
-            )}
-            <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-              <button className="btn btn-ghost btn-sm" onClick={() => setEditHandle(null)}>Cancel</button>
-              <button className="btn btn-primary btn-sm" onClick={saveEditHandle} disabled={editSaving}>
-                {editSaving ? 'Saving…' : 'Save & Sync'}
-              </button>
-            </div>
+    <div>
+      {/* Stats grid */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
+        {platform === 'leetcode' && <>
+          <KPI label="Rating"   value={fmtNum(base.ranking || detail.rating)}  color={colorOf(platform)} />
+          <KPI label="Solved"   value={fmtNum(detail.totalSolved || detail.total_solved)}  sub={`E:${detail.easySolved||0} M:${detail.mediumSolved||0} H:${detail.hardSolved||0}`} />
+          <KPI label="Acceptance" value={detail.acceptanceRate ? `${(detail.acceptanceRate*100).toFixed(1)}%` : '—'} />
+          <KPI label="Streak"   value={detail.currentStreak ? `${detail.currentStreak}d` : '—'} sub="current" />
+          <KPI label="Contests" value={fmtNum(detail.contestCount || data.contests?.length)} />
+          <KPI label="Global Rank" value={base.globalRank ? `#${fmtNum(base.globalRank)}` : '—'} />
+        </>}
+        {platform === 'codeforces' && <>
+          <KPI label="Rating"   value={fmtNum(detail.currentRating || base.current_rating)} color={colorOf(platform)} />
+          <KPI label="Max Rating" value={fmtNum(detail.maxRating || base.max_rating)} />
+          <KPI label="Rank"     value={detail.rank || base.rank || '—'} />
+          <KPI label="Contests" value={fmtNum(contests.length)} />
+          <KPI label="Problems" value={fmtNum(detail.totalSolved || base.total_solved)} />
+        </>}
+        {platform === 'codechef' && <>
+          <KPI label="Rating"   value={fmtNum(detail.currentRating || base.current_rating)} color={colorOf(platform)} />
+          <KPI label="Stars"    value={detail.stars || base.stars || '—'} />
+          <KPI label="Global Rank" value={detail.globalRank ? `#${fmtNum(detail.globalRank)}` : '—'} />
+          <KPI label="Contests" value={fmtNum(contests.length)} />
+        </>}
+        {platform === 'hackerrank' && <>
+          <KPI label="PS Stars"     value={`${detail.problemSolvingStars ?? 0}★`}  color={colorOf(platform)} />
+          <KPI label="SQL Stars"    value={`${detail.sqlStars ?? 0}★`} />
+          <KPI label="Java Stars"   value={`${detail.javaStars ?? 0}★`} />
+          <KPI label="Python Stars" value={`${detail.pythonStars ?? 0}★`} />
+        </>}
+      </div>
+
+      {/* Rating history chart */}
+      {ratingHistory.length > 1 && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: '0.78rem', color: 'var(--fg-subtle)', fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Rating History
+          </div>
+          <ResponsiveContainer width="100%" height={180}>
+            <AreaChart data={ratingHistory}>
+              <defs>
+                <linearGradient id={`grad_${platform}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor={colorOf(platform)} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={colorOf(platform)} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
+              <XAxis dataKey="date" tick={{ fill: 'var(--fg-subtle)', fontSize: 10 }} />
+              <YAxis tick={{ fill: 'var(--fg-subtle)', fontSize: 10 }} />
+              <Tooltip content={<DarkTooltip />} />
+              <Area type="monotone" dataKey="rating" name="Rating"
+                stroke={colorOf(platform)} fill={`url(#grad_${platform})`} strokeWidth={2} dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Recent contests table */}
+      {contests.length > 0 && (
+        <div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--fg-subtle)', fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Recent Contests ({contests.length})
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Contest</th>
+                  <th style={{ textAlign: 'right' }}>Rank</th>
+                  <th style={{ textAlign: 'right' }}>Rating</th>
+                  <th style={{ textAlign: 'right' }}>Change</th>
+                  {platform === 'leetcode' && <th style={{ textAlign: 'right' }}>Solved</th>}
+                  {platform === 'codechef' && <th>Div</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {contests.slice(0, 15).map((c, i) => {
+                  const change = c.ratingChange ?? c.rating_change ?? ((c.ratingAfterContest || c.new_rating) - (c.ratingBeforeContest || c.old_rating)) || 0
+                  return (
+                    <tr key={i}>
+                      <td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
+                        {c.contestTitle || c.contest_name || c.contest_code || c.contestId}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                        #{fmtNum(c.rankAchieved || c.rank_achieved)}
+                      </td>
+                      <td style={{ textAlign: 'right', color: colorOf(platform), fontWeight: 700 }}>
+                        {fmtNum(c.ratingAfterContest || c.rating_after_contest || c.new_rating)}
+                      </td>
+                      <td style={{ textAlign: 'right', color: change > 0 ? 'var(--success)' : change < 0 ? 'var(--danger)' : 'var(--fg-muted)', fontWeight: 600, fontSize: '0.82rem' }}>
+                        {change > 0 ? `+${change}` : change || '—'}
+                      </td>
+                      {platform === 'leetcode' && <td style={{ textAlign: 'right', fontSize: '0.82rem' }}>{c.problemsSolved ?? c.problems_solved ?? '—'}</td>}
+                      {platform === 'codechef' && <td><span className="badge badge-gray" style={{ fontSize: '0.68rem' }}>{c.division || '—'}</span></td>}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
-      <AdminHeader title="Student Profile" breadcrumb="Students" />
+      {/* LC difficulty breakdown */}
+      {platform === 'leetcode' && detail.totalSolved > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: '0.78rem', color: 'var(--fg-subtle)', fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Difficulty Breakdown
+          </div>
+          <div style={{ display: 'flex', gap: 12 }}>
+            {[
+              { label: 'Easy',   count: detail.easySolved   || 0, color: '#00b8a9' },
+              { label: 'Medium', count: detail.mediumSolved || 0, color: '#ffc01e' },
+              { label: 'Hard',   count: detail.hardSolved   || 0, color: '#ef4743' },
+            ].map(({ label, count, color }) => (
+              <div key={label} style={{ background: 'var(--muted)', borderRadius: 8, padding: '10px 14px', flex: 1, textAlign: 'center' }}>
+                <div style={{ color, fontWeight: 700, fontSize: '1.3rem' }}>{count}</div>
+                <div style={{ color: 'var(--fg-muted)', fontSize: '0.72rem', marginTop: 2 }}>{label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recent AC submissions */}
+      {submissions.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: '0.78rem', color: 'var(--fg-subtle)', fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Recent Accepted Submissions ({submissions.length})
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {submissions.slice(0, 20).map((s, i) => (
+              <span key={i} className="badge badge-gray" style={{ fontSize: '0.7rem', fontFamily: 'monospace' }}>
+                {s.title || s.problemId || s.problem_id || `#${i+1}`}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Main StudentDetailPage ────────────────────────────────────────────────────
+export default function StudentDetailPage() {
+  const { email }    = useParams()
+  const navigate     = useNavigate()
+  const decodedEmail = decodeURIComponent(email)
+
+  const [student, setStudent] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error,   setError]   = useState(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState('')
+  const [blocking, setBlocking] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const res = await adminAPI.getStudent(decodedEmail)
+      setStudent(res.data?.data ?? res.data)
+    } catch (e) {
+      setError(e.response?.data?.message || 'Failed to load student')
+    } finally {
+      setLoading(false)
+    }
+  }, [decodedEmail])
+
+  useEffect(() => { load() }, [load])
+
+  async function handleSync() {
+    setSyncing(true); setSyncMsg('')
+    try {
+      await adminAPI.syncStudent(decodedEmail)
+      setSyncMsg('Sync started! Data will update in a few minutes.')
+    } catch (e) {
+      setSyncMsg(e.response?.data?.message || 'Sync failed')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  async function handleBlock() {
+    if (!window.confirm(`Are you sure you want to ${student?.is_blocklisted ? 'unblock' : 'block'} ${student?.full_name}?`)) return
+    setBlocking(true)
+    try {
+      if (student.is_blocklisted) { await adminAPI.unblock(decodedEmail) }
+      else { await adminAPI.block(decodedEmail) }
+      await load()
+    } finally { setBlocking(false) }
+  }
+
+  async function handleUpdateHandle(platform, username) {
+    await adminAPI.updateHandle(decodedEmail, platform, username)
+    await load()
+  }
+
+  if (loading) return (
+    <>
+      <AdminHeader title="Student Profile" breadcrumb="Students" onRefresh={load} />
+      <div className="page"><div className="loading-center"><div className="spinner" /> Loading profile…</div></div>
+    </>
+  )
+
+  if (error) return (
+    <>
+      <AdminHeader title="Student Profile" breadcrumb="Students" onRefresh={load} />
       <div className="page">
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={() => navigate(-1)}
-          style={{ alignSelf: 'flex-start', marginBottom: -8 }}
-        >
+        <div className="msg msg-error"><AlertCircle size={14} /> {error}</div>
+        <button className="btn btn-ghost" style={{ marginTop: 12 }} onClick={() => navigate('/students')}>
           <ArrowLeft size={14} /> Back to Students
         </button>
+      </div>
+    </>
+  )
+
+  const handles = {
+    leetcode:   student.platforms?.find(p => p.platform_name === 'leetcode')?.username,
+    codeforces: student.platforms?.find(p => p.platform_name === 'codeforces')?.username,
+    codechef:   student.platforms?.find(p => p.platform_name === 'codechef')?.username,
+    hackerrank: student.platforms?.find(p => p.platform_name === 'hackerrank')?.username,
+  }
+
+  return (
+    <>
+      <AdminHeader
+        title={student.full_name || 'Student Profile'}
+        breadcrumb="Students"
+        onRefresh={load}
+      />
+      <div className="page">
+        {/* Back + action buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+          <button className="btn btn-ghost" onClick={() => navigate('/students')}>
+            <ArrowLeft size={14} /> Students
+          </button>
+          <div style={{ flex: 1 }} />
+          <button className="btn btn-ghost" onClick={handleSync} disabled={syncing}>
+            <RefreshCw size={14} className={syncing ? 'spin' : ''} />
+            {syncing ? 'Syncing…' : 'Sync Now'}
+          </button>
+          <button
+            className={`btn ${student.is_blocklisted ? 'btn-success' : 'btn-danger'}`}
+            onClick={handleBlock}
+            disabled={blocking}
+          >
+            {student.is_blocklisted
+              ? <><UserCheck size={14} /> Unblock</>
+              : <><UserX size={14} /> Block</>
+            }
+          </button>
+        </div>
 
         {syncMsg && (
-          <div style={{
-            background: 'var(--success-bg)', border: '1px solid var(--success-border)',
-            borderRadius: 'var(--radius-sm)', padding: '10px 14px',
-            fontSize: '0.82rem', color: 'var(--success)'
-          }}>
-            ✓ {syncMsg}
+          <div className={`msg ${syncMsg.includes('fail') ? 'msg-error' : 'msg-success'}`} style={{ marginBottom: 16 }}>
+            {syncMsg}
           </div>
         )}
 
-        {loading ? (
-          <div className="loading-center"><div className="spinner" /> Loading profile…</div>
-        ) : error ? (
-          <div className="empty-state">
-            <AlertCircle size={32} style={{ color: 'var(--danger)' }} />
-            <p className="empty-title">{error}</p>
+        {/* ── 1. Dashboard / Overview ─────────────────────────────────────── */}
+        <Section title="Dashboard" icon="📊" color="var(--fg)" defaultOpen={true}>
+          {/* Student info */}
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
+            <div style={{ flex: '1 1 200px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                <div style={{
+                  width: 52, height: 52, borderRadius: '50%',
+                  background: 'linear-gradient(135deg, var(--chart-1), var(--chart-2))',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '1.4rem', fontWeight: 800, color: '#fff', flexShrink: 0,
+                }}>
+                  {(student.full_name || 'S')[0].toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--fg)' }}>{student.full_name}</div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--fg-muted)' }}>{student.email}</div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                    <span className={`badge ${student.is_verified ? 'badge-green' : 'badge-gray'}`}>
+                      {student.is_verified ? 'Verified' : 'Unverified'}
+                    </span>
+                    {student.is_blocklisted && <span className="badge badge-red">Blocklisted</span>}
+                  </div>
+                </div>
+              </div>
+              <table style={{ width: '100%', fontSize: '0.82rem', borderCollapse: 'collapse' }}>
+                {[
+                  ['Roll Number', student.roll_number],
+                  ['Branch',      student.branch],
+                  ['College',     student.college],
+                  ['Passout Year',student.passout_year],
+                  ['Phone',       student.phone],
+                  ['Joined',      fmtDate(student.created_at)],
+                ].map(([label, val]) => val && (
+                  <tr key={label}>
+                    <td style={{ color: 'var(--fg-subtle)', paddingRight: 12, paddingBottom: 4, whiteSpace: 'nowrap' }}>{label}</td>
+                    <td style={{ color: 'var(--fg)', fontWeight: 500 }}>{val}</td>
+                  </tr>
+                ))}
+              </table>
+            </div>
+
+            {/* Platform overview */}
+            <div style={{ flex: '1 1 280px' }}>
+              <div style={{ fontSize: '0.78rem', color: 'var(--fg-subtle)', fontWeight: 600, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Platform Handles
+              </div>
+              <div>
+                {Object.keys(PLATFORM_META).map(p => (
+                  <HandleEditRow
+                    key={p}
+                    platform={p}
+                    handle={handles[p]}
+                    onSave={handleUpdateHandle}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
-        ) : (
-          <>
-            {/* Profile Hero */}
-            <div className="card">
-              <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-                <div className="avatar avatar-lg">{initials}</div>
-                <div style={{ flex: 1, minWidth: 200 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
-                    <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>{student?.full_name || '—'}</h2>
-                    {student?.is_verified    && <span className="badge badge-green">✓ Verified</span>}
-                    {student?.is_blocklisted && <span className="badge badge-red">⛔ Blocked</span>}
+
+          {/* Platform rating KPIs */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            {(student.platforms || []).map(pp => {
+              const meta = PLATFORM_META[pp.platform_name]
+              if (!meta) return null
+              return (
+                <div key={pp.platform_name} style={{
+                  background: 'var(--muted)', borderRadius: 'var(--radius-sm)',
+                  padding: '12px 16px', minWidth: 120, borderLeft: `3px solid ${colorOf(pp.platform_name)}`
+                }}>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--fg-subtle)', fontWeight: 600, textTransform: 'uppercase' }}>{meta.label}</div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: colorOf(pp.platform_name), lineHeight: 1.2, marginTop: 4 }}>
+                    {fmtNum(pp.current_rating) || '—'}
                   </div>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--fg-muted)', marginBottom: 8 }}>{student?.email}</p>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {student?.roll_number  && <span className="badge badge-gray">{student.roll_number}</span>}
-                    {student?.branch       && <span className="badge badge-gray">{student.branch}</span>}
-                    {student?.passout_year && <span className="badge badge-gray">Class of {student.passout_year}</span>}
-                    {student?.college      && <span className="badge badge-gray">{student.college}</span>}
-                    {student?.phone        && <span className="badge badge-gray">📞 {student.phone}</span>}
+                  <div style={{ fontSize: '0.7rem', color: 'var(--fg-muted)', marginTop: 2 }}>
+                    {pp.total_solved ? `${fmtNum(pp.total_solved)} solved` : ''}
+                  </div>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--fg-subtle)', marginTop: 1 }}>
+                    Updated {pp.last_updated ? new Date(pp.last_updated).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}
                   </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-                  <button
-                    className="btn btn-sm"
-                    onClick={handleResync}
-                    disabled={syncing}
-                    style={{ background: 'var(--muted)', color: 'var(--fg)', border: '1px solid var(--border)' }}
-                  >
-                    <RefreshCw size={13} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
-                    {syncing ? 'Syncing…' : 'Re-sync'}
-                  </button>
-                  {student?.is_blocklisted ? (
-                    <button className="btn btn-success" onClick={handleUnblock} disabled={blocking}>
-                      <ShieldCheck size={14} /> Unblock
-                    </button>
-                  ) : (
-                    <button className="btn btn-danger" onClick={handleBlock} disabled={blocking}>
-                      <ShieldOff size={14} /> Block
-                    </button>
-                  )}
-                  <p style={{ fontSize: '0.72rem', color: 'var(--fg-subtle)' }}>
-                    Joined {new Date(student?.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </p>
-                </div>
-              </div>
-            </div>
+              )
+            })}
+          </div>
+        </Section>
 
-            {/* Platform Cards */}
-            <div>
-              <h3 className="section-label">Platform Profiles</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
-                {['leetcode', 'codeforces', 'codechef', 'hackerrank'].map(p => {
-                  const d = platforms[p]
-                  const color = PLATFORM_COLORS[p]
-                  return (
-                    <div key={p} className="kpi-card" style={{ borderTop: `3px solid ${color}` }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                        <p style={{ fontSize: '0.7rem', color: 'var(--fg-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          {PLATFORM_LABELS[p]}
-                        </p>
-                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                          <button
-                            className="icon-btn"
-                            style={{ width: 24, height: 24 }}
-                            onClick={() => openEditHandle(p, d?.username)}
-                            title={`Edit ${PLATFORM_LABELS[p]} handle`}
-                          >
-                            <Pencil size={11} />
-                          </button>
-                          {d?.username && (
-                            <a
-                              href={PLATFORM_URLS[p](d.username)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{ color: 'var(--fg-muted)', display: 'flex', alignItems: 'center' }}
-                              title={`View @${d.username}`}
-                            >
-                              <ExternalLink size={11} />
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                      {d ? (
-                        <>
-                          <p style={{ fontSize: '1.5rem', fontWeight: 800, color }}>{d.current_rating ? Math.round(d.current_rating) : '—'}</p>
-                          <p style={{ fontSize: '0.72rem', color: 'var(--fg-muted)', marginTop: 2 }}>
-                            {d.total_solved ?? 0} solved
-                            {d.global_rank ? ` · #${d.global_rank.toLocaleString()}` : ''}
-                          </p>
-                          <p style={{ fontSize: '0.72rem', color: 'var(--fg-subtle)', marginTop: 2 }}>@{d.username}</p>
-                        </>
-                      ) : (
-                        <p style={{ fontSize: '0.8rem', color: 'var(--fg-subtle)' }}>Not linked</p>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
+        {/* ── 2. LeetCode ─────────────────────────────────────────────────── */}
+        <Section title="LeetCode" icon="🟡" color="var(--lc)" defaultOpen={!!handles.leetcode}>
+          <PlatformProfileCard email={decodedEmail} platform="leetcode" handles={handles} />
+        </Section>
 
-            {/* Charts */}
-            {snapshots && Object.keys(snapshots).length > 0 && (
-              <div className="grid-2">
-                <RatingChart snapshots={snapshots} />
-                <SolvedChart snapshots={snapshots} />
-              </div>
-            )}
+        {/* ── 3. CodeChef ─────────────────────────────────────────────────── */}
+        <Section title="CodeChef" icon="🟤" color="var(--cc)" defaultOpen={!!handles.codechef}>
+          <PlatformProfileCard email={decodedEmail} platform="codechef" handles={handles} />
+        </Section>
 
-            {/* Snapshot availability notice */}
-            {(!snapshots || Object.keys(snapshots).length === 0) && (
-              <div className="empty-state" style={{ padding: '32px 0' }}>
-                <Zap size={28} style={{ color: 'var(--fg-subtle)' }} />
-                <p className="empty-title" style={{ fontSize: '0.9rem' }}>No history snapshots yet</p>
-                <p style={{ fontSize: '0.78rem', color: 'var(--fg-subtle)' }}>
-                  Snapshots are recorded nightly after the sync job runs.
-                </p>
-              </div>
-            )}
-          </>
-        )}
+        {/* ── 4. Codeforces ───────────────────────────────────────────────── */}
+        <Section title="Codeforces" icon="🔵" color="var(--cf)" defaultOpen={!!handles.codeforces}>
+          <PlatformProfileCard email={decodedEmail} platform="codeforces" handles={handles} />
+        </Section>
+
+        {/* ── 5. HackerRank ───────────────────────────────────────────────── */}
+        <Section title="HackerRank" icon="🟢" color="var(--hr)" defaultOpen={!!handles.hackerrank}>
+          <PlatformProfileCard email={decodedEmail} platform="hackerrank" handles={handles} />
+        </Section>
       </div>
     </>
   )

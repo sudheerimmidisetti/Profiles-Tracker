@@ -1,7 +1,11 @@
 // WeeklyLeaderboard.jsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { Search, X } from 'lucide-react'
 import { leaderboardAPI } from '../../api/api'
 import './leaderboard.shared.css'
+
+const BRANCHES = ['All', 'CSE', 'CSE1', 'IT', 'AIML']
 
 function currentWeekStart() {
   const now = new Date()
@@ -49,20 +53,41 @@ function PlatScore({ val, color }) {
   )
 }
 
+// ── Portal Tooltip ────────────────────────────────────────────────────────────
 function WeekRow({ row, rank }) {
-  const [tip, setTip] = useState(false)
-  // API returns snake_case: lc_score, cc_score, cf_score, final_score, platforms_attended
-  const lcScore  = row.lc_score  ?? row.lcScore  ?? 0
-  const ccScore  = row.cc_score  ?? row.ccScore  ?? 0
-  const cfScore  = row.cf_score  ?? row.cfScore  ?? 0
+  const [tip, setTip]      = useState(false)
+  const [pos, setPos]      = useState({ top: 0, right: 0 })
+  const rowRef             = useRef(null)
+  const tipRef             = useRef(null)
+
+  const lcScore   = row.lc_score  ?? row.lcScore  ?? 0
+  const ccScore   = row.cc_score  ?? row.ccScore  ?? 0
+  const cfScore   = row.cf_score  ?? row.cfScore  ?? 0
   const composite = row.final_score ?? row.total_score ?? row.composite ?? 0
-  const plats = row.platforms_attended ?? row.platformsAttended ?? 0
+  const plats     = row.platforms_attended ?? row.platformsAttended ?? 0
+
+  function recalcPos() {
+    if (!rowRef.current) return
+    const rect = rowRef.current.getBoundingClientRect()
+    const vpH  = window.innerHeight
+    const tipH = tipRef.current?.offsetHeight || 210
+    const tipW = tipRef.current?.offsetWidth  || 260
+    let top    = rect.bottom + 6
+    if (rect.bottom + 6 + tipH > vpH) top = rect.top - 6 - tipH
+    let right  = window.innerWidth - rect.right
+    if (window.innerWidth - right - tipW < 8) right = 8
+    setPos({ top, right })
+  }
+
+  function handleEnter() { setTip(true); setTimeout(recalcPos, 0) }
+  function handleLeave() { setTip(false) }
 
   return (
     <div
+      ref={rowRef}
       className="lb-row"
-      onMouseEnter={() => setTip(true)}
-      onMouseLeave={() => setTip(false)}
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
     >
       {/* Rank */}
       <div style={{ width: 28, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
@@ -78,13 +103,12 @@ function WeekRow({ row, rank }) {
           {row.roll_number}
           {row.branch ? <span style={{ color: 'var(--fg-subtle)' }}> · {row.branch}</span> : null}
         </div>
-        {/* Progress bar — composite score */}
         <div className="lb-bar-track" style={{ marginTop: 6, width: '100%' }}>
           <div className="lb-bar-fill cf" style={{ width: `${Math.min(100, composite)}%` }} />
         </div>
       </div>
 
-      {/* Platform scores — use .lb-week-cols for alignment with header */}
+      {/* Platform scores */}
       <div className="lb-week-cols">
         <PlatScore val={lcScore} color="var(--lc)" />
         <PlatScore val={ccScore} color="var(--cc)" />
@@ -94,7 +118,7 @@ function WeekRow({ row, rank }) {
       {/* Divider */}
       <div style={{ width: 1, height: 32, background: 'var(--border-subtle)', flexShrink: 0 }} />
 
-      {/* Composite + eligibility — width matches header score col (72px) */}
+      {/* Composite */}
       <div className="lb-score-cell" style={{ width: 72, minWidth: 72 }}>
         <div className="lb-score-num">{composite.toFixed(1)}</div>
         <div className="lb-score-denom">/ 100</div>
@@ -106,9 +130,13 @@ function WeekRow({ row, rank }) {
         </div>
       </div>
 
-      {/* Tooltip */}
-      {tip && (
-        <div className="lb-tip">
+      {/* Portal Tooltip — renders in document.body, never clipped */}
+      {tip && createPortal(
+        <div
+          ref={tipRef}
+          className="lb-tip lb-tip-portal"
+          style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999 }}
+        >
           <div className="lb-tip-title">Weekly breakdown</div>
           <div className="lb-tip-row">
             <span>LeetCode <span style={{ color: 'var(--fg-subtle)', fontSize: '0.68rem' }}>×0.35</span></span>
@@ -144,7 +172,8 @@ function WeekRow({ row, rank }) {
             <span style={{ fontWeight: 700 }}>Composite</span>
             <span style={{ fontWeight: 700 }}>{composite.toFixed(2)}</span>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
@@ -158,6 +187,9 @@ export default function WeeklyLeaderboard() {
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState('')
   const [page,    setPage]    = useState(1)
+  const [search,  setSearch]  = useState('')
+  const [branch,  setBranch]  = useState('All')
+  const searchRef = useRef(null)
 
   useEffect(() => {
     setLoading(true)
@@ -168,10 +200,25 @@ export default function WeeklyLeaderboard() {
       .finally(() => setLoading(false))
   }, [selWk, page])
 
-  const rows  = data?.data  || []
-  const total = data?.total || 0
-  const pages = Math.ceil(total / 50)
-  const isLive = selWk === thisWk
+  const allRows = data?.data || []
+  const total   = data?.total || 0
+  const pages   = Math.ceil(total / 50)
+  const isLive  = selWk === thisWk
+
+  // Client-side filter
+  const rows = useMemo(() => {
+    let r = allRows
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      r = r.filter(x => (x.full_name || '').toLowerCase().includes(q) || (x.roll_number || '').toLowerCase().includes(q))
+    }
+    if (branch !== 'All') {
+      r = r.filter(x => (x.branch || '').toLowerCase() === branch.toLowerCase())
+    }
+    return r
+  }, [allRows, search, branch])
+
+  const clearSearch = () => { setSearch(''); searchRef.current?.focus() }
 
   return (
     <div className="card">
@@ -184,8 +231,6 @@ export default function WeeklyLeaderboard() {
           </div>
           <div className="lb-card-sub">Contest performance only · Award requires ≥ 2 platforms</div>
         </div>
-
-        {/* Week picker */}
         <select
           className="lb-select"
           value={selWk}
@@ -210,12 +255,38 @@ export default function WeeklyLeaderboard() {
         </>}
       </div>
 
-      {/* Column labels — widths MUST match .lb-week-col (54px) and score cell (72px) */}
+      {/* Search + filter bar */}
+      <div className="lb-search-bar">
+        <div className="lb-search-input-wrap">
+          <Search size={13} />
+          <input
+            ref={searchRef}
+            className="lb-search-input"
+            placeholder="Search name or roll…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          {search && <button className="lb-search-clear" onClick={clearSearch}><X size={12} /></button>}
+        </div>
+        <div className="lb-filter-pills">
+          {BRANCHES.map(b => (
+            <button
+              key={b}
+              className={`lb-f-pill${branch === b ? ' active' : ''}`}
+              onClick={() => setBranch(b)}
+            >{b}</button>
+          ))}
+        </div>
+        <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--fg-subtle)' }}>
+          {rows.length} student{rows.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      {/* Column labels */}
       {!loading && rows.length > 0 && (
         <div className="lb-col-header" style={{ gap: 12 }}>
           <div style={{ width: 28, flexShrink: 0 }}>#</div>
           <div style={{ flex: 1 }}>Student</div>
-          {/* lb-week-cols + lb-week-col = same widths as PlatScore cells */}
           <div className="lb-week-cols">
             <div className="lb-week-col lb-col-label">LC</div>
             <div className="lb-week-col lb-col-label">CC</div>
@@ -233,9 +304,8 @@ export default function WeeklyLeaderboard() {
         ) : error ? (
           <div className="msg msg-error" style={{ margin: '20px 16px' }}>{error}</div>
         ) : rows.length === 0 ? (
-          <div className="empty-state">
-            <p className="empty-title">No contest data</p>
-            <p className="empty-desc">Contest results appear after profiles are synced.</p>
+          <div className="lb-no-results">
+            {search || branch !== 'All' ? 'No students match your filters.' : 'No contest data for this week.'}
           </div>
         ) : (
           <div className="lb-rows-list" style={{ display: 'flex', flexDirection: 'column' }}>

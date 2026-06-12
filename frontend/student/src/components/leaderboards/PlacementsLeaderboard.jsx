@@ -1,22 +1,16 @@
 // PlacementsLeaderboard.jsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { Search, X } from 'lucide-react'
 import { leaderboardAPI } from '../../api/api'
 import './leaderboard.shared.css'
 
-const fmt  = (v, d = 1) => typeof v === 'number' ? v.toFixed(d) : '—'
-const pct  = v => typeof v === 'number' ? `${(v * 100).toFixed(0)}%` : '—'
+const BRANCHES = ['All', 'CSE', 'CSE1', 'IT', 'AIML']
+const fmt = (v, d = 1) => typeof v === 'number' ? v.toFixed(d) : '—'
 
 function RankCell({ rank }) {
-  if (rank <= 3) {
-    return <span style={{ fontSize: 18, lineHeight: 1, userSelect: 'none' }}>
-      {['🥇', '🥈', '🥉'][rank - 1]}
-    </span>
-  }
-  return (
-    <div className="rank-badge rank-n" style={{ width: 26, height: 26, fontSize: '0.72rem' }}>
-      {rank}
-    </div>
-  )
+  if (rank <= 3) return <span style={{ fontSize: 18, lineHeight: 1, userSelect: 'none' }}>{['🥇','🥈','🥉'][rank - 1]}</span>
+  return <div className="rank-badge rank-n" style={{ width: 26, height: 26, fontSize: '0.72rem' }}>{rank}</div>
 }
 
 function ScoreBar({ value, max = 100 }) {
@@ -27,77 +21,45 @@ function ScoreBar({ value, max = 100 }) {
   )
 }
 
-function Tooltip({ data }) {
-  if (!data) return null
-  const lc = data.lc ?? {}
-  const cc = data.cc ?? {}
-  const cf = data.cf ?? {}
-  const hr = data.hr ?? {}
-
-  return (
-    <div className="lb-tip" style={{ minWidth: 250, right: 0 }}>
-      <div className="lb-tip-title">Score breakdown</div>
-
-      <div className="lb-tip-row">
-        <span>LeetCode</span><span style={{ color: 'var(--lc)' }}>{fmt(lc.score)} / 30</span>
-      </div>
-      {lc.prob && <>
-        <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
-          <span>Problems (UDG)</span><span>{fmt(lc.prob.cappedPts)} pts</span>
-        </div>
-        <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
-          <span>Active weeks</span><span>{lc.prob.activeWeeks}/26</span>
-        </div>
-      </>}
-      {lc.contest && <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
-        <span>Contests</span><span>{lc.contest.attended}/{lc.contest.expected}</span>
-      </div>}
-
-      <div className="lb-tip-divider" />
-
-      <div className="lb-tip-row">
-        <span>CodeChef</span><span style={{ color: 'var(--cc)' }}>{fmt(cc.score)} / 30</span>
-      </div>
-
-      <div className="lb-tip-divider" />
-
-      <div className="lb-tip-row">
-        <span>Codeforces</span><span style={{ color: 'var(--cf)' }}>{fmt(cf.score)} / 20</span>
-      </div>
-
-      <div className="lb-tip-divider" />
-
-      <div className="lb-tip-row">
-        <span>HackerRank</span><span>{fmt(hr.score)} / 20</span>
-      </div>
-      {hr.psStars !== undefined && <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
-        <span>PS / SQL / Java / Python</span>
-        <span>{hr.psStars}★ · {hr.sqlStars ?? 0}★ · {hr.javStars ?? 0}★ · {hr.pytStars ?? 0}★</span>
-      </div>}
-
-      <div className="lb-tip-divider" />
-      <div className="lb-tip-row">
-        <span style={{ fontWeight: 700, color: 'var(--fg)' }}>Total</span>
-        <span style={{ fontWeight: 700, color: 'var(--fg)' }}>{fmt(data.total)} / 100</span>
-      </div>
-    </div>
-  )
-}
-
 function PlacementRow({ row, rank }) {
   const [tip, setTip] = useState(false)
-  const lc = row.lc?.score ?? row.lc_score ?? 0
-  const cc = row.cc?.score ?? row.cc_score ?? 0
-  const cf = row.cf?.score ?? row.cf_score ?? 0
-  const hr = row.hr?.score ?? row.hr_score ?? 0
-  // API returns final_score, not 'total'
+  const [pos, setPos] = useState({ top: 0, right: 0 })
+  const rowRef        = useRef(null)
+  const tipRef        = useRef(null)
+
+  const lc    = row.lc?.score ?? row.lc_score ?? 0
+  const cc    = row.cc?.score ?? row.cc_score ?? 0
+  const cf    = row.cf?.score ?? row.cf_score ?? 0
+  const hr    = row.hr?.score ?? row.hr_score ?? 0
   const total = row.final_score ?? row.total_score ?? row.total ?? 0
+
+  const lcData = row.lc ?? {}
+  const ccData = row.cc ?? {}
+  const cfData = row.cf ?? {}
+  const hrData = row.hr ?? {}
+
+  function recalcPos() {
+    if (!rowRef.current) return
+    const rect = rowRef.current.getBoundingClientRect()
+    const vpH  = window.innerHeight
+    const tipH = tipRef.current?.offsetHeight || 280
+    const tipW = tipRef.current?.offsetWidth  || 260
+    let top    = rect.bottom + 6
+    if (rect.bottom + 6 + tipH > vpH) top = rect.top - 6 - tipH
+    let right  = window.innerWidth - rect.right
+    if (window.innerWidth - right - tipW < 8) right = 8
+    setPos({ top, right })
+  }
+
+  function handleEnter() { setTip(true); setTimeout(recalcPos, 0) }
+  function handleLeave() { setTip(false) }
 
   return (
     <div
+      ref={rowRef}
       className="lb-row"
-      onMouseEnter={() => setTip(true)}
-      onMouseLeave={() => setTip(false)}
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
     >
       {/* Rank */}
       <div style={{ width: 28, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
@@ -106,17 +68,13 @@ function PlacementRow({ row, rank }) {
 
       {/* Identity */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontSize: '0.875rem', fontWeight: 600, color: 'var(--fg)',
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>
+        <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--fg)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {row.full_name}
         </div>
         <div style={{ fontSize: '0.72rem', color: 'var(--fg-muted)', marginTop: 1 }}>
           {row.roll_number}
           {row.branch ? <span style={{ color: 'var(--fg-subtle)' }}> · {row.branch}</span> : null}
         </div>
-        {/* Platform handles */}
         <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
           {row.lc_handle && <span className="plat-chip lc">LC</span>}
           {row.cc_handle && <span className="plat-chip cc">CC</span>}
@@ -125,7 +83,7 @@ function PlacementRow({ row, rank }) {
         </div>
       </div>
 
-      {/* Per-platform breakdown bars */}
+      {/* Per-platform scores */}
       <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
         {[
           { label: 'LC', val: lc, max: 30, cls: 'lc' },
@@ -134,12 +92,8 @@ function PlacementRow({ row, rank }) {
           { label: 'HR', val: hr, max: 20, cls: 'hr' },
         ].map(({ label, val, max, cls }) => (
           <div key={label} style={{ textAlign: 'center', width: 38 }}>
-            <div style={{ fontSize: '0.62rem', color: 'var(--fg-subtle)', marginBottom: 2, fontWeight: 600 }}>
-              {label}
-            </div>
-            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: `var(--${cls})` }}>
-              {val.toFixed(1)}
-            </div>
+            <div style={{ fontSize: '0.62rem', color: 'var(--fg-subtle)', marginBottom: 2, fontWeight: 600 }}>{label}</div>
+            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: `var(--${cls})` }}>{val.toFixed(1)}</div>
             <div className="lb-bar-track" style={{ width: 38 }}>
               <div className={`lb-bar-fill ${cls}`} style={{ width: `${(val / max) * 100}%` }} />
             </div>
@@ -151,13 +105,62 @@ function PlacementRow({ row, rank }) {
       <div style={{ width: 1, height: 36, background: 'var(--border-subtle)', flexShrink: 0 }} />
 
       {/* Total */}
-      <div className="lb-score-cell">
+      <div className="lb-score-cell" style={{ width: 72, minWidth: 72 }}>
         <div className="lb-score-num">{total.toFixed(1)}</div>
         <div className="lb-score-denom">/ 100</div>
         <ScoreBar value={total} />
       </div>
 
-      {tip && <Tooltip data={row} />}
+      {/* Portal Tooltip */}
+      {tip && createPortal(
+        <div
+          ref={tipRef}
+          className="lb-tip lb-tip-portal"
+          style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999, minWidth: 250 }}
+        >
+          <div className="lb-tip-title">Score breakdown</div>
+          <div className="lb-tip-row">
+            <span>LeetCode</span><span style={{ color: 'var(--lc)' }}>{fmt(lc)} / 30</span>
+          </div>
+          {lcData.prob && <>
+            <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
+              <span>Problems (UDG)</span><span>{fmt(lcData.prob.cappedPts)} pts</span>
+            </div>
+            <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
+              <span>Active weeks</span><span>{lcData.prob.activeWeeks}/26</span>
+            </div>
+          </>}
+          {lcData.contest && <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
+            <span>Contests</span><span>{lcData.contest.attended}/{lcData.contest.expected}</span>
+          </div>}
+
+          <div className="lb-tip-divider" />
+          <div className="lb-tip-row">
+            <span>CodeChef</span><span style={{ color: 'var(--cc)' }}>{fmt(cc)} / 30</span>
+          </div>
+
+          <div className="lb-tip-divider" />
+          <div className="lb-tip-row">
+            <span>Codeforces</span><span style={{ color: 'var(--cf)' }}>{fmt(cf)} / 20</span>
+          </div>
+
+          <div className="lb-tip-divider" />
+          <div className="lb-tip-row">
+            <span>HackerRank</span><span>{fmt(hr)} / 20</span>
+          </div>
+          {hrData.psStars !== undefined && <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
+            <span>PS / SQL / Java / Py</span>
+            <span>{hrData.psStars}★ · {hrData.sqlStars ?? 0}★ · {hrData.javStars ?? 0}★ · {hrData.pytStars ?? 0}★</span>
+          </div>}
+
+          <div className="lb-tip-divider" />
+          <div className="lb-tip-row">
+            <span style={{ fontWeight: 700, color: 'var(--fg)' }}>Total</span>
+            <span style={{ fontWeight: 700, color: 'var(--fg)' }}>{fmt(total)} / 100</span>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
@@ -167,6 +170,9 @@ export default function PlacementsLeaderboard() {
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState('')
   const [page,    setPage]    = useState(1)
+  const [search,  setSearch]  = useState('')
+  const [branch,  setBranch]  = useState('All')
+  const searchRef = useRef(null)
 
   useEffect(() => {
     setLoading(true)
@@ -177,9 +183,21 @@ export default function PlacementsLeaderboard() {
       .finally(() => setLoading(false))
   }, [page])
 
-  const rows  = data?.data  || []
-  const total = data?.total || 0
-  const pages = Math.ceil(total / 50)
+  const allRows = data?.data  || []
+  const total   = data?.total || 0
+  const pages   = Math.ceil(total / 50)
+
+  const rows = useMemo(() => {
+    let r = allRows
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      r = r.filter(x => (x.full_name || '').toLowerCase().includes(q) || (x.roll_number || '').toLowerCase().includes(q))
+    }
+    if (branch !== 'All') r = r.filter(x => (x.branch || '').toLowerCase() === branch.toLowerCase())
+    return r
+  }, [allRows, search, branch])
+
+  const clearSearch = () => { setSearch(''); searchRef.current?.focus() }
 
   return (
     <div className="card">
@@ -189,9 +207,30 @@ export default function PlacementsLeaderboard() {
           <div className="lb-card-title">Placements Leaderboard</div>
           <div className="lb-card-sub">6-month window · 100 pts · Hover any row for breakdown</div>
         </div>
-        {total > 0 && (
-          <span className="badge badge-gray">{total} students</span>
-        )}
+        {total > 0 && <span className="badge badge-gray">{total} students</span>}
+      </div>
+
+      {/* Search + filter bar */}
+      <div className="lb-search-bar">
+        <div className="lb-search-input-wrap">
+          <Search size={13} />
+          <input
+            ref={searchRef}
+            className="lb-search-input"
+            placeholder="Search name or roll…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          {search && <button className="lb-search-clear" onClick={clearSearch}><X size={12} /></button>}
+        </div>
+        <div className="lb-filter-pills">
+          {BRANCHES.map(b => (
+            <button key={b} className={`lb-f-pill${branch === b ? ' active' : ''}`} onClick={() => setBranch(b)}>{b}</button>
+          ))}
+        </div>
+        <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--fg-subtle)' }}>
+          {rows.length} student{rows.length !== 1 ? 's' : ''}
+        </span>
       </div>
 
       {/* Column labels */}
@@ -200,13 +239,12 @@ export default function PlacementsLeaderboard() {
           <div style={{ width: 28 }}>#</div>
           <div style={{ flex: 1 }}>Student</div>
           <div style={{ display: 'flex', gap: 14 }}>
-            <div style={{ width: 38, textAlign: 'center' }}>LC</div>
-            <div style={{ width: 38, textAlign: 'center' }}>CC</div>
-            <div style={{ width: 38, textAlign: 'center' }}>CF</div>
-            <div style={{ width: 38, textAlign: 'center' }}>HR</div>
+            {['LC', 'CC', 'CF', 'HR'].map(l => (
+              <div key={l} style={{ width: 38, textAlign: 'center' }} className="lb-col-label">{l}</div>
+            ))}
           </div>
           <div style={{ width: 1 }} />
-          <div style={{ width: 68, textAlign: 'right' }}>Score</div>
+          <div style={{ width: 72, textAlign: 'right' }} className="lb-col-label">Score</div>
         </div>
       )}
 
@@ -217,9 +255,8 @@ export default function PlacementsLeaderboard() {
         ) : error ? (
           <div className="msg msg-error" style={{ margin: '20px 16px' }}>{error}</div>
         ) : rows.length === 0 ? (
-          <div className="empty-state">
-            <p className="empty-title">No data yet</p>
-            <p className="empty-desc">Sync profiles to populate this leaderboard.</p>
+          <div className="lb-no-results">
+            {search || branch !== 'All' ? 'No students match your filters.' : 'No data yet. Sync profiles to populate.'}
           </div>
         ) : (
           <div className="lb-rows-list" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -230,7 +267,6 @@ export default function PlacementsLeaderboard() {
         )}
       </div>
 
-      {/* Pagination */}
       {pages > 1 && (
         <div className="lb-pagination">
           <button className="lb-page-btn" onClick={() => setPage(p => p - 1)} disabled={page === 1}>‹</button>

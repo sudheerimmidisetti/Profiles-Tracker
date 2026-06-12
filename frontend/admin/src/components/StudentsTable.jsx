@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Eye, ShieldOff, ShieldCheck, ChevronLeft, ChevronRight, Search } from 'lucide-react'
+import { Eye, ShieldOff, ShieldCheck, ChevronLeft, ChevronRight, Search, RefreshCw } from 'lucide-react'
 import { adminAPI } from '../api/api'
 import { useNavigate } from 'react-router-dom'
 
-export default function StudentsTable({ students = [], total, page, onPageChange, onRefresh }) {
+export default function StudentsTable({ students = [], total, page, onPageChange, onRefresh, showSyncButton = false }) {
   const [blocking,  setBlocking]  = useState(null)
+  const [syncingId, setSyncingId] = useState(null)
   const [search,    setSearch]    = useState('')
   const navigate = useNavigate()
 
@@ -28,6 +29,13 @@ export default function StudentsTable({ students = [], total, page, onPageChange
     } finally {
       setBlocking(null)
     }
+  }
+
+  const handleSync = async (email) => {
+    setSyncingId(email)
+    try { await adminAPI.syncStudent(email) }
+    catch (e) { console.error(e) }
+    finally { setSyncingId(null) }
   }
 
   const filtered = search
@@ -123,6 +131,16 @@ export default function StudentsTable({ students = [], total, page, onPageChange
                           >
                             <Eye size={14} />
                           </button>
+                          {showSyncButton && (
+                            <button
+                              className="btn btn-ghost btn-sm btn-icon"
+                              title="Sync now"
+                              onClick={() => handleSync(s.email)}
+                              disabled={syncingId === s.email}
+                            >
+                              <RefreshCw size={13} className={syncingId === s.email ? 'spin' : ''} />
+                            </button>
+                          )}
                           {s.is_blocklisted ? (
                             <button
                               className="btn btn-success btn-sm"

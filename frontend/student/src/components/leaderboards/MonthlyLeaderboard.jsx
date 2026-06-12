@@ -1,7 +1,11 @@
 // MonthlyLeaderboard.jsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { Search, X } from 'lucide-react'
 import { leaderboardAPI } from '../../api/api'
 import './leaderboard.shared.css'
+
+const BRANCHES = ['All', 'CSE', 'CSE1', 'IT', 'AIML']
 
 function recentMonths() {
   const now = new Date()
@@ -31,19 +35,39 @@ function ScoreBar({ value, max = 100, cls = 'all' }) {
 }
 
 function MonthRow({ row, rank }) {
-  const [tip, setTip] = useState(false)
-  // API returns snake_case: contest_score, practice_score, final_score, active_weeks, month_udg
-  const contest  = row.contest_score  ?? row.contestPts  ?? 0
-  const practice = row.practice_score ?? row.practicePts ?? 0
-  const total    = row.final_score    ?? row.monthlyScore ?? 0
-  const activeWeeks = row.active_weeks ?? row.activeWeeks ?? 0
-  const monthUdg    = row.month_udg   ?? row.monthUdg    ?? 0
+  const [tip, setTip]  = useState(false)
+  const [pos, setPos]  = useState({ top: 0, right: 0 })
+  const rowRef         = useRef(null)
+  const tipRef         = useRef(null)
+
+  const contest     = row.contest_score  ?? row.contestPts  ?? 0
+  const practice    = row.practice_score ?? row.practicePts ?? 0
+  const total       = row.final_score    ?? row.monthlyScore ?? 0
+  const activeWeeks = row.active_weeks   ?? row.activeWeeks ?? 0
+  const monthUdg    = row.month_udg      ?? row.monthUdg    ?? 0
+
+  function recalcPos() {
+    if (!rowRef.current) return
+    const rect = rowRef.current.getBoundingClientRect()
+    const vpH  = window.innerHeight
+    const tipH = tipRef.current?.offsetHeight || 230
+    const tipW = tipRef.current?.offsetWidth  || 260
+    let top    = rect.bottom + 6
+    if (rect.bottom + 6 + tipH > vpH) top = rect.top - 6 - tipH
+    let right  = window.innerWidth - rect.right
+    if (window.innerWidth - right - tipW < 8) right = 8
+    setPos({ top, right })
+  }
+
+  function handleEnter() { setTip(true); setTimeout(recalcPos, 0) }
+  function handleLeave() { setTip(false) }
 
   return (
     <div
+      ref={rowRef}
       className="lb-row"
-      onMouseEnter={() => setTip(true)}
-      onMouseLeave={() => setTip(false)}
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
     >
       {/* Rank */}
       <div style={{ width: 28, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
@@ -66,27 +90,21 @@ function MonthRow({ row, rank }) {
         </div>
       </div>
 
-      {/* Contest vs Practice split — use .lb-month-cols for header alignment */}
+      {/* Contest vs Practice split */}
       <div className="lb-month-cols">
         <div className="lb-month-col contest">
           <div className="lb-col-label" style={{ marginBottom: 3 }}>Contest</div>
-          <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--chart-1)', lineHeight: 1 }}>
-            {contest.toFixed(1)}
-          </div>
+          <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--chart-1)', lineHeight: 1 }}>{contest.toFixed(1)}</div>
           <div style={{ fontSize: '0.60rem', color: 'var(--fg-subtle)' }}>/60</div>
         </div>
         <div className="lb-month-col practice">
           <div className="lb-col-label" style={{ marginBottom: 3 }}>Practice</div>
-          <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--chart-2)', lineHeight: 1 }}>
-            {practice.toFixed(1)}
-          </div>
+          <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--chart-2)', lineHeight: 1 }}>{practice.toFixed(1)}</div>
           <div style={{ fontSize: '0.60rem', color: 'var(--fg-subtle)' }}>/40</div>
         </div>
         <div className="lb-month-col weeks">
           <div className="lb-col-label" style={{ marginBottom: 3 }}>Weeks</div>
-          <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--fg-muted)', lineHeight: 1 }}>
-            {activeWeeks}
-          </div>
+          <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--fg-muted)', lineHeight: 1 }}>{activeWeeks}</div>
         </div>
       </div>
 
@@ -99,18 +117,18 @@ function MonthRow({ row, rank }) {
         <div className="lb-score-denom">/ 100</div>
         <ScoreBar value={total} cls="all" />
         <div style={{ marginTop: 3, textAlign: 'right' }}>
-          {row.eligible
-            ? <span className="badge badge-green" style={{ fontSize: '0.62rem', padding: '1px 5px' }}>Award</span>
-            : null
-          }
+          {row.eligible && <span className="badge badge-green" style={{ fontSize: '0.62rem', padding: '1px 5px' }}>Award</span>}
         </div>
       </div>
 
-      {/* Tooltip */}
-      {tip && (
-        <div className="lb-tip">
+      {/* Portal Tooltip */}
+      {tip && createPortal(
+        <div
+          ref={tipRef}
+          className="lb-tip lb-tip-portal"
+          style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999 }}
+        >
           <div className="lb-tip-title">Monthly breakdown</div>
-
           <div className="lb-tip-row">
             <span>Contest (60%)</span>
             <span style={{ color: 'var(--chart-1)' }}>{contest.toFixed(2)} / 60</span>
@@ -119,9 +137,7 @@ function MonthRow({ row, rank }) {
             <span>Weeks (drop-one of {row.breakdown.W})</span>
             <span>{activeWeeks} active</span>
           </div>}
-
           <div className="lb-tip-divider" />
-
           <div className="lb-tip-row">
             <span>Practice (40%)</span>
             <span style={{ color: 'var(--chart-2)' }}>{practice.toFixed(2)} / 40</span>
@@ -130,9 +146,7 @@ function MonthRow({ row, rank }) {
             <span>UDG points</span>
             <span>{monthUdg.toFixed(1)}</span>
           </div>
-
           <div className="lb-tip-divider" />
-
           <div className="lb-tip-row">
             <span style={{ fontWeight: 700 }}>Total</span>
             <span style={{ fontWeight: 700 }}>{total.toFixed(2)} / 100</span>
@@ -143,7 +157,8 @@ function MonthRow({ row, rank }) {
               {row.eligible ? 'Yes' : 'No — need ≥ 2 contest wks'}
             </span>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
@@ -156,6 +171,9 @@ export default function MonthlyLeaderboard() {
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState('')
   const [page,    setPage]    = useState(1)
+  const [search,  setSearch]  = useState('')
+  const [branch,  setBranch]  = useState('All')
+  const searchRef = useRef(null)
 
   useEffect(() => {
     setLoading(true)
@@ -166,10 +184,22 @@ export default function MonthlyLeaderboard() {
       .finally(() => setLoading(false))
   }, [selMonth, page])
 
-  const rows  = data?.data  || []
-  const total = data?.total || 0
-  const pages = Math.ceil(total / 50)
-  const isNow = selMonth === months[0]
+  const allRows = data?.data || []
+  const total   = data?.total || 0
+  const pages   = Math.ceil(total / 50)
+  const isNow   = selMonth === months[0]
+
+  const rows = useMemo(() => {
+    let r = allRows
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      r = r.filter(x => (x.full_name || '').toLowerCase().includes(q) || (x.roll_number || '').toLowerCase().includes(q))
+    }
+    if (branch !== 'All') r = r.filter(x => (x.branch || '').toLowerCase() === branch.toLowerCase())
+    return r
+  }, [allRows, search, branch])
+
+  const clearSearch = () => { setSearch(''); searchRef.current?.focus() }
 
   return (
     <div className="card">
@@ -182,7 +212,6 @@ export default function MonthlyLeaderboard() {
           </div>
           <div className="lb-card-sub">60% Contest (drop-one week) + 40% Practice (UDG) · Hover for breakdown</div>
         </div>
-
         <select
           className="lb-select"
           value={selMonth}
@@ -205,7 +234,30 @@ export default function MonthlyLeaderboard() {
         <span>Drop-one when W ≥ 4</span>
       </div>
 
-      {/* Column labels — widths match .lb-month-col classes */}
+      {/* Search + filter bar */}
+      <div className="lb-search-bar">
+        <div className="lb-search-input-wrap">
+          <Search size={13} />
+          <input
+            ref={searchRef}
+            className="lb-search-input"
+            placeholder="Search name or roll…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          {search && <button className="lb-search-clear" onClick={clearSearch}><X size={12} /></button>}
+        </div>
+        <div className="lb-filter-pills">
+          {BRANCHES.map(b => (
+            <button key={b} className={`lb-f-pill${branch === b ? ' active' : ''}`} onClick={() => setBranch(b)}>{b}</button>
+          ))}
+        </div>
+        <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--fg-subtle)' }}>
+          {rows.length} student{rows.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      {/* Column labels */}
       {!loading && rows.length > 0 && (
         <div className="lb-col-header" style={{ gap: 12 }}>
           <div style={{ width: 28, flexShrink: 0 }}>#</div>
@@ -227,9 +279,8 @@ export default function MonthlyLeaderboard() {
         ) : error ? (
           <div className="msg msg-error" style={{ margin: '20px 16px' }}>{error}</div>
         ) : rows.length === 0 ? (
-          <div className="empty-state">
-            <p className="empty-title">No data for {fmtMonth(selMonth)}</p>
-            <p className="empty-desc">Weekly boards must be computed first.</p>
+          <div className="lb-no-results">
+            {search || branch !== 'All' ? 'No students match your filters.' : `No data for ${fmtMonth(selMonth)}.`}
           </div>
         ) : (
           <div className="lb-rows-list" style={{ display: 'flex', flexDirection: 'column' }}>

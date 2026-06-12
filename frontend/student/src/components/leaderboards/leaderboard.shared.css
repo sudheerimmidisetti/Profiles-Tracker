@@ -314,3 +314,95 @@
   letter-spacing: 0.08em;
   color: var(--fg-subtle);
 }
+
+/* ── Portal tooltip (renders in document.body) ─── */
+.lb-tip-portal {
+  /* position: fixed is set inline from the hook */
+  z-index: 9999 !important;
+  /* Force totally opaque — nothing from behind can show */
+  background: oklch(0.13 0 0) !important;
+  border: 1px solid oklch(0.25 0 0) !important;
+  border-top: 2px solid var(--chart-1) !important;
+}
+
+/* ── Leaderboard search bar ──────────────────────── */
+.lb-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.lb-search-input-wrap {
+  position: relative;
+  flex: 1;
+  max-width: 320px;
+}
+.lb-search-input-wrap svg {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--fg-subtle);
+  pointer-events: none;
+}
+.lb-search-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px 0 32px;
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-size: 0.82rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.lb-search-input:focus {
+  border-color: var(--chart-1);
+}
+.lb-search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--fg-subtle);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.lb-filter-pills {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.lb-f-pill {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--fg-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.lb-f-pill:hover { background: var(--muted); color: var(--fg); }
+.lb-f-pill.active {
+  background: var(--chart-1);
+  border-color: var(--chart-1);
+  color: oklch(0.09 0 0);
+}
+.lb-no-results {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--fg-subtle);
+  font-size: 0.85rem;
+}

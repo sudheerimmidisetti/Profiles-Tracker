@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
-  LayoutDashboard, Users, Trophy, BarChart2, Settings,
-  Code2, ShieldOff, LogOut, Database
+  LayoutDashboard, Users, Trophy, BarChart2,
+  Code2, ShieldOff, LogOut, Database, UserCog
 } from 'lucide-react'
 import { useAdminAuth } from '../context/AdminAuthContext'
 
@@ -19,6 +19,7 @@ const NAV = [
     title: 'MANAGEMENT',
     items: [
       { to: '/blocklist',   label: 'Blocked Students', icon: ShieldOff },
+      { to: '/team',        label: 'Admin Team',        icon: UserCog },
     ],
   },
 ]
@@ -31,6 +32,14 @@ export default function AdminSidebar() {
     logout()
     navigate('/login')
   }
+
+  const myEmail = (() => {
+    try {
+      const token = localStorage.getItem('adminToken')
+      if (!token) return null
+      return JSON.parse(atob(token.split('.')[1])).email
+    } catch { return null }
+  })()
 
   return (
     <aside className="sidebar">
@@ -71,9 +80,13 @@ export default function AdminSidebar() {
       {/* Footer */}
       <div className="sidebar-footer">
         <div className="user-row">
-          <div className="avatar" style={{ background: 'var(--danger)' }}>A</div>
+          <div className="avatar" style={{ background: 'var(--danger)' }}>
+            {myEmail ? myEmail[0].toUpperCase() : 'A'}
+          </div>
           <div className="user-info">
-            <p className="user-name">Admin</p>
+            <p className="user-name" style={{ fontSize: '0.72rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {myEmail || 'Admin'}
+            </p>
             <p className="user-sub">Full access</p>
           </div>
         </div>
