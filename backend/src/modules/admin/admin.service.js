@@ -72,7 +72,7 @@ async function getStudent(email) {
 
   const ppRes = await query(
     `SELECT platform_name, username, current_rating, total_solved,
-            global_rank, country_rank, last_updated
+            global_rank, last_updated
      FROM platform_profiles
      WHERE student_email = $1`,
     [email]

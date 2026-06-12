@@ -206,24 +206,32 @@ async function getPlacementsLeaderboard(page = 1, limit = 50) {
     });
 
     return {
-      email:       s.email,
-      full_name:   s.full_name,
-      roll_number: s.roll_number,
-      branch:      s.branch,
-      lc_handle:   s.lc_handle,
-      cc_handle:   s.cc_handle,
-      cf_handle:   s.cf_handle,
-      hr_handle:   s.hr_handle,
-      total:       result.total,
-      lc:          result.lc,
-      cc:          result.cc,
-      cf:          result.cf,
-      hr:          result.hr,
+      student_email: s.email,
+      full_name:     s.full_name,
+      roll_number:   s.roll_number,
+      branch:        s.branch,
+      lc_handle:     s.lc_handle,
+      cc_handle:     s.cc_handle,
+      cf_handle:     s.cf_handle,
+      hr_handle:     s.hr_handle,
+      final_score:   result.total,
+      total_score:   result.total,
+      cf_rating:     s.cf_rating || 0,
+      cc_rating:     s.cc_rating || 0,
+      lc_score:      result.lc?.score || 0,
+      cc_score:      result.cc?.score || 0,
+      cf_score:      result.cf?.score || 0,
+      hr_score:      result.hr?.score || 0,
+      total_solved:  (d.lcSolves.length + d.ccSolves.length + d.cfSolves.length),
+      lc:            result.lc,
+      cc:            result.cc,
+      cf:            result.cf,
+      hr:            result.hr,
     };
   });
 
   // 4. Sort + paginate
-  scored.sort((a, b) => b.total - a.total);
+  scored.sort((a, b) => b.final_score - a.final_score);
   scored.forEach((s, i) => { s.rank = i + 1; });
 
   // 5. Upsert into placements_board cache (non-fatal if table doesn't exist yet)
@@ -331,22 +339,37 @@ async function getWeeklyLeaderboard(weekParam, page = 1, limit = 50) {
       collegeBase: { lc: bestLCRank, cf: bestCFRank, cc: bestCCRank },
     });
     return {
-      email:       s.email,
-      full_name:   s.full_name,
-      roll_number: s.roll_number,
-      branch:      s.branch,
-      lc_handle:   s.lc_handle,
-      cc_handle:   s.cc_handle,
-      cf_handle:   s.cf_handle,
-      ...result,
+      student_email:          s.email,
+      full_name:              s.full_name,
+      roll_number:            s.roll_number,
+      branch:                 s.branch,
+      lc_handle:              s.lc_handle,
+      cc_handle:              s.cc_handle,
+      cf_handle:              s.cf_handle,
+      total_score:            result.composite || 0,
+      final_score:            result.composite || 0,
+      contests_participated:  result.platformsAttended || 0,
+      best_rank:              (() => {
+        const ranks = [
+          ...d.lcContests.map(c => c.rank),
+          ...d.cfContests.map(c => c.rank),
+          ...d.ccContests.map(c => c.rank),
+        ].filter(r => r != null && r > 0);
+        return ranks.length ? Math.min(...ranks) : null;
+      })(),
+      lc_score:               result.lcScore || 0,
+      cf_score:               result.cfScore || 0,
+      cc_score:               result.ccScore || 0,
+      platforms_attended:     result.platformsAttended || 0,
+      eligible:               result.eligible || false,
     };
-  }).filter(s => s.platformsAttended > 0);
+  }); // show ALL students (not just those who contested)
 
-  scored.sort((a, b) => b.composite - a.composite);
+  scored.sort((a, b) => b.final_score - a.final_score);
   scored.forEach((s, i) => { s.rank = i + 1; });
 
-  // Upsert weekly_board rows
-  for (const s of scored) {
+  // Upsert weekly_board rows (only for those who participated)
+  for (const s of scored.filter(x => x.platforms_attended > 0)) {
     await query(
       `INSERT INTO weekly_board (student_email, week_start, lc_score, cf_score, cc_score, composite, platforms_attended, eligible)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -354,7 +377,7 @@ async function getWeeklyLeaderboard(weekParam, page = 1, limit = 50) {
          lc_score = EXCLUDED.lc_score, cf_score = EXCLUDED.cf_score,
          cc_score = EXCLUDED.cc_score, composite = EXCLUDED.composite,
          platforms_attended = EXCLUDED.platforms_attended, eligible = EXCLUDED.eligible`,
-      [s.email, wkStart, s.lcScore, s.cfScore, s.ccScore, s.composite, s.platformsAttended, s.eligible]
+      [s.student_email, wkStart, s.lc_score, s.cf_score, s.cc_score, s.final_score, s.platforms_attended, s.eligible]
     ).catch(() => {});
   }
 
@@ -513,18 +536,25 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50) {
       year, month,
     });
     return {
-      email:       s.email,
-      full_name:   s.full_name,
-      roll_number: s.roll_number,
-      branch:      s.branch,
-      lc_handle:   s.lc_handle,
-      cc_handle:   s.cc_handle,
-      cf_handle:   s.cf_handle,
-      ...result,
+      student_email:  s.email,
+      full_name:      s.full_name,
+      roll_number:    s.roll_number,
+      branch:         s.branch,
+      lc_handle:      s.lc_handle,
+      cc_handle:      s.cc_handle,
+      cf_handle:      s.cf_handle,
+      final_score:    result.monthlyScore || 0,
+      total_score:    result.monthlyScore || 0,
+      contest_score:  result.contestPts   || 0,
+      practice_score: result.practicePts  || 0,
+      problems_solved: d.solves.length,
+      active_weeks:   result.activeWeeks  || 0,
+      eligible:       result.eligible     || false,
+      month_udg:      result.monthUdg     || 0,
     };
-  }).filter(s => s.monthlyScore > 0 || s.activeWeeks > 0);
+  }); // show ALL verified students (not just active)
 
-  scored.sort((a, b) => b.monthlyScore - a.monthlyScore);
+  scored.sort((a, b) => b.final_score - a.final_score);
   scored.forEach((s, i) => { s.rank = i + 1; });
 
   // Upsert monthly_board (non-fatal if table doesn't exist)
