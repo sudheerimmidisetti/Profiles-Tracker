@@ -1608,3 +1608,190 @@ tbody tr:last-child td {
     display: none;
   }
 }
+
+/* ── Toolbar (Students page) ─────────────────────────────────────────── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 220px;
+  max-width: 380px;
+}
+
+.search-box input {
+  width: 100%;
+  height: 36px;
+  padding: 0 32px 0 34px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.search-box input::placeholder { color: var(--fg-subtle); }
+.search-box input:focus         { border-color: oklch(0.42 0 0); }
+
+.search-box-ico {
+  position: absolute;
+  left: 10px;
+  color: var(--fg-muted);
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.search-clear {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 3px;
+  transition: color 0.13s;
+}
+.search-clear:hover { color: var(--fg); }
+
+.count-badge {
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  white-space: nowrap;
+  padding: 5px 10px;
+  background: var(--muted);
+  border-radius: var(--radius-sm);
+}
+
+/* ── Section label ───────────────────────────────────────────────────── */
+.section-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+  margin-bottom: 12px;
+  display: block;
+}
+
+/* ── Data table ──────────────────────────────────────────────────────── */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table thead tr {
+  border-bottom: 1px solid var(--border);
+  background: oklch(0.13 0 0);
+}
+
+.data-table th {
+  padding: 10px 16px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--fg-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 12px 16px;
+  font-size: 0.875rem;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.data-table tbody tr {
+  transition: background 0.1s;
+}
+
+.data-table tbody tr:hover {
+  background: var(--card-hover);
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ── Tab bar ─────────────────────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px;
+  width: fit-content;
+}
+
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: calc(var(--radius) - 4px);
+  border: none;
+  background: none;
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+  transition: all 0.15s;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.tab-btn:hover {
+  color: var(--fg);
+  background: var(--muted);
+}
+
+.tab-btn.active {
+  background: var(--muted);
+  color: var(--fg);
+}
+
+/* ── Pagination (shared) ─────────────────────────────────────────────── */
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+/* ── Primary color token ─────────────────────────────────────────────── */
+:root {
+  --primary-bg: oklch(0.70 0.15 200 / 0.12);
+}
+
+/* ── KPI grid responsive (5 cards) ──────────────────────────────────── */
+@media (max-width: 1100px) {
+  .kpi-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ── Toolbar responsive ─────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .search-box {
+    max-width: 100%;
+  }
+  .tab-bar {
+    width: 100%;
+    overflow-x: auto;
+  }
+}

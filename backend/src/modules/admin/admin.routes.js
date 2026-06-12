@@ -9,8 +9,10 @@ const router = Router();
 router.use(adminAuth);
 
 router.get('/students',              ctrl.listStudents);    // List all with optional filters
-router.put('/blocklist/:email',      ctrl.blockStudent);    // Block a student (cheater)
+router.get('/students/:email',       ctrl.getStudent);      // Single student detail + platform stats
+router.put('/blocklist/:email',      ctrl.blockStudent);    // Block a student
 router.put('/unblocklist/:email',    ctrl.unblockStudent);  // Reinstate a student
 router.post('/sync',                 ctrl.triggerSync);     // POST manually trigger full data sync
+router.get('/overview',              ctrl.getOverview);     // Dashboard KPIs + platform breakdown
 
 module.exports = router;

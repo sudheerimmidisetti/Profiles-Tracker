@@ -1,4 +1,4 @@
-import { Users, ShieldCheck, ShieldOff, Activity, TrendingUp } from 'lucide-react'
+import { Users, ShieldCheck, ShieldOff, Activity, UserPlus, TrendingUp } from 'lucide-react'
 
 function StatCard({ icon, value, label, sub, accentColor, trend }) {
   return (
@@ -9,7 +9,7 @@ function StatCard({ icon, value, label, sub, accentColor, trend }) {
         </div>
         {trend !== undefined && (
           <div className={`trend-badge ${trend >= 0 ? 'trend-up' : 'trend-down'}`}>
-            <TrendingUp size={11} />{trend}%
+            <TrendingUp size={11} />{trend > 0 ? '+' : ''}{trend}
           </div>
         )}
       </div>
@@ -23,42 +23,49 @@ function StatCard({ icon, value, label, sub, accentColor, trend }) {
 }
 
 export default function KPICards({ stats }) {
-  const total      = stats?.total      ?? 0
-  const verified   = stats?.verified   ?? 0
-  const blocked    = stats?.blocked    ?? 0
-  const active     = stats?.activeWeek ?? 0
+  const total       = stats?.total       ?? 0
+  const verified    = stats?.verified    ?? 0
+  const blocked     = stats?.blocked     ?? 0
+  const active7d    = stats?.active7d    ?? 0
+  const newThisWeek = stats?.newThisWeek ?? 0
 
   return (
     <div className="kpi-grid">
       <StatCard
-        label="Total Students"
+        icon={<Users size={16} style={{ color: 'var(--primary)' }} />}
         value={total.toLocaleString()}
-        sub="Registered in the system"
-        accentColor="var(--chart-1)"
-        icon={<Users size={20} style={{ color: 'var(--chart-1)' }} />}
+        label="Total Students"
+        sub={`${verified} verified`}
+        accentColor="oklch(0.70 0.15 200)"
+        trend={newThisWeek}
       />
       <StatCard
-        label="Verified Handles"
+        icon={<ShieldCheck size={16} style={{ color: 'var(--success)' }} />}
         value={verified.toLocaleString()}
-        sub={`${total ? Math.round(verified / total * 100) : 0}% of total`}
-        accentColor="var(--success)"
-        trend={8}
-        icon={<ShieldCheck size={20} style={{ color: 'var(--success)' }} />}
+        label="Verified"
+        sub={`${Math.round((verified / (total || 1)) * 100)}% of total`}
+        accentColor="oklch(0.72 0.19 145)"
       />
       <StatCard
+        icon={<Activity size={16} style={{ color: 'var(--warning)' }} />}
+        value={active7d.toLocaleString()}
         label="Active This Week"
-        value={active.toLocaleString()}
-        sub="At least 1 submission"
-        accentColor="var(--chart-3)"
-        trend={3}
-        icon={<Activity size={20} style={{ color: 'var(--chart-3)' }} />}
+        sub="Had data synced in 7d"
+        accentColor="oklch(0.80 0.15 85)"
       />
       <StatCard
-        label="Blocklisted"
+        icon={<UserPlus size={16} style={{ color: 'var(--chart-1)' }} />}
+        value={newThisWeek.toLocaleString()}
+        label="Joined This Week"
+        sub={`${stats?.newThisMonth ?? 0} this month`}
+        accentColor="oklch(0.70 0.15 200)"
+      />
+      <StatCard
+        icon={<ShieldOff size={16} style={{ color: 'var(--danger)' }} />}
         value={blocked.toLocaleString()}
-        sub="Excluded from leaderboard"
-        accentColor="var(--danger)"
-        icon={<ShieldOff size={20} style={{ color: 'var(--danger)' }} />}
+        label="Blocked"
+        sub="Hidden from leaderboard"
+        accentColor="oklch(0.65 0.2 25)"
       />
     </div>
   )

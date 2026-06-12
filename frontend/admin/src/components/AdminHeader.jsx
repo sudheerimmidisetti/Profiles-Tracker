@@ -1,6 +1,6 @@
-import { Search, Bell, RefreshCw } from 'lucide-react'
+import { RefreshCw, Bell } from 'lucide-react'
 
-export default function AdminHeader({ title, breadcrumb, onRefresh }) {
+export default function AdminHeader({ title, breadcrumb, onRefresh, extra }) {
   return (
     <header className="header">
       <div className="header-left">
@@ -13,21 +13,19 @@ export default function AdminHeader({ title, breadcrumb, onRefresh }) {
         <h1 className="header-title">{title}</h1>
       </div>
 
-      <div className="header-search">
-        <Search className="search-ico" size={14} />
-        <input type="text" placeholder="Search students, emails, roll numbers…" />
-      </div>
-
       <div className="header-right">
+        {extra}
         {onRefresh && (
           <button className="icon-btn" onClick={onRefresh} title="Refresh data">
             <RefreshCw size={16} />
           </button>
         )}
-        <button className="icon-btn">
+        <button className="icon-btn" title="Notifications">
           <Bell size={17} />
         </button>
-        <div className="avatar" style={{ background: 'var(--danger)' }}>A</div>
+        <div className="avatar" style={{ background: 'var(--danger)', fontSize: '0.75rem', fontWeight: 700 }}>
+          AD
+        </div>
       </div>
     </header>
   )
