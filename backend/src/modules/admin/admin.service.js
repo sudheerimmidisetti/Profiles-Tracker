@@ -136,7 +136,7 @@ async function getOverview() {
     query(`
       SELECT COUNT(DISTINCT student_email) AS active_7d
       FROM platform_daily_snapshots
-      WHERE recorded_at > NOW() - INTERVAL '7 days'
+      WHERE snapshot_date > NOW() - INTERVAL '7 days'
     `),
   ]);
 

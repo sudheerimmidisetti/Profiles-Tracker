@@ -45,16 +45,32 @@ function DarkTooltip({ active, payload, label }) {
   )
 }
 
-function RatingChart({ snapshots }) {
-  if (!snapshots?.length) return null
-  const data = snapshots
+function buildChartData(snapshots) {
+  if (!snapshots) return []
+  // snapshots is { leetcode: [{date, rating, totalSolved}], codeforces: [...], ... }
+  const dateMap = {}
+  const platforms = ['leetcode', 'codeforces', 'codechef', 'hackerrank']
+  for (const [platform, rows] of Object.entries(snapshots)) {
+    for (const row of (rows || [])) {
+      const d = row.date || row.snapshot_date
+      if (!dateMap[d]) dateMap[d] = { date: d }
+      const key = platform === 'leetcode' ? 'lc' : platform === 'codeforces' ? 'cf' : platform === 'codechef' ? 'cc' : 'hr'
+      dateMap[d][key]         = row.rating || null
+      dateMap[d][key + 'Sol'] = row.totalSolved || null
+    }
+  }
+  return Object.values(dateMap)
+    .sort((a, b) => a.date.localeCompare(b.date))
     .slice(-60)
-    .map(s => ({
-      date: new Date(s.recorded_at).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
-      lc:   s.lc_rating   || null,
-      cf:   s.cf_rating   || null,
-      cc:   s.cc_rating   || null,
+    .map(r => ({
+      ...r,
+      date: new Date(r.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
     }))
+}
+
+function RatingChart({ snapshots }) {
+  const data = buildChartData(snapshots)
+  if (!data.length) return null
 
   return (
     <div className="card">
@@ -79,16 +95,8 @@ function RatingChart({ snapshots }) {
 }
 
 function SolvedChart({ snapshots }) {
-  if (!snapshots?.length) return null
-  const data = snapshots
-    .slice(-60)
-    .map(s => ({
-      date:  new Date(s.recorded_at).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
-      lc:    s.lc_solved   || null,
-      cf:    s.cf_solved   || null,
-      cc:    s.cc_solved   || null,
-      hr:    s.hr_solved   || null,
-    }))
+  const data = buildChartData(snapshots)
+  if (!data.length) return null
 
   return (
     <div className="card">
@@ -102,10 +110,10 @@ function SolvedChart({ snapshots }) {
             <XAxis dataKey="date" tick={{ fill: 'var(--fg-muted)', fontSize: 11 }} tickLine={false} axisLine={false} />
             <YAxis tick={{ fill: 'var(--fg-muted)', fontSize: 11 }} tickLine={false} axisLine={false} width={40} />
             <Tooltip content={<DarkTooltip />} />
-            <Line type="monotone" dataKey="lc" name="LeetCode"   stroke="var(--lc)" strokeWidth={2} dot={false} connectNulls />
-            <Line type="monotone" dataKey="cf" name="Codeforces" stroke="var(--cf)" strokeWidth={2} dot={false} connectNulls />
-            <Line type="monotone" dataKey="cc" name="CodeChef"   stroke="var(--cc)" strokeWidth={2} dot={false} connectNulls />
-            <Line type="monotone" dataKey="hr" name="HackerRank" stroke="var(--hr)" strokeWidth={2} dot={false} connectNulls />
+            <Line type="monotone" dataKey="lcSol" name="LeetCode"   stroke="var(--lc)" strokeWidth={2} dot={false} connectNulls />
+            <Line type="monotone" dataKey="cfSol" name="Codeforces" stroke="var(--cf)" strokeWidth={2} dot={false} connectNulls />
+            <Line type="monotone" dataKey="ccSol" name="CodeChef"   stroke="var(--cc)" strokeWidth={2} dot={false} connectNulls />
+            <Line type="monotone" dataKey="hrSol" name="HackerRank" stroke="var(--hr)" strokeWidth={2} dot={false} connectNulls />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -258,7 +266,7 @@ export default function StudentDetailPage() {
             </div>
 
             {/* Charts */}
-            {snapshots && snapshots.length > 0 && (
+            {snapshots && Object.keys(snapshots).length > 0 && (
               <div className="grid-2">
                 <RatingChart snapshots={snapshots} />
                 <SolvedChart snapshots={snapshots} />
@@ -266,7 +274,7 @@ export default function StudentDetailPage() {
             )}
 
             {/* Snapshot availability notice */}
-            {(!snapshots || snapshots.length === 0) && (
+            {(!snapshots || Object.keys(snapshots).length === 0) && (
               <div className="empty-state" style={{ padding: '32px 0' }}>
                 <Zap size={28} style={{ color: 'var(--fg-subtle)' }} />
                 <p className="empty-title" style={{ fontSize: '0.9rem' }}>No history snapshots yet</p>
