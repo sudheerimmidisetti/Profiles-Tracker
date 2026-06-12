@@ -297,8 +297,8 @@ async function getWeeklyLeaderboard(weekParam, page = 1, limit = 50) {
       [emails, wkStart, wkEnd]
     ),
     query(
-      `SELECT student_email, contest_code, rank_achieved AS rank,
-              problems_solved_count AS problems_solved, 0 AS total_problems,
+      `SELECT student_email, contest_code, contest_name,
+              rank_achieved, problems_solved_count,
               rating_change, division, contest_date
        FROM codechef_contest_history
        WHERE student_email = ANY($1)

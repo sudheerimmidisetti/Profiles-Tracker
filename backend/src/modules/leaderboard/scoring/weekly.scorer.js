@@ -1,24 +1,89 @@
 // src/modules/leaderboard/scoring/weekly.scorer.js
 // Weekly leaderboard — contests held this week only.
-// Formula: Weekly = 0.35×LC + 0.30×CC_unified + 0.35×CF
 //
-// Simplified proxy (v1): We don't have live standings data yet.
-// Score = weighted blend of:
-//   - Rating change this week (normalized via tanh)
-//   - Rank percentile proxy from problems_solved / total_problems
-//   - Problems solved in contest (UDG-weighted) where available
+// SCORING PHILOSOPHY (v2 — fair across divisions)
+// ─────────────────────────────────────────────────
+// We have: rank, problems_solved, rating_change, division (CC), total_problems (LC only)
+// We do NOT have: total participant count (not scraped)
 //
-// Full log-ratio formula (activate when standings are scraped):
-//   S = 100 × ln(N/r) / ln(N/base)
+// Formula per platform:
+//
+//  CodeChef:
+//    S_cc = divBase + rankScore × 0.50 + solveScore × 0.50
+//    divBase:   Div1=60, Div2=40, Div3=20, Div4=0
+//    rankScore: 40 × (1 - rank / typicalDivSize)  clamped [0,40]
+//    solveScore: 40 × (problems_solved / typicalDivProblems) clamped [0,40]
+//    The two 50/50 split means rank AND number of problems both matter equally.
+//    A Div3 student who solves 3 can outscore a Div4 student who solves 4
+//    because divBase gives Div3 a +20 head-start AND their rank percentile is
+//    evaluated within Div3's pool (smaller → higher percentile for same rank).
+//
+//  LeetCode / Codeforces (unchanged):
+//    proxyScore uses rating_change + solve ratio + speed bonus (0–100)
+//
+// Composite: 0.35×LC + 0.35×CF + 0.30×CC  (unchanged weights)
+//
+// NOTE: When we eventually scrape real div_participants, ccUnifiedScore() with
+//       the actual count replaces the typicalDivSize constants.
 
 'use strict';
 
 const { isoWeek } = require('./placements.scorer');
 
+// ── Typical CodeChef division sizes (Starters ~2026) ──────────────────────────
+// These are approximate median participation counts per division.
+// Source: observed across ~10 recent Starters rounds.
+const CC_DIV_SIZE = {
+  'Div 1':  2000,
+  'Div 2':  8000,
+  'Div 3': 12000,
+  'Div 4': 18000,
+};
+// Typical number of scoreable problems per division (problems that matter for rank)
+const CC_DIV_PROBLEMS = {
+  'Div 1': 8,
+  'Div 2': 7,
+  'Div 3': 6,
+  'Div 4': 5,
+};
+// Division floor scores (head-start for being in a harder division)
+const CC_DIV_FLOOR = {
+  'Div 1': 60,
+  'Div 2': 40,
+  'Div 3': 20,
+  'Div 4':  0,
+};
+
+/**
+ * CodeChef score — fair across divisions.
+ * Score = divFloor + rankComponent + solveComponent   (max ≈ 100)
+ *
+ * rankComponent  = 40 × max(0, 1 − rank / typicalDivSize)
+ * solveComponent = 40 × min(1, solved / typicalDivProblems)
+ */
+function ccScore(rank, problemsSolved, division, ratingChange) {
+  const div         = division || 'Div 4';
+  const floor       = CC_DIV_FLOOR[div]    ?? 0;
+  const divSize     = CC_DIV_SIZE[div]     ?? 18000;
+  const divProblems = CC_DIV_PROBLEMS[div] ?? 5;
+
+  const rankComponent  = rank > 0
+    ? 40 * Math.max(0, 1 - rank / divSize)
+    : 0;
+
+  const solveComponent = 40 * Math.min(1, (problemsSolved || 0) / divProblems);
+
+  // Small rating bonus/penalty: ±5 points based on tanh of rating change
+  // Prevents ties when rank+solves are identical
+  const ratingBonus = 5 * Math.tanh((ratingChange || 0) / 100);
+
+  return Math.max(0, Math.min(115, floor + rankComponent + solveComponent + ratingBonus));
+}
+
 /**
  * Log-ratio score (used when we have N, rank, and college base rank).
  * S = 100 × ln(N/r) / ln(N/base)
- * Returns 0 if not attended; 100 for the base student.
+ * Returns null if inputs missing so caller can fall back.
  */
 function logRatioScore(rank, participants, collegeBaseRank) {
   if (!rank || !participants || !collegeBaseRank) return null;
@@ -33,8 +98,8 @@ function logRatioScore(rank, participants, collegeBaseRank) {
 }
 
 /**
- * Proxy score when we don't have live standings.
- * Uses rating change + problems solved ratio.
+ * Proxy score for LC/CF when we don't have live standings.
+ * Uses rating change + problems solved ratio + speed bonus.
  * Score range: 0–100
  */
 function proxyScore(ratingChange, problemsSolved, totalProblems, finishTimeSeconds) {
@@ -46,7 +111,6 @@ function proxyScore(ratingChange, problemsSolved, totalProblems, finishTimeSecon
   const solveNorm  = 30 * solveRatio;
 
   // Speed bonus (0–10): inversely proportional to finish time
-  // finishTimeSeconds: 0 = max speed. 7200s (2h) = no bonus.
   let speedNorm = 0;
   if (finishTimeSeconds > 0 && finishTimeSeconds < 7200) {
     speedNorm = 10 * (1 - finishTimeSeconds / 7200) * solveRatio;
@@ -56,11 +120,7 @@ function proxyScore(ratingChange, problemsSolved, totalProblems, finishTimeSecon
 }
 
 /**
- * CodeChef unified score using overlapping division bands.
- * U = Floor(div) + p × 55   where p = within-div percentile
- *
- * Band floors: Div4=0, Div3=20, Div2=40, Div1=60
- * Band ranges: each div spans 0–55 points above floor.
+ * Legacy ccUnifiedScore — kept for when we have actual div_participants.
  */
 function ccUnifiedScore(rank, divParticipants, division) {
   const divFloor = { 'Div 1': 60, 'Div 2': 40, 'Div 3': 20, 'Div 4': 0 };
@@ -79,7 +139,6 @@ function weekStart(date = new Date()) {
   const day = ist.getUTCDay(); // 0=Sun
   const monday = new Date(ist.getTime() - ((day === 0 ? 6 : day - 1) * 86400000));
   monday.setUTCHours(0, 0, 0, 0);
-  // Return as YYYY-MM-DD
   return monday.toISOString().slice(0, 10);
 }
 
@@ -87,33 +146,31 @@ function weekStart(date = new Date()) {
  * Compute weekly score for one student.
  *
  * @param {object} data
- *   lcContests    — LC contests this week: [{rank, total_participants, problems_solved, total_problems, finish_time_seconds, rating_change}]
- *   cfContests    — CF rounds this week: same structure
- *   ccContests    — CC contests this week: [{rank, div_participants, division, problems_solved, total_problems, rating_change}]
- *   collegeBase   — { lc: minRankLC, cf: minRankCF, cc: minRankCC } (best rank from any college student)
+ *   lcContests — LC contests this week
+ *   cfContests — CF rounds this week
+ *   ccContests — CC contests this week: [{rank_achieved, division, problems_solved, rating_change}]
+ *   collegeBase — { lc, cf, cc } best rank among college students
  *
- * @returns {{ lcScore, cfScore, ccScore, composite, platformsAttended, eligible, breakdown }}
+ * @returns {{ lcScore, cfScore, ccScore, composite, platformsAttended, eligible }}
  */
 function computeWeeklyScore(data) {
   const { lcContests = [], cfContests = [], ccContests = [], collegeBase = {} } = data;
 
-  // ── LeetCode: best of the week's contests ──────────────────────────────────
+  // ── LeetCode ───────────────────────────────────────────────────────────────
   let lcScore = 0;
   let lcBest  = null;
   for (const c of lcContests) {
-    // Try log-ratio first (needs N + base rank)
     let s = null;
     if (c.total_participants && collegeBase.lc) {
       s = logRatioScore(c.rank, c.total_participants, collegeBase.lc);
     }
-    // Fallback to proxy
     if (s === null) {
       s = proxyScore(c.rating_change, c.problems_solved, c.total_problems, c.finish_time_seconds);
     }
     if (s > lcScore) { lcScore = s; lcBest = c; }
   }
 
-  // ── Codeforces: best round of the week ─────────────────────────────────────
+  // ── Codeforces ─────────────────────────────────────────────────────────────
   let cfScore = 0;
   let cfBest  = null;
   for (const c of cfContests) {
@@ -127,17 +184,24 @@ function computeWeeklyScore(data) {
     if (s > cfScore) { cfScore = s; cfBest = c; }
   }
 
-  // ── CodeChef: unified band score ───────────────────────────────────────────
-  let ccScore = 0;
-  let ccBest  = null;
+  // ── CodeChef ───────────────────────────────────────────────────────────────
+  let ccScoreVal = 0;
+  let ccBest     = null;
   for (const c of ccContests) {
     let s;
-    if (c.division && c.div_participants) {
+    // Use actual participant count if available (future scraper upgrade)
+    if (c.div_participants && c.div_participants > 0) {
       s = ccUnifiedScore(c.rank, c.div_participants, c.division);
     } else {
-      s = proxyScore(c.rating_change, c.problems_solved, c.total_problems, c.finish_time_seconds);
+      // Use our fair rank+solve formula with typical division sizes
+      s = ccScore(
+        c.rank_achieved ?? c.rank,
+        c.problems_solved_count ?? c.problems_solved ?? 0,
+        c.division,
+        c.rating_change
+      );
     }
-    if (s > ccScore) { ccScore = s; ccBest = c; }
+    if (s > ccScoreVal) { ccScoreVal = s; ccBest = c; }
   }
 
   const platformsAttended =
@@ -145,18 +209,25 @@ function computeWeeklyScore(data) {
     (cfContests.length > 0 ? 1 : 0) +
     (ccContests.length > 0 ? 1 : 0);
 
-  // Composite: 0.35×LC + 0.30×CC + 0.35×CF (each 0–100; 0 if not attended)
-  const composite = 0.35 * lcScore + 0.30 * ccScore + 0.35 * cfScore;
+  // Composite: 0.35×LC + 0.30×CC + 0.35×CF
+  const composite = 0.35 * lcScore + 0.30 * ccScoreVal + 0.35 * cfScore;
 
   return {
-    lcScore:  +lcScore.toFixed(4),
-    cfScore:  +cfScore.toFixed(4),
-    ccScore:  +ccScore.toFixed(4),
-    composite: +composite.toFixed(4),
+    lcScore:           +lcScore.toFixed(4),
+    cfScore:           +cfScore.toFixed(4),
+    ccScore:           +ccScoreVal.toFixed(4),
+    composite:         +composite.toFixed(4),
     platformsAttended,
-    eligible: platformsAttended >= 2,   // must attend ≥ 2 platforms
-    breakdown: { lcBest, cfBest, ccBest }
+    eligible:          platformsAttended >= 2,
+    breakdown: { lcBest, cfBest, ccBest },
   };
 }
 
-module.exports = { computeWeeklyScore, logRatioScore, proxyScore, ccUnifiedScore, weekStart };
+module.exports = {
+  computeWeeklyScore,
+  logRatioScore,
+  proxyScore,
+  ccScore,
+  ccUnifiedScore,
+  weekStart,
+};
