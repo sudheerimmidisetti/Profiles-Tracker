@@ -281,7 +281,23 @@ async function getFullProfile(username) {
       if (m) { try { allRatingData = JSON.parse(m[1]); } catch { /* ignore */ } }
     }
 
+    // Fetch submissions early — needed to compute per-contest problems_solved_count below
+    const allAcSubmissions = await fetchCCRecentSubmissions(username);
+
     if (allRatingData) {
+      // Build map: contestCode → AC unique problems count from submissions
+      // (allAcSubmissions is fetched early so we can derive solved counts per contest)
+      const contestSolvedMap = {};
+      for (const sub of allAcSubmissions) {
+        if (sub.status === 'AC' && sub.contest_id) {
+          const key = `${sub.contest_id}::${sub.problem_id}`;
+          if (!contestSolvedMap[`_seen_${key}`]) {
+            contestSolvedMap[`_seen_${key}`] = true;
+            contestSolvedMap[sub.contest_id] = (contestSolvedMap[sub.contest_id] || 0) + 1;
+          }
+        }
+      }
+
       let prevRating = 0;
       allRatingData.forEach((r) => {
         const rank        = safeInt(r.rank);
@@ -290,18 +306,19 @@ async function getFullProfile(username) {
         const change      = prevRating > 0 ? rating - prevRating : 0;
         prevRating        = rating;
         const dateStr = r.end_date || `${r.getyear}-${r.getmonth}-${r.getday}` || null;
+        const cCode = r.code || '';
 
         contestHistory.push({
-          contestCode:        r.code || '',
+          contestCode:        cCode,
           contestName:        r.name || '',
           rankAchieved:       rank,
           ratingAfterContest: rating,
           ratingChange:       change,
           contestDate:        dateStr,
           contestType:        detectContestType(r.name || ''),
-          // Pass ratingBefore so detectDivision can infer Div when name lacks it
           division:           detectDivision(r.name || '', ratingBefore),
-          problemsSolvedCount: 0,
+          // Real count from submissions — 0 if contest is older than 400 subs
+          problemsSolvedCount: contestSolvedMap[cCode] || 0,
         });
         ratingGraph.push({ name: r.name, date: dateStr, rating, rank, ratingChange: change });
 
@@ -427,7 +444,8 @@ async function getFullProfile(username) {
       ratingGraph,
       contestHistory,
       // Real CC submissions scraped from /recent/user (actual problem codes, not heatmap fakes)
-      allAcSubmissions: await fetchCCRecentSubmissions(username),
+      // Fetched early so contestHistory can derive problemsSolvedCount per contest
+      allAcSubmissions,
     };
 
   } catch (err) {

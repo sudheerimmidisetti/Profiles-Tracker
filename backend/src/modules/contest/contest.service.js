@@ -245,24 +245,43 @@ async function getCodechefDetail(contestCode, email, dbQuery) {
     }
   }
 
-  // Source B: student_submissions DB (real problem codes stored by sync job)
-  // Only useful if the scraper now stores real CC problem codes (not fake cc-date-N IDs)
+  // Source B: student_submissions DB (real problem codes stored by sync job, with contest_id)
   const problemCodes = problems.map(p => p.code).filter(Boolean);
   if (email && problemCodes.length > 0) {
     try {
-      const dbSubs = await dbQuery(
+      // First try: direct contest_id match (populated after the contest_id migration)
+      const dbSubsByContest = await dbQuery(
         `SELECT problem_id, status FROM student_submissions
          WHERE student_email = $1
            AND platform = 'codechef'
-           AND problem_id = ANY($2)`,
-        [email, problemCodes]
+           AND contest_id = $2`,
+        [email, contestCode]
       );
-      for (const sub of (dbSubs?.rows || [])) {
+      for (const sub of (dbSubsByContest?.rows || [])) {
         if (!solvedByCode[sub.problem_id]) {
-          solvedByCode[sub.problem_id] = { accepted: true, attempts: 1, score: 100 };
-        } else if (!solvedByCode[sub.problem_id].accepted) {
+          solvedByCode[sub.problem_id] = { accepted: sub.status === 'AC', attempts: 1, score: sub.status === 'AC' ? 100 : 0 };
+        } else if (sub.status === 'AC') {
           solvedByCode[sub.problem_id].accepted = true;
           solvedByCode[sub.problem_id].score    = 100;
+        }
+      }
+
+      // Fallback: match by problem code if contest_id wasn't stored yet
+      if (Object.keys(solvedByCode).length === 0) {
+        const dbSubs = await dbQuery(
+          `SELECT problem_id, status FROM student_submissions
+           WHERE student_email = $1
+             AND platform = 'codechef'
+             AND problem_id = ANY($2)`,
+          [email, problemCodes]
+        );
+        for (const sub of (dbSubs?.rows || [])) {
+          if (!solvedByCode[sub.problem_id]) {
+            solvedByCode[sub.problem_id] = { accepted: true, attempts: 1, score: 100 };
+          } else if (!solvedByCode[sub.problem_id].accepted) {
+            solvedByCode[sub.problem_id].accepted = true;
+            solvedByCode[sub.problem_id].score    = 100;
+          }
         }
       }
     } catch (e) {

@@ -141,7 +141,7 @@ async function upsertSubmissions(email, platform, submissions) {
     const params = [];
     let p = 1;
     for (const s of batch) {
-      values.push(`($${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++})`);
+      values.push(`($${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++})`);
       params.push(
         email,
         platform,
@@ -150,17 +150,19 @@ async function upsertSubmissions(email, platform, submissions) {
         s.status || 'AC',
         s.language || null,
         s.submitted_at || null,
-        s.runtime_ms   || null
+        s.runtime_ms   || null,
+        s.contest_id   || null   // CC stores contest code e.g. START145D
       );
     }
     await query(
       `INSERT INTO student_submissions
-         (student_email, platform, problem_id, problem_name, status, language, submitted_at, runtime_ms)
+         (student_email, platform, problem_id, problem_name, status, language, submitted_at, runtime_ms, contest_id)
        VALUES ${values.join(',')}
        ON CONFLICT (student_email, platform, problem_id) DO UPDATE SET
          problem_name = COALESCE(NULLIF(EXCLUDED.problem_name, EXCLUDED.problem_id), student_submissions.problem_name),
          status       = EXCLUDED.status,
-         language     = COALESCE(EXCLUDED.language, student_submissions.language)`,
+         language     = COALESCE(EXCLUDED.language, student_submissions.language),
+         contest_id   = COALESCE(EXCLUDED.contest_id, student_submissions.contest_id)`,
       params
     ).catch(err => logger.warn(`[SyncJob] upsertSubmissions batch failed: ${err.message}`));
   }
