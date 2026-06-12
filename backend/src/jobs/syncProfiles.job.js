@@ -359,16 +359,19 @@ async function upsertCodeforces(email, d) {
     await query(
       `INSERT INTO codeforces_contest_history
          (student_email, contest_id, contest_name, rank_achieved,
-          old_rating, new_rating, rating_change, timestamp_seconds, division)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+          old_rating, new_rating, rating_change, timestamp_seconds,
+          division, problems_solved)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        ON CONFLICT (student_email, contest_id) DO UPDATE SET
          rank_achieved  = EXCLUDED.rank_achieved,
          old_rating     = EXCLUDED.old_rating,
          new_rating     = EXCLUDED.new_rating,
          rating_change  = EXCLUDED.rating_change,
-         division       = EXCLUDED.division`,
+         division       = EXCLUDED.division,
+         problems_solved = EXCLUDED.problems_solved`,
       [email, c.contestId, c.contestName, c.rankAchieved,
-       c.oldRating, c.newRating, c.ratingChange, c.timestampSeconds, c.division]
+       c.oldRating, c.newRating, c.ratingChange, c.timestampSeconds,
+       c.division, c.problemsSolved ?? 0]
     );
   }
 

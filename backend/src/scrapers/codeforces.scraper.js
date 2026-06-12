@@ -57,7 +57,9 @@ async function getFullProfile(handle) {
         ratingChange:     r.newRating - r.oldRating,
         timestampSeconds: r.ratingUpdateTimeSeconds,
         division:         detectDivision(r.contestName),
+        // problemsSolved will be filled after processing submissions
       }));
+
     } catch (e) {
       logger.warn(`[CF] rating history unavailable for ${handle}: ${e.message}`);
     }
@@ -67,13 +69,13 @@ async function getFullProfile(handle) {
     const solvedByTier = { under1200: 0, r1200_1599: 0, r1600_1899: 0, r1900_2199: 0, above2200: 0 };
     const langMap      = {};   // language → count
     const tagMap       = {};   // tag → count
-    const calMap          = {};   // date YYYY-MM-DD → submission count
-    const recentAC        = [];
-    const allAcSubs       = [];   // ALL unique AC problems for submissions table
-    let totalSubs         = 0;
-    let acceptedSubs      = 0;
-    let highestRated      = 0;
-
+    const calMap       = {};   // date YYYY-MM-DD → submission count
+    const recentAC     = [];
+    const allAcSubs    = [];   // ALL unique AC problems for submissions table
+    const contestSolvedMap = {}; // contestId → count of unique AC problems solved IN that contest
+    let totalSubs      = 0;
+    let acceptedSubs   = 0;
+    let highestRated   = 0;
 
     try {
       const submissions = await cfGet(
@@ -99,6 +101,10 @@ async function getFullProfile(handle) {
         if (solvedSet.has(key)) continue;
         solvedSet.add(key);
 
+        // Count unique AC problems per contest (for contest tooltip)
+        if (sub.problem.contestId) {
+          contestSolvedMap[sub.problem.contestId] = (contestSolvedMap[sub.problem.contestId] || 0) + 1;
+        }
         // Tag stats (unique solved problems)
         for (const tag of (sub.problem.tags || [])) {
           tagMap[tag] = (tagMap[tag] || 0) + 1;
@@ -165,6 +171,12 @@ async function getFullProfile(handle) {
       ? Math.min(...contestHistory.map(c => c.rankAchieved))
       : 0;
 
+    // Attach per-contest solved count (derived from AC submissions)
+    const enrichedContestHistory = contestHistory.map(c => ({
+      ...c,
+      problemsSolved: contestSolvedMap[c.contestId] || 0,
+    }));
+
     return {
       username:                user.handle,
       firstName:               user.firstName               || null,
@@ -201,9 +213,10 @@ async function getFullProfile(handle) {
       submissionCalendar:      calMap,
       recentAcSubmissions:     recentAC,
       allAcSubmissions:        allAcSubs,   // full unique AC history
-      // Contest history
-      contestHistory,
+      // Contest history (with problemsSolved per contest)
+      contestHistory:          enrichedContestHistory,
     };
+
   } catch (err) {
     logger.error(`[CF] getFullProfile failed for ${handle}: ${err.message}`);
     return null;
