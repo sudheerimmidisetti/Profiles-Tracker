@@ -1,8 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      // Directly reuse student UI components in admin
+      '@student': path.resolve(__dirname, '../student/src'),
+    }
+  },
   build: {
     rollupOptions: {
       output: {
