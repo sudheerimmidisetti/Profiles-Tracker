@@ -152,7 +152,7 @@ async function logout(sessionId) {
 // Roll number comes from email prefix (e.g. 23p31a0537 → 23P31A0537)
 // Per API requirement: alphabetic characters must be UPPERCASE
 // ─────────────────────────────────────────────────────────────
-const MAYA_API = 'https://api.maya.adityauniversity.in/node/api/get-user-by-roll-no-coding-profiles';
+const MAYA_API = process.env.MAYA_API_URL || 'https://api.maya.adityauniversity.in/node/api/get-user-by-roll-no-coding-profiles';
 
 async function fetchStudentFromCollegeDB(email) {
   // Derive roll number from email prefix and uppercase ALL alpha chars
@@ -160,12 +160,16 @@ async function fetchStudentFromCollegeDB(email) {
   const rollNumber = email.split('@')[0].replace(/[a-z]/g, c => c.toUpperCase());
 
   const domain = email.split('@')[1]?.toLowerCase() || '';
-  const collegeMap = {
-    'acet.ac.in':          'ACET',
-    'aec.edu.in':          'AEC',
-    'adityauniversity.in': 'Aditya University',
-  };
-  const collegeFallback = collegeMap[domain] || domain.split('.')[0].toUpperCase();
+  // COLLEGE_LABEL_MAP env: "acet.ac.in=ACET,aec.edu.in=AEC"
+  // Falls back to capitalised domain prefix if not set
+  const labelMap = {};
+  (process.env.COLLEGE_LABEL_MAP || 'acet.ac.in=ACET,aec.edu.in=AEC,adityauniversity.in=Aditya University')
+    .split(',')
+    .forEach(pair => {
+      const [d, l] = pair.split('=');
+      if (d && l) labelMap[d.trim().toLowerCase()] = l.trim();
+    });
+  const collegeFallback = labelMap[domain] || domain.split('.')[0].toUpperCase();
 
   try {
     const { data } = await axios.get(`${MAYA_API}/${rollNumber}`, {
