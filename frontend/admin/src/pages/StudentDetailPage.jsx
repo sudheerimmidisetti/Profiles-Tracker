@@ -255,7 +255,8 @@ function PlatformProfileCard({ email, platform, handles }) {
               </thead>
               <tbody>
                 {contests.slice(0, 15).map((c, i) => {
-                  const change = c.ratingChange ?? c.rating_change ?? ((c.ratingAfterContest || c.new_rating) - (c.ratingBeforeContest || c.old_rating)) || 0
+                  const rawChange = (c.ratingAfterContest || c.new_rating || 0) - (c.ratingBeforeContest || c.old_rating || 0)
+                  const change = c.ratingChange ?? c.rating_change ?? rawChange
                   return (
                     <tr key={i}>
                       <td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
