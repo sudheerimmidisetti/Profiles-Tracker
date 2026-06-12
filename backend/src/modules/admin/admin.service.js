@@ -1,5 +1,7 @@
 // src/modules/admin/admin.service.js
-const { query } = require('../../config/db');
+const { query }       = require('../../config/db');
+const { syncStudent } = require('../../jobs/syncProfiles.job');
+const logger          = require('../../utils/logger');
 
 /**
  * List all students with their verification + blocklist status
@@ -200,4 +202,87 @@ async function unblockStudent(email) {
   return res.rows[0];
 }
 
-module.exports = { listStudents, getStudent, getOverview, blockStudent, unblockStudent };
+/**
+ * Update a student's handle for one platform, then re-sync that student.
+ * Validates that the new username is not already claimed by another student.
+ */
+const VALID_PLATFORMS = ['leetcode', 'codeforces', 'codechef', 'hackerrank'];
+async function updateHandle(email, platform, username) {
+  if (!VALID_PLATFORMS.includes(platform)) {
+    const err = new Error(`Invalid platform. Choose: ${VALID_PLATFORMS.join(', ')}`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // Check no other student already claims this username on this platform
+  const conflict = await query(
+    `SELECT student_email FROM platform_profiles
+     WHERE platform_name = $1 AND LOWER(username) = LOWER($2) AND student_email != $3`,
+    [platform, username, email]
+  );
+  if (conflict.rows.length) {
+    const err = new Error(
+      `Handle "${username}" on ${platform} is already linked to ${conflict.rows[0].student_email}`
+    );
+    err.statusCode = 409;
+    throw err;
+  }
+
+  // Upsert the handle
+  await query(
+    `INSERT INTO platform_profiles (student_email, platform_name, username)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (student_email, platform_name) DO UPDATE SET username = EXCLUDED.username`,
+    [email, platform, username]
+  );
+
+  logger.info(`[Admin] Updated ${email} ${platform} handle → "${username}" — queuing re-sync`);
+
+  // Fetch all handles for this student so syncStudent gets the full picture
+  const ppRes = await query(
+    `SELECT platform_name, username FROM platform_profiles WHERE student_email = $1`,
+    [email]
+  );
+  const handles = {};
+  for (const r of ppRes.rows) handles[r.platform_name] = r.username;
+
+  // Fire-and-forget re-sync
+  setImmediate(() => {
+    syncStudent(email, handles)
+      .then(() => logger.info(`[Admin] Re-sync complete for ${email}`))
+      .catch(e  => logger.warn(`[Admin] Re-sync error for ${email}: ${e.message}`));
+  });
+
+  return { email, platform, username, syncing: true };
+}
+
+/**
+ * Force an immediate re-sync for a single student using their current handles.
+ */
+async function syncStudentNow(email) {
+  const ppRes = await query(
+    `SELECT platform_name, username FROM platform_profiles WHERE student_email = $1`,
+    [email]
+  );
+  if (!ppRes.rows.length) {
+    const err = new Error('No platform profiles found for this student');
+    err.statusCode = 404;
+    throw err;
+  }
+  const handles = {};
+  for (const r of ppRes.rows) handles[r.platform_name] = r.username;
+
+  setImmediate(() => {
+    syncStudent(email, handles)
+      .then(() => logger.info(`[Admin] Re-sync complete for ${email}`))
+      .catch(e  => logger.warn(`[Admin] Re-sync error for ${email}: ${e.message}`));
+  });
+
+  return { email, handles, syncing: true };
+}
+
+module.exports = {
+  listStudents, getStudent, getOverview,
+  blockStudent, unblockStudent,
+  updateHandle, syncStudentNow,
+};

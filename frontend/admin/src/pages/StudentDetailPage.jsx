@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { adminAPI, analyticsAPI } from '../api/api'
 import AdminHeader from '../components/AdminHeader'
 import { ArrowLeft, ShieldOff, ShieldCheck, AlertCircle,
-         Trophy, Star, Zap, Code, ExternalLink } from 'lucide-react'
+         Trophy, Star, Zap, Code, ExternalLink, RefreshCw, Pencil } from 'lucide-react'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis,
   Tooltip, CartesianGrid
@@ -127,9 +127,14 @@ export default function StudentDetailPage() {
   const [loading,   setLoading]   = useState(true)
   const [student,   setStudent]   = useState(null)
   const [platforms, setPlatforms] = useState({})
-  const [snapshots, setSnapshots] = useState(null)
-  const [blocking,  setBlocking]  = useState(false)
-  const [error,     setError]     = useState('')
+  const [snapshots,   setSnapshots]  = useState(null)
+  const [blocking,    setBlocking]   = useState(false)
+  const [syncing,     setSyncing]    = useState(false)
+  const [syncMsg,     setSyncMsg]    = useState('')
+  const [editHandle,  setEditHandle] = useState(null)  // { platform, username }
+  const [editSaving,  setEditSaving] = useState(false)
+  const [editError,   setEditError]  = useState('')
+  const [error,       setError]      = useState('')
 
   useEffect(() => {
     setLoading(true)
@@ -162,11 +167,82 @@ export default function StudentDetailPage() {
     } finally { setBlocking(false) }
   }
 
+  const handleResync = async () => {
+    setSyncing(true); setSyncMsg('')
+    try {
+      await adminAPI.syncStudent(decodeURIComponent(email))
+      setSyncMsg('Re-sync started! Data will update in ~30s.')
+      setTimeout(() => setSyncMsg(''), 8000)
+    } catch (e) {
+      setSyncMsg(e.response?.data?.message || 'Sync failed')
+    } finally { setSyncing(false) }
+  }
+
+  const openEditHandle = (platform, username) => {
+    setEditHandle({ platform, username: username || '' })
+    setEditError('')
+  }
+
+  const saveEditHandle = async () => {
+    if (!editHandle?.username?.trim()) { setEditError('Username cannot be empty'); return }
+    setEditSaving(true); setEditError('')
+    try {
+      await adminAPI.updateHandle(decodeURIComponent(email), editHandle.platform, editHandle.username.trim())
+      // Optimistically update local state
+      setPlatforms(prev => ({
+        ...prev,
+        [editHandle.platform]: { ...(prev[editHandle.platform] || {}), username: editHandle.username.trim() }
+      }))
+      setEditHandle(null)
+      setSyncMsg(`Handle updated! Re-sync started in background.`)
+      setTimeout(() => setSyncMsg(''), 8000)
+    } catch (e) {
+      setEditError(e.response?.data?.message || 'Failed to update handle')
+    } finally { setEditSaving(false) }
+  }
+
   const initials = student?.full_name
     ?.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?'
 
   return (
     <>
+      {/* Edit Handle Modal */}
+      {editHandle && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'oklch(0 0 0 / 0.7)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
+        }} onClick={() => setEditHandle(null)}>
+          <div style={{
+            background: 'var(--card)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-lg)', padding: '28px', width: 380, maxWidth: '90vw'
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontWeight: 700, marginBottom: 16, fontSize: '1rem' }}>
+              Edit {PLATFORM_LABELS[editHandle.platform]} handle
+            </h3>
+            <p style={{ fontSize: '0.78rem', color: 'var(--fg-muted)', marginBottom: 14 }}>
+              The new handle will be saved and a re-sync will start immediately.
+            </p>
+            <input
+              className="form-input"
+              value={editHandle.username}
+              onChange={e => setEditHandle(h => ({ ...h, username: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && saveEditHandle()}
+              placeholder={`${PLATFORM_LABELS[editHandle.platform]} username`}
+              autoFocus
+            />
+            {editError && (
+              <p style={{ fontSize: '0.75rem', color: 'var(--danger)', marginTop: 8 }}>{editError}</p>
+            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditHandle(null)}>Cancel</button>
+              <button className="btn btn-primary btn-sm" onClick={saveEditHandle} disabled={editSaving}>
+                {editSaving ? 'Saving…' : 'Save & Sync'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <AdminHeader title="Student Profile" breadcrumb="Students" />
       <div className="page">
         <button
@@ -176,6 +252,16 @@ export default function StudentDetailPage() {
         >
           <ArrowLeft size={14} /> Back to Students
         </button>
+
+        {syncMsg && (
+          <div style={{
+            background: 'var(--success-bg)', border: '1px solid var(--success-border)',
+            borderRadius: 'var(--radius-sm)', padding: '10px 14px',
+            fontSize: '0.82rem', color: 'var(--success)'
+          }}>
+            ✓ {syncMsg}
+          </div>
+        )}
 
         {loading ? (
           <div className="loading-center"><div className="spinner" /> Loading profile…</div>
@@ -206,13 +292,22 @@ export default function StudentDetailPage() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+                  <button
+                    className="btn btn-sm"
+                    onClick={handleResync}
+                    disabled={syncing}
+                    style={{ background: 'var(--muted)', color: 'var(--fg)', border: '1px solid var(--border)' }}
+                  >
+                    <RefreshCw size={13} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
+                    {syncing ? 'Syncing…' : 'Re-sync'}
+                  </button>
                   {student?.is_blocklisted ? (
                     <button className="btn btn-success" onClick={handleUnblock} disabled={blocking}>
                       <ShieldCheck size={14} /> Unblock
                     </button>
                   ) : (
                     <button className="btn btn-danger" onClick={handleBlock} disabled={blocking}>
-                      <ShieldOff size={14} /> Block from Leaderboard
+                      <ShieldOff size={14} /> Block
                     </button>
                   )}
                   <p style={{ fontSize: '0.72rem', color: 'var(--fg-subtle)' }}>
@@ -235,17 +330,27 @@ export default function StudentDetailPage() {
                         <p style={{ fontSize: '0.7rem', color: 'var(--fg-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                           {PLATFORM_LABELS[p]}
                         </p>
-                        {d?.username && (
-                          <a
-                            href={PLATFORM_URLS[p](d.username)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{ color: 'var(--fg-muted)' }}
-                            title={`View @${d.username}`}
+                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                          <button
+                            className="icon-btn"
+                            style={{ width: 24, height: 24 }}
+                            onClick={() => openEditHandle(p, d?.username)}
+                            title={`Edit ${PLATFORM_LABELS[p]} handle`}
                           >
-                            <ExternalLink size={12} />
-                          </a>
-                        )}
+                            <Pencil size={11} />
+                          </button>
+                          {d?.username && (
+                            <a
+                              href={PLATFORM_URLS[p](d.username)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ color: 'var(--fg-muted)', display: 'flex', alignItems: 'center' }}
+                              title={`View @${d.username}`}
+                            >
+                              <ExternalLink size={11} />
+                            </a>
+                          )}
+                        </div>
                       </div>
                       {d ? (
                         <>

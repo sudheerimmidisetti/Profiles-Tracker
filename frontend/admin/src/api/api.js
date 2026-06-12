@@ -25,12 +25,14 @@ api.interceptors.response.use(
 
 // ── Admin API ─────────────────────────────────────────────────────────────────
 export const adminAPI = {
-  overview:     ()            => api.get('/api/admin/overview'),
-  listStudents: (params)      => api.get('/api/admin/students', { params }),
-  getStudent:   (email)       => api.get(`/api/admin/students/${encodeURIComponent(email)}`),
-  block:        (email)       => api.put(`/api/admin/blocklist/${encodeURIComponent(email)}`),
-  unblock:      (email)       => api.put(`/api/admin/unblocklist/${encodeURIComponent(email)}`),
-  triggerSync:  ()            => api.post('/api/admin/sync'),
+  overview:       ()                           => api.get('/api/admin/overview'),
+  listStudents:   (params)                     => api.get('/api/admin/students', { params }),
+  getStudent:     (email)                      => api.get(`/api/admin/students/${encodeURIComponent(email)}`),
+  block:          (email)                      => api.put(`/api/admin/blocklist/${encodeURIComponent(email)}`),
+  unblock:        (email)                      => api.put(`/api/admin/unblocklist/${encodeURIComponent(email)}`),
+  triggerSync:    ()                           => api.post('/api/admin/sync'),
+  updateHandle:   (email, platform, username)  => api.put(`/api/admin/students/${encodeURIComponent(email)}/handle`, { platform, username }),
+  syncStudent:    (email)                      => api.post(`/api/admin/students/${encodeURIComponent(email)}/sync`),
 }
 
 // ── Leaderboard ───────────────────────────────────────────────────────────────
