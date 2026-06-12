@@ -80,9 +80,9 @@ function detectDivision(name = '', ratingBefore = 0) {
   if (m) return `Div ${m[1]}`
   // 2. Rating-band fallback
   const r = Number(ratingBefore) || 0
-  if (r >= 2500) return 'Div 1'
-  if (r >= 2000) return 'Div 2'
-  if (r >= 1600) return 'Div 3'
+  if (r >= 2000) return 'Div 1'
+  if (r >= 1600) return 'Div 2'
+  if (r >= 1400) return 'Div 3'
   if (r >= 0) return 'Div 4'
   return null
 }
