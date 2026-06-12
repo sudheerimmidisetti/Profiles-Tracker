@@ -1,20 +1,42 @@
 // src/modules/admin/admin.routes.js
-const { Router } = require('express');
-const adminAuth = require('../../middleware/adminAuth');
-const ctrl = require('./admin.controller');
+'use strict';
+
+const { Router }  = require('express');
+const adminAuth   = require('../../middleware/adminAuth');
+const ctrl        = require('./admin.controller');
+const authCtrl    = require('./adminAuth.controller');
 
 const router = Router();
 
-// All admin routes require X-Admin-Secret header
+// ── PUBLIC: OTP Auth (no auth required) ─────────────────────────────────────
+router.post('/auth/request-otp', authCtrl.requestOtp);
+router.post('/auth/verify-otp',  authCtrl.verifyOtp);
+
+// ── All remaining routes require admin auth ──────────────────────────────────
 router.use(adminAuth);
 
-router.get('/students',              ctrl.listStudents);    // List all with optional filters
-router.get('/students/:email',       ctrl.getStudent);      // Single student detail + platform stats
-router.put('/students/:email/handle', ctrl.updateHandle);   // Fix a wrong platform handle + re-sync
-router.post('/students/:email/sync', ctrl.syncStudentNow);  // Re-sync a single student
-router.put('/blocklist/:email',      ctrl.blockStudent);    // Block a student
-router.put('/unblocklist/:email',    ctrl.unblockStudent);  // Reinstate a student
-router.post('/sync',                 ctrl.triggerSync);     // POST manually trigger full data sync
-router.get('/overview',              ctrl.getOverview);     // Dashboard KPIs + platform breakdown
+// Admin user management
+router.get   ('/auth/admins',        authCtrl.listAdmins);
+router.post  ('/auth/add-admin',     authCtrl.addAdmin);
+router.delete('/auth/remove-admin',  authCtrl.removeAdmin);
+
+// Students
+router.get  ('/students',              ctrl.listStudents);
+router.get  ('/students/:email',       ctrl.getStudent);
+router.put  ('/students/:email/handle', ctrl.updateHandle);
+router.post ('/students/:email/sync',  ctrl.syncStudentNow);
+
+// Platform detail for admin (same as analytics but no JWT needed)
+router.get  ('/students/:email/platform/:platform', ctrl.getPlatformDetail);
+
+// Blocklist
+router.put  ('/blocklist/:email',    ctrl.blockStudent);
+router.put  ('/unblocklist/:email',  ctrl.unblockStudent);
+
+// Sync
+router.post ('/sync',                ctrl.triggerSync);
+
+// Overview
+router.get  ('/overview',            ctrl.getOverview);
 
 module.exports = router;

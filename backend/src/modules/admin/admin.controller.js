@@ -1,17 +1,20 @@
 // src/modules/admin/admin.controller.js
-const adminService    = require('./admin.service');
+const adminService        = require('./admin.service');
+const analyticsService    = require('../analytics/analytics.service');
 const { syncAllStudents } = require('../../jobs/syncProfiles.job');
-const logger          = require('../../utils/logger');
+const logger              = require('../../utils/logger');
 
-// GET /api/admin/students?page=1&limit=50&verified=true&blocklisted=false&search=
+// GET /api/admin/students?page=1&limit=50&verified=true&blocklisted=false&search=&branch=CSE
 async function listStudents(req, res, next) {
   try {
     const page        = Math.max(1, parseInt(req.query.page  || '1',  10));
     const limit       = Math.min(200, parseInt(req.query.limit || '50', 10));
     const verified    = req.query.verified    !== undefined ? req.query.verified    === 'true' : undefined;
     const blocklisted = req.query.blocklisted !== undefined ? req.query.blocklisted === 'true' : undefined;
-    const search      = req.query.search || undefined;
-    const result = await adminService.listStudents({ page, limit, verified, blocklisted, search });
+    const search      = req.query.search  || undefined;
+    const branch      = req.query.branch  || undefined;
+    const platform    = req.query.platform || undefined; // 'leetcode'|'codeforces'|'codechef'|'hackerrank'
+    const result = await adminService.listStudents({ page, limit, verified, blocklisted, search, branch, platform });
     res.status(200).json({ success: true, ...result });
   } catch (err) { next(err); }
 }
@@ -81,9 +84,19 @@ async function triggerSync(req, res) {
   res.status(202).json({ success: true, message: 'Sync started in background. Check server logs for progress.' });
 }
 
+// GET /api/admin/students/:email/platform/:platform
+async function getPlatformDetail(req, res, next) {
+  try {
+    const email    = decodeURIComponent(req.params.email);
+    const platform = req.params.platform.toLowerCase();
+    const data     = await analyticsService.getPlatformDetail(email, platform);
+    res.status(200).json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
 module.exports = {
   listStudents, getStudent, getOverview,
   blockStudent, unblockStudent,
   updateHandle, syncStudentNow,
-  triggerSync,
+  triggerSync, getPlatformDetail,
 };

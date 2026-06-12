@@ -6,7 +6,7 @@ const logger          = require('../../utils/logger');
 /**
  * List all students with their verification + blocklist status
  */
-async function listStudents({ page = 1, limit = 50, verified, blocklisted, search }) {
+async function listStudents({ page = 1, limit = 50, verified, blocklisted, search, branch, platform }) {
   const offset = (page - 1) * limit;
   const conditions = ['1=1'];
   const params     = [];
@@ -30,21 +30,34 @@ async function listStudents({ page = 1, limit = 50, verified, blocklisted, searc
     params.push(`%${search.toLowerCase()}%`);
     idx++;
   }
+  if (branch) {
+    conditions.push(`LOWER(branch) = $${idx++}`);
+    params.push(branch.toLowerCase());
+  }
 
   const where = conditions.join(' AND ');
+
+  // Build platform join if filtering by platform (student has a linked handle)
+  let platformJoin = '';
+  if (platform) {
+    platformJoin = `LEFT JOIN platform_profiles pp_filter
+      ON pp_filter.student_email = email AND pp_filter.platform_name = '${platform.toLowerCase()}'`;
+    conditions.push(`pp_filter.username IS NOT NULL`);
+  }
 
   const res = await query(
     `SELECT email, full_name, roll_number, college, branch, phone,
             passout_year, is_verified, is_blocklisted, created_at
      FROM students
-     WHERE ${where}
+     ${platformJoin}
+     WHERE ${conditions.join(' AND ')}
      ORDER BY created_at DESC
      LIMIT $${idx++} OFFSET $${idx++}`,
     [...params, limit, offset]
   );
 
   const countRes = await query(
-    `SELECT COUNT(*) FROM students WHERE ${where}`,
+    `SELECT COUNT(*) FROM students ${platformJoin} WHERE ${conditions.join(' AND ')}`,
     params
   );
 
