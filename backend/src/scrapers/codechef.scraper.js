@@ -49,11 +49,15 @@ function detectDivision(name = '', ratingBefore = 0) {
   // 1. Try name-based match first (e.g. "Starters 130 Div 2")
   const m = name.match(/div(?:ision)?\s*(\d)/i);
   if (m) return `Div ${m[1]}`;
-  // 2. Fallback: infer from rating (CodeChef Starter divisions by rating)
+  // 2. Fallback: infer from rating — CodeChef's actual Starters division bands:
+  //    Div 1: 2000+   (5★ and above)
+  //    Div 2: 1600–1999 (4★)
+  //    Div 3: 1400–1599 (3★)   ← was wrong (had ≥1600), fixed to ≥1400
+  //    Div 4: below 1400 (1★–2★)
   if (ratingBefore > 0) {
-    if (ratingBefore >= 2500) return 'Div 1';
-    if (ratingBefore >= 2000) return 'Div 2';
-    if (ratingBefore >= 1600) return 'Div 3';
+    if (ratingBefore >= 2000) return 'Div 1';
+    if (ratingBefore >= 1600) return 'Div 2';
+    if (ratingBefore >= 1400) return 'Div 3';
     return 'Div 4';
   }
   return null;
