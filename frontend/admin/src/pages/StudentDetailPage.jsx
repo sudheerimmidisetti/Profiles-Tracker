@@ -182,31 +182,32 @@ function PlatformProfileCard({ email, platform, handles }) {
       {/* Stats grid */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
         {platform === 'leetcode' && <>
-          <KPI label="Rating"   value={fmtNum(base.ranking || detail.rating)}  color={colorOf(platform)} />
-          <KPI label="Solved"   value={fmtNum(detail.totalSolved || detail.total_solved)}  sub={`E:${detail.easySolved||0} M:${detail.mediumSolved||0} H:${detail.hardSolved||0}`} />
-          <KPI label="Acceptance" value={detail.acceptanceRate ? `${(detail.acceptanceRate*100).toFixed(1)}%` : '—'} />
-          <KPI label="Streak"   value={detail.currentStreak ? `${detail.currentStreak}d` : '—'} sub="current" />
-          <KPI label="Contests" value={fmtNum(detail.contestCount || data.contests?.length)} />
-          <KPI label="Global Rank" value={base.globalRank ? `#${fmtNum(base.globalRank)}` : '—'} />
+          <KPI label="Rating"     value={fmtNum(base.current_rating || detail.contest_rating || detail.rating)} color={colorOf(platform)} />
+          <KPI label="Solved"     value={fmtNum(detail.total_solved || detail.totalSolved)}
+            sub={`E:${detail.easy_solved||detail.easySolved||0} M:${detail.medium_solved||detail.mediumSolved||0} H:${detail.hard_solved||detail.hardSolved||0}`} />
+          <KPI label="Acceptance" value={detail.acceptance_rate ? `${parseFloat(detail.acceptance_rate).toFixed(1)}%` : (detail.acceptanceRate ? `${(detail.acceptanceRate*100).toFixed(1)}%` : '—')} />
+          <KPI label="Streak"     value={detail.streak ? `${detail.streak}d` : (detail.currentStreak ? `${detail.currentStreak}d` : '—')} sub="current" />
+          <KPI label="Contests"   value={fmtNum(detail.attended_contests_count || detail.contestCount || contests.length)} />
+          <KPI label="Global Rank" value={base.global_rank ? `#${fmtNum(base.global_rank)}` : (detail.global_ranking ? `#${fmtNum(detail.global_ranking)}` : '—')} />
         </>}
         {platform === 'codeforces' && <>
-          <KPI label="Rating"   value={fmtNum(detail.currentRating || base.current_rating)} color={colorOf(platform)} />
-          <KPI label="Max Rating" value={fmtNum(detail.maxRating || base.max_rating)} />
-          <KPI label="Rank"     value={detail.rank || base.rank || '—'} />
-          <KPI label="Contests" value={fmtNum(contests.length)} />
-          <KPI label="Problems" value={fmtNum(detail.totalSolved || base.total_solved)} />
+          <KPI label="Rating"     value={fmtNum(base.current_rating || detail.currentRating)} color={colorOf(platform)} />
+          <KPI label="Max Rating" value={fmtNum(detail.maxRating || detail.max_rating)} />
+          <KPI label="Rank"       value={detail.rank || detail.current_rank || base.rank || '—'} />
+          <KPI label="Contests"   value={fmtNum(contests.length)} />
+          <KPI label="Problems"   value={fmtNum(detail.total_solved || detail.totalSolved || base.total_solved)} />
         </>}
         {platform === 'codechef' && <>
-          <KPI label="Rating"   value={fmtNum(detail.currentRating || base.current_rating)} color={colorOf(platform)} />
-          <KPI label="Stars"    value={detail.stars || base.stars || '—'} />
-          <KPI label="Global Rank" value={detail.globalRank ? `#${fmtNum(detail.globalRank)}` : '—'} />
-          <KPI label="Contests" value={fmtNum(contests.length)} />
+          <KPI label="Rating"     value={fmtNum(base.current_rating || detail.currentRating)} color={colorOf(platform)} />
+          <KPI label="Stars"      value={detail.stars || detail.star || base.stars || '—'} />
+          <KPI label="Global Rank" value={base.global_rank ? `#${fmtNum(base.global_rank)}` : '—'} />
+          <KPI label="Contests"   value={fmtNum(contests.length)} />
         </>}
         {platform === 'hackerrank' && <>
-          <KPI label="PS Stars"     value={`${detail.problemSolvingStars ?? 0}★`}  color={colorOf(platform)} />
-          <KPI label="SQL Stars"    value={`${detail.sqlStars ?? 0}★`} />
-          <KPI label="Java Stars"   value={`${detail.javaStars ?? 0}★`} />
-          <KPI label="Python Stars" value={`${detail.pythonStars ?? 0}★`} />
+          <KPI label="PS Stars"     value={`${detail.problem_solving_stars ?? detail.problemSolvingStars ?? 0}★`} color={colorOf(platform)} />
+          <KPI label="SQL Stars"    value={`${detail.sql_stars ?? detail.sqlStars ?? 0}★`} />
+          <KPI label="Java Stars"   value={`${detail.java_stars ?? detail.javaStars ?? 0}★`} />
+          <KPI label="Python Stars" value={`${detail.python_stars ?? detail.pythonStars ?? 0}★`} />
         </>}
       </div>
 
@@ -283,16 +284,16 @@ function PlatformProfileCard({ email, platform, handles }) {
       )}
 
       {/* LC difficulty breakdown */}
-      {platform === 'leetcode' && detail.totalSolved > 0 && (
+      {platform === 'leetcode' && (detail.total_solved || detail.totalSolved) > 0 && (
         <div style={{ marginTop: 16 }}>
           <div style={{ fontSize: '0.78rem', color: 'var(--fg-subtle)', fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             Difficulty Breakdown
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
             {[
-              { label: 'Easy',   count: detail.easySolved   || 0, color: '#00b8a9' },
-              { label: 'Medium', count: detail.mediumSolved || 0, color: '#ffc01e' },
-              { label: 'Hard',   count: detail.hardSolved   || 0, color: '#ef4743' },
+              { label: 'Easy',   count: detail.easy_solved   || detail.easySolved   || 0, color: '#00b8a9' },
+              { label: 'Medium', count: detail.medium_solved || detail.mediumSolved || 0, color: '#ffc01e' },
+              { label: 'Hard',   count: detail.hard_solved   || detail.hardSolved   || 0, color: '#ef4743' },
             ].map(({ label, count, color }) => (
               <div key={label} style={{ background: 'var(--muted)', borderRadius: 8, padding: '10px 14px', flex: 1, textAlign: 'center' }}>
                 <div style={{ color, fontWeight: 700, fontSize: '1.3rem' }}>{count}</div>
@@ -338,8 +339,13 @@ export default function StudentDetailPage() {
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const res = await adminAPI.getStudent(decodedEmail)
-      setStudent(res.data?.data ?? res.data)
+      const res  = await adminAPI.getStudent(decodedEmail)
+      // API returns { success, data: { student: {...}, platforms: { leetcode:{}, ... } } }
+      const body = res.data?.data ?? res.data
+      const studentData = body?.student ?? body
+      const platformsObj = body?.platforms ?? {}
+      // Attach platforms object onto student for easy access
+      setStudent({ ...studentData, _platforms: platformsObj })
     } catch (e) {
       setError(e.response?.data?.message || 'Failed to load student')
     } finally {
@@ -395,11 +401,13 @@ export default function StudentDetailPage() {
     </>
   )
 
+  // platforms is an object keyed by platform name: { leetcode: {...}, codechef: {...}, ... }
+  const platformsObj = student._platforms || {}
   const handles = {
-    leetcode:   student.platforms?.find(p => p.platform_name === 'leetcode')?.username,
-    codeforces: student.platforms?.find(p => p.platform_name === 'codeforces')?.username,
-    codechef:   student.platforms?.find(p => p.platform_name === 'codechef')?.username,
-    hackerrank: student.platforms?.find(p => p.platform_name === 'hackerrank')?.username,
+    leetcode:   platformsObj.leetcode?.username,
+    codeforces: platformsObj.codeforces?.username,
+    codechef:   platformsObj.codechef?.username,
+    hackerrank: platformsObj.hackerrank?.username,
   }
 
   return (
@@ -500,7 +508,7 @@ export default function StudentDetailPage() {
 
           {/* Platform rating KPIs */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-            {(student.platforms || []).map(pp => {
+            {Object.values(platformsObj).map(pp => {
               const meta = PLATFORM_META[pp.platform_name]
               if (!meta) return null
               return (
