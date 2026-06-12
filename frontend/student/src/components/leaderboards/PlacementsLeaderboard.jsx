@@ -86,11 +86,12 @@ function Tooltip({ data }) {
 
 function PlacementRow({ row, rank }) {
   const [tip, setTip] = useState(false)
-  const lc = row.lc?.score ?? 0
-  const cc = row.cc?.score ?? 0
-  const cf = row.cf?.score ?? 0
-  const hr = row.hr?.score ?? 0
-  const total = row.total ?? 0
+  const lc = row.lc?.score ?? row.lc_score ?? 0
+  const cc = row.cc?.score ?? row.cc_score ?? 0
+  const cf = row.cf?.score ?? row.cf_score ?? 0
+  const hr = row.hr?.score ?? row.hr_score ?? 0
+  // API returns final_score, not 'total'
+  const total = row.final_score ?? row.total_score ?? row.total ?? 0
 
   return (
     <div
@@ -223,7 +224,7 @@ export default function PlacementsLeaderboard() {
         ) : (
           <div className="lb-rows-list" style={{ display: 'flex', flexDirection: 'column' }}>
             {rows.map((row, i) => (
-              <PlacementRow key={row.email} row={row} rank={(page - 1) * 50 + i + 1} />
+              <PlacementRow key={row.student_email || row.email} row={row} rank={(page - 1) * 50 + i + 1} />
             ))}
           </div>
         )}

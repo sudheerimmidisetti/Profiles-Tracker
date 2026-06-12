@@ -32,9 +32,12 @@ function ScoreBar({ value, max = 100, cls = 'all' }) {
 
 function MonthRow({ row, rank }) {
   const [tip, setTip] = useState(false)
-  const contest  = row.contestPts  ?? 0
-  const practice = row.practicePts ?? 0
-  const total    = row.monthlyScore ?? 0
+  // API returns snake_case: contest_score, practice_score, final_score, active_weeks, month_udg
+  const contest  = row.contest_score  ?? row.contestPts  ?? 0
+  const practice = row.practice_score ?? row.practicePts ?? 0
+  const total    = row.final_score    ?? row.monthlyScore ?? 0
+  const activeWeeks = row.active_weeks ?? row.activeWeeks ?? 0
+  const monthUdg    = row.month_udg   ?? row.monthUdg    ?? 0
 
   return (
     <div
@@ -82,7 +85,7 @@ function MonthRow({ row, rank }) {
         <div style={{ textAlign: 'center', width: 40 }}>
           <div style={{ fontSize: '0.62rem', color: 'var(--fg-subtle)', marginBottom: 2, fontWeight: 600 }}>WEEKS</div>
           <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--fg-muted)', lineHeight: 1 }}>
-            {row.activeWeeks ?? 0}
+            {activeWeeks}
           </div>
         </div>
       </div>
@@ -114,7 +117,7 @@ function MonthRow({ row, rank }) {
           </div>
           {row.breakdown?.W && <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
             <span>Weeks (drop-one of {row.breakdown.W})</span>
-            <span>{row.activeWeeks} active</span>
+            <span>{activeWeeks} active</span>
           </div>}
 
           <div className="lb-tip-divider" />
@@ -125,7 +128,7 @@ function MonthRow({ row, rank }) {
           </div>
           <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
             <span>UDG points</span>
-            <span>{(row.monthUdg ?? 0).toFixed(1)}</span>
+            <span>{monthUdg.toFixed(1)}</span>
           </div>
 
           <div className="lb-tip-divider" />
@@ -231,7 +234,7 @@ export default function MonthlyLeaderboard() {
         ) : (
           <div className="lb-rows-list" style={{ display: 'flex', flexDirection: 'column' }}>
             {rows.map((row, i) => (
-              <MonthRow key={row.email} row={row} rank={(page - 1) * 50 + i + 1} />
+              <MonthRow key={row.student_email || row.email} row={row} rank={(page - 1) * 50 + i + 1} />
             ))}
           </div>
         )}

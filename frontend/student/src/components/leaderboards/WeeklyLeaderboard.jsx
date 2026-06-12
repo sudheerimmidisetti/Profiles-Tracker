@@ -51,7 +51,12 @@ function PlatScore({ val, color }) {
 
 function WeekRow({ row, rank }) {
   const [tip, setTip] = useState(false)
-  const composite = row.composite ?? 0
+  // API returns snake_case: lc_score, cc_score, cf_score, final_score, platforms_attended
+  const lcScore  = row.lc_score  ?? row.lcScore  ?? 0
+  const ccScore  = row.cc_score  ?? row.ccScore  ?? 0
+  const cfScore  = row.cf_score  ?? row.cfScore  ?? 0
+  const composite = row.final_score ?? row.total_score ?? row.composite ?? 0
+  const plats = row.platforms_attended ?? row.platformsAttended ?? 0
 
   return (
     <div
@@ -81,9 +86,9 @@ function WeekRow({ row, rank }) {
 
       {/* Platform scores */}
       <div style={{ display: 'flex', gap: 0, alignItems: 'center' }}>
-        <PlatScore val={row.lcScore ?? 0} color="var(--lc)" />
-        <PlatScore val={row.ccScore ?? 0} color="var(--cc)" />
-        <PlatScore val={row.cfScore ?? 0} color="var(--cf)" />
+        <PlatScore val={lcScore} color="var(--lc)" />
+        <PlatScore val={ccScore} color="var(--cc)" />
+        <PlatScore val={cfScore} color="var(--cf)" />
       </div>
 
       {/* Divider */}
@@ -96,7 +101,7 @@ function WeekRow({ row, rank }) {
         <div style={{ marginTop: 3, textAlign: 'right' }}>
           {row.eligible
             ? <span className="badge badge-green" style={{ fontSize: '0.62rem', padding: '1px 5px' }}>Award</span>
-            : <span style={{ fontSize: '0.62rem', color: 'var(--fg-subtle)' }}>{row.platformsAttended}/3</span>
+            : <span style={{ fontSize: '0.62rem', color: 'var(--fg-subtle)' }}>{plats}/3</span>
           }
         </div>
       </div>
@@ -107,26 +112,26 @@ function WeekRow({ row, rank }) {
           <div className="lb-tip-title">Weekly breakdown</div>
           <div className="lb-tip-row">
             <span>LeetCode <span style={{ color: 'var(--fg-subtle)', fontSize: '0.68rem' }}>×0.35</span></span>
-            <span style={{ color: (row.lcScore ?? 0) > 0 ? 'var(--lc)' : 'var(--fg-subtle)' }}>
-              {(row.lcScore ?? 0) > 0 ? (row.lcScore).toFixed(2) : 'DNS'}
+            <span style={{ color: lcScore > 0 ? 'var(--lc)' : 'var(--fg-subtle)' }}>
+              {lcScore > 0 ? lcScore.toFixed(2) : 'DNS'}
             </span>
           </div>
           <div className="lb-tip-row">
             <span>CodeChef <span style={{ color: 'var(--fg-subtle)', fontSize: '0.68rem' }}>×0.30</span></span>
-            <span style={{ color: (row.ccScore ?? 0) > 0 ? 'var(--cc)' : 'var(--fg-subtle)' }}>
-              {(row.ccScore ?? 0) > 0 ? (row.ccScore).toFixed(2) : 'DNS'}
+            <span style={{ color: ccScore > 0 ? 'var(--cc)' : 'var(--fg-subtle)' }}>
+              {ccScore > 0 ? ccScore.toFixed(2) : 'DNS'}
             </span>
           </div>
           <div className="lb-tip-row">
             <span>Codeforces <span style={{ color: 'var(--fg-subtle)', fontSize: '0.68rem' }}>×0.35</span></span>
-            <span style={{ color: (row.cfScore ?? 0) > 0 ? 'var(--cf)' : 'var(--fg-subtle)' }}>
-              {(row.cfScore ?? 0) > 0 ? (row.cfScore).toFixed(2) : 'DNS'}
+            <span style={{ color: cfScore > 0 ? 'var(--cf)' : 'var(--fg-subtle)' }}>
+              {cfScore > 0 ? cfScore.toFixed(2) : 'DNS'}
             </span>
           </div>
           <div className="lb-tip-divider" />
           <div className="lb-tip-row">
             <span>Platforms</span>
-            <span>{row.platformsAttended} / 3</span>
+            <span>{plats} / 3</span>
           </div>
           <div className="lb-tip-row">
             <span>Eligible</span>
@@ -234,7 +239,7 @@ export default function WeeklyLeaderboard() {
         ) : (
           <div className="lb-rows-list" style={{ display: 'flex', flexDirection: 'column' }}>
             {rows.map((row, i) => (
-              <WeekRow key={row.email} row={row} rank={(page - 1) * 50 + i + 1} />
+              <WeekRow key={row.student_email || row.email} row={row} rank={(page - 1) * 50 + i + 1} />
             ))}
           </div>
         )}
