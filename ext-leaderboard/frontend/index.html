@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>External Placements Leaderboard — DR Batch 7.0</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+/* ─── Reset & Base ───────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:         #0d1117;
+  --surface:    #161b22;
+  --surface2:   #21262d;
+  --border:     #30363d;
+  --fg:         #e6edf3;
+  --fg-muted:   #8b949e;
+  --fg-subtle:  #6e7681;
+  --accent:     #238636;
+  --accent-glow:#2ea043;
+  --lc:         #f89f1b;
+  --cc:         #8b5e3c;
+  --hr:         #2ec866;
+  --danger:     #f85149;
+  --gold:       #ffd700;
+  --silver:     #c0c0c0;
+  --bronze:     #cd7f32;
+  --radius:     10px;
+  --shadow:     0 8px 32px rgba(0,0,0,.5);
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ─── Header ─────────────────────────────────────────────────────────────────── */
+.header {
+  background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 0 32px;
+  position: sticky; top: 0; z-index: 100;
+  backdrop-filter: blur(12px);
+}
+.header-inner {
+  display: flex; align-items: center; gap: 16px;
+  max-width: 1400px; margin: 0 auto; height: 60px;
+}
+.header-logo {
+  font-size: 1.1rem; font-weight: 800;
+  background: linear-gradient(90deg, #58a6ff, #bc8cff, #ff7b72);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.header-sub { font-size: 0.72rem; color: var(--fg-subtle); margin-top: -2px; }
+.header-spacer { flex: 1; }
+.header-progress {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.72rem; color: var(--fg-muted);
+  background: var(--surface2); border: 1px solid var(--border);
+  padding: 4px 12px; border-radius: 20px;
+}
+.progress-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-glow);
+  box-shadow: 0 0 6px var(--accent-glow); animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+/* ─── Main layout ────────────────────────────────────────────────────────────── */
+.main { max-width: 1400px; margin: 0 auto; padding: 24px 32px; }
+
+/* ─── Stats Bar ──────────────────────────────────────────────────────────────── */
+.stats-bar {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;
+}
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 4px;
+  transition: border-color .2s, transform .2s;
+}
+.stat-card:hover { border-color: #58a6ff44; transform: translateY(-1px); }
+.stat-label { font-size: 0.68rem; color: var(--fg-subtle); text-transform: uppercase; letter-spacing: .05em; }
+.stat-value { font-size: 1.5rem; font-weight: 700; }
+.stat-note  { font-size: 0.65rem; color: var(--fg-subtle); }
+
+/* ─── Toolbar ────────────────────────────────────────────────────────────────── */
+.toolbar {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;
+}
+.search-wrap {
+  flex: 1; min-width: 200px; position: relative;
+}
+.search-wrap svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--fg-muted); }
+.search-input {
+  width: 100%; background: var(--surface); border: 1px solid var(--border);
+  color: var(--fg); padding: 8px 12px 8px 34px; border-radius: 8px;
+  font-family: inherit; font-size: 0.82rem; outline: none;
+  transition: border-color .2s;
+}
+.search-input:focus { border-color: #58a6ff; }
+.search-input::placeholder { color: var(--fg-subtle); }
+
+.sort-sel {
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--fg); padding: 8px 12px; border-radius: 8px;
+  font-family: inherit; font-size: 0.82rem; outline: none; cursor: pointer;
+}
+
+.btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
+  font-family: inherit; font-size: 0.8rem; font-weight: 500;
+  cursor: pointer; transition: all .2s; white-space: nowrap;
+}
+.btn-export {
+  background: linear-gradient(135deg, #238636, #2ea043);
+  color: #fff; border-color: transparent;
+}
+.btn-export:hover { background: linear-gradient(135deg, #2ea043, #3fb950); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(46,160,67,.4); }
+.btn-ghost { background: var(--surface2); color: var(--fg); }
+.btn-ghost:hover { border-color: #58a6ff; }
+.btn:disabled { opacity: .5; cursor: not-allowed; transform: none !important; }
+
+/* ─── Table ──────────────────────────────────────────────────────────────────── */
+.table-wrap {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: auto;
+}
+table {
+  width: 100%; border-collapse: collapse;
+}
+thead th {
+  background: var(--surface2); padding: 10px 14px;
+  font-size: 0.7rem; font-weight: 600; color: var(--fg-muted);
+  text-transform: uppercase; letter-spacing: .05em;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer; white-space: nowrap; user-select: none;
+  transition: color .15s;
+}
+thead th:hover { color: var(--fg); }
+thead th.sorted { color: #58a6ff; }
+thead th .sort-arrow { margin-left: 4px; opacity: .6; }
+
+tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background .15s;
+}
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: rgba(255,255,255,.03); }
+
+td {
+  padding: 10px 14px; vertical-align: middle;
+}
+
+/* Rank medal */
+.rank-cell { font-weight: 700; font-size: 0.9rem; text-align: center; }
+.rank-1 { color: var(--gold); }
+.rank-2 { color: var(--silver); }
+.rank-3 { color: var(--bronze); }
+
+/* Score bars */
+.score-bar-wrap {
+  display: flex; align-items: center; gap: 8px; min-width: 110px;
+}
+.score-bar-bg {
+  flex: 1; height: 6px; background: var(--surface2);
+  border-radius: 3px; overflow: hidden;
+}
+.score-bar-fill {
+  height: 100%; border-radius: 3px;
+  transition: width .4s ease;
+}
+.score-num { font-size: 0.82rem; font-weight: 600; min-width: 36px; text-align: right; }
+
+/* Platform badges */
+.platform-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 12px;
+  font-size: 0.68rem; font-weight: 600; white-space: nowrap;
+}
+.badge-lc { background: rgba(248,159,27,.15); color: var(--lc); border: 1px solid rgba(248,159,27,.3); }
+.badge-cc { background: rgba(139,94,60,.15);  color: #c8956a; border: 1px solid rgba(139,94,60,.3); }
+.badge-hr { background: rgba(46,200,102,.15); color: var(--hr); border: 1px solid rgba(46,200,102,.3); }
+
+.student-id { font-size: 0.78rem; color: var(--fg-muted); font-family: monospace; }
+
+/* Breakdown popover trigger */
+.detail-btn {
+  background: none; border: 1px solid var(--border); color: var(--fg-subtle);
+  padding: 2px 8px; border-radius: 6px; font-size: 0.68rem;
+  cursor: pointer; transition: all .15s;
+}
+.detail-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+
+/* ─── Detail Drawer ──────────────────────────────────────────────────────────── */
+.drawer-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.7);
+  backdrop-filter: blur(4px); z-index: 200;
+  display: none; align-items: flex-end; justify-content: flex-end;
+}
+.drawer-overlay.open { display: flex; }
+
+.drawer {
+  background: var(--surface); border-left: 1px solid var(--border);
+  width: 420px; height: 100vh; overflow-y: auto;
+  padding: 24px; animation: slideIn .2s ease;
+}
+@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+.drawer-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 20px; padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.drawer-close {
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--fg); width: 28px; height: 28px; border-radius: 6px;
+  cursor: pointer; font-size: 1rem; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.drawer-close:hover { border-color: var(--danger); color: var(--danger); }
+
+.drawer-rank-badge {
+  display: inline-block; background: linear-gradient(135deg, #238636, #2ea043);
+  color: #fff; padding: 2px 10px; border-radius: 12px;
+  font-size: 0.72rem; font-weight: 700; margin-bottom: 6px;
+}
+.drawer-title { font-size: 1rem; font-weight: 700; }
+.drawer-id { font-size: 0.72rem; color: var(--fg-subtle); font-family: monospace; }
+
+.score-total-card {
+  background: linear-gradient(135deg, #0d2818, #163829);
+  border: 1px solid #238636; border-radius: var(--radius);
+  padding: 16px; margin-bottom: 16px; text-align: center;
+}
+.score-total-label { font-size: 0.7rem; color: #52aa6a; text-transform: uppercase; letter-spacing: .1em; }
+.score-total-value { font-size: 2.5rem; font-weight: 800; color: #3fb950; }
+.score-total-sub   { font-size: 0.7rem; color: #52aa6a; }
+
+.platform-section { margin-bottom: 14px; }
+.platform-section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; border-radius: 8px 8px 0 0;
+  border-bottom: none; font-weight: 600; font-size: 0.8rem;
+}
+.ps-lc { background: rgba(248,159,27,.1); color: var(--lc); border: 1px solid rgba(248,159,27,.25); }
+.ps-cc { background: rgba(139,94,60,.1);  color: #c8956a; border: 1px solid rgba(139,94,60,.25); }
+.ps-hr { background: rgba(46,200,102,.1); color: var(--hr); border: 1px solid rgba(46,200,102,.25); }
+
+.platform-section-body {
+  background: var(--surface2); border-radius: 0 0 8px 8px;
+  border: 1px solid var(--border); border-top: none; padding: 10px 12px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+}
+.detail-row { display: flex; flex-direction: column; gap: 1px; }
+.detail-key { font-size: 0.62rem; color: var(--fg-subtle); text-transform: uppercase; }
+.detail-val { font-size: 0.8rem; font-weight: 500; }
+
+.score-split { display: flex; gap: 8px; margin-top: 8px; }
+.score-split-item {
+  flex: 1; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 8px; text-align: center;
+}
+.score-split-label { font-size: 0.6rem; color: var(--fg-subtle); }
+.score-split-val   { font-size: 0.88rem; font-weight: 700; }
+
+/* ─── Empty / Loading states ─────────────────────────────────────────────────── */
+.empty-state {
+  padding: 60px; text-align: center; color: var(--fg-muted);
+}
+.empty-icon { font-size: 2.5rem; margin-bottom: 12px; }
+.loading-spinner {
+  display: inline-block; width: 20px; height: 20px;
+  border: 2px solid var(--border); border-top-color: #58a6ff;
+  border-radius: 50%; animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── Pagination ─────────────────────────────────────────────────────────────── */
+.pagination {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 14px; flex-wrap: wrap; gap: 8px;
+}
+.page-info { font-size: 0.75rem; color: var(--fg-subtle); }
+.page-btns { display: flex; gap: 6px; }
+.page-btn {
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--fg); padding: 5px 12px; border-radius: 6px;
+  font-family: inherit; font-size: 0.78rem; cursor: pointer;
+  transition: all .15s;
+}
+.page-btn:hover:not(:disabled) { border-color: #58a6ff; }
+.page-btn:disabled { opacity: .4; cursor: not-allowed; }
+.page-btn.active { background: #238636; border-color: #2ea043; color: #fff; font-weight: 600; }
+
+/* ─── Toast ──────────────────────────────────────────────────────────────────── */
+.toast-wrap {
+  position: fixed; bottom: 24px; right: 24px; z-index: 500;
+  display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+}
+.toast {
+  background: var(--surface2); border: 1px solid var(--border);
+  padding: 10px 16px; border-radius: 8px; font-size: 0.8rem;
+  box-shadow: var(--shadow); pointer-events: auto;
+  display: flex; align-items: center; gap: 8px;
+  animation: toastIn .25s ease;
+  max-width: 320px;
+}
+@keyframes toastIn { from { opacity:0; transform: translateY(12px); } to { opacity:1; transform: translateY(0); } }
+.toast-success { border-color: #2ea043; }
+.toast-error   { border-color: var(--danger); }
+
+/* ─── Sync banner ────────────────────────────────────────────────────────────── */
+.sync-banner {
+  background: rgba(248,159,27,.08); border: 1px solid rgba(248,159,27,.3);
+  border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px;
+  display: flex; align-items: center; gap: 10px; font-size: 0.8rem;
+}
+.sync-banner.hidden { display: none; }
+
+/* ─── Weight info chip ───────────────────────────────────────────────────────── */
+.weight-chips {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.weight-chip {
+  padding: 3px 10px; border-radius: 12px; font-size: 0.68rem; font-weight: 600;
+}
+.wc-lc { background: rgba(248,159,27,.15); color: var(--lc); border: 1px solid rgba(248,159,27,.3); }
+.wc-cc { background: rgba(139,94,60,.15);  color: #c8956a; border: 1px solid rgba(139,94,60,.3); }
+.wc-hr { background: rgba(46,200,102,.15); color: var(--hr); border: 1px solid rgba(46,200,102,.3); }
+.wc-note { font-size: 0.65rem; color: var(--fg-subtle); display: flex; align-items: center; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+  <div class="header-inner">
+    <div>
+      <div class="header-logo">🏆 External Placements Leaderboard</div>
+      <div class="header-sub">DR Batch 7.0 · 04-06-2026 · LC + CC + HR · No Codeforces</div>
+    </div>
+    <div class="header-spacer"></div>
+    <div class="header-progress" id="progressBadge">
+      <div class="progress-dot"></div>
+      <span id="progressText">Loading…</span>
+    </div>
+  </div>
+</header>
+
+<!-- Main -->
+<main class="main">
+
+  <!-- Sync banner (shown when no data yet) -->
+  <div class="sync-banner hidden" id="syncBanner">
+    ⚠️ &nbsp;<strong>No data synced yet.</strong>&nbsp;
+    Run <code>npm run sync</code> in the <code>backend/</code> folder to fetch all student profiles.
+    Or use the <strong>"Sync One"</strong> feature to test with a single student.
+  </div>
+
+  <!-- Stats bar -->
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-card">
+      <div class="stat-label">Total Students</div>
+      <div class="stat-value" id="statTotal">—</div>
+      <div class="stat-note">in leaderboard</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Avg Score</div>
+      <div class="stat-value" id="statAvg">—</div>
+      <div class="stat-note">out of 100</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Top Score</div>
+      <div class="stat-value" id="statTop" style="color:var(--gold)">—</div>
+      <div class="stat-note">out of 100</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Last Synced</div>
+      <div class="stat-value" style="font-size:0.9rem" id="statSync">—</div>
+      <div class="stat-note">refresh to update</div>
+    </div>
+  </div>
+
+  <!-- Weight chips -->
+  <div class="weight-chips">
+    <span class="weight-chip wc-lc">LeetCode — 40 pts</span>
+    <span class="weight-chip wc-cc">CodeChef — 40 pts</span>
+    <span class="weight-chip wc-hr">HackerRank — 20 pts</span>
+    <span class="wc-note">⚡ CF weight (20pts) redistributed equally to LC &amp; CC</span>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="search-wrap">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="text" class="search-input" id="searchInput" placeholder="Search by Student ID, LC/CC/HR handle…" />
+    </div>
+
+    <select class="sort-sel" id="sortSel">
+      <option value="total_score">Sort: Total Score</option>
+      <option value="lc_score">Sort: LC Score</option>
+      <option value="cc_score">Sort: CC Score</option>
+      <option value="hr_score">Sort: HR Score</option>
+      <option value="lc_detail.total_solved">Sort: LC Problems Solved</option>
+      <option value="lc_detail.contest_rating">Sort: LC Contest Rating</option>
+      <option value="cc_detail.problems_solved">Sort: CC Problems Solved</option>
+      <option value="cc_detail.current_rating">Sort: CC Rating</option>
+    </select>
+
+    <select class="sort-sel" id="orderSel">
+      <option value="desc">↓ Descending</option>
+      <option value="asc">↑ Ascending</option>
+    </select>
+
+    <button class="btn btn-export" id="exportBtn" onclick="exportCSV()">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Export CSV
+    </button>
+
+    <button class="btn btn-ghost" id="refreshBtn" onclick="loadLeaderboard()">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+      </svg>
+      Refresh
+    </button>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:50px">Rank</th>
+          <th>Student ID</th>
+          <th>Handles</th>
+          <th class="sorted" data-sort="total_score">Total <span class="sort-arrow">↓</span></th>
+          <th data-sort="lc_score">LC (40)</th>
+          <th data-sort="cc_score">CC (40)</th>
+          <th data-sort="hr_score">HR (20)</th>
+          <th>LC Stats</th>
+          <th>CC Stats</th>
+          <th style="width:70px">Detail</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        <tr><td colspan="10"><div class="empty-state"><div class="loading-spinner"></div></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination">
+    <div class="page-info" id="pageInfo">—</div>
+    <div class="page-btns" id="pageBtns"></div>
+  </div>
+</main>
+
+<!-- Detail Drawer -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer(event)">
+  <div class="drawer" id="drawer">
+    <div class="drawer-header">
+      <div>
+        <div class="drawer-rank-badge" id="dRank">Rank #—</div>
+        <div class="drawer-title" id="dTitle">—</div>
+        <div class="drawer-id" id="dId">—</div>
+      </div>
+      <button class="drawer-close" onclick="closeDrawer()">✕</button>
+    </div>
+
+    <!-- Total score -->
+    <div class="score-total-card">
+      <div class="score-total-label">Total Placements Score</div>
+      <div class="score-total-value" id="dTotal">—</div>
+      <div class="score-total-sub">out of 100 pts</div>
+    </div>
+
+    <!-- LeetCode section -->
+    <div class="platform-section">
+      <div class="platform-section-header ps-lc">
+        🟡 LeetCode&nbsp;&nbsp;<span id="dLCHandle" style="font-weight:400;font-size:.72rem;opacity:.8"></span>
+        <span id="dLCScore" style="font-weight:800">—/40</span>
+      </div>
+      <div class="platform-section-body" id="dLCBody">—</div>
+      <div class="score-split">
+        <div class="score-split-item">
+          <div class="score-split-label">Problem (20)</div>
+          <div class="score-split-val" id="dLCProb">—</div>
+        </div>
+        <div class="score-split-item">
+          <div class="score-split-label">Contest (20)</div>
+          <div class="score-split-val" id="dLCContest">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CodeChef section -->
+    <div class="platform-section">
+      <div class="platform-section-header ps-cc">
+        🟤 CodeChef&nbsp;&nbsp;<span id="dCCHandle" style="font-weight:400;font-size:.72rem;opacity:.8"></span>
+        <span id="dCCScore" style="font-weight:800">—/40</span>
+      </div>
+      <div class="platform-section-body" id="dCCBody">—</div>
+      <div class="score-split">
+        <div class="score-split-item">
+          <div class="score-split-label">Problem (20)</div>
+          <div class="score-split-val" id="dCCProb">—</div>
+        </div>
+        <div class="score-split-item">
+          <div class="score-split-label">Contest (20)</div>
+          <div class="score-split-val" id="dCCContest">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HackerRank section -->
+    <div class="platform-section">
+      <div class="platform-section-header ps-hr">
+        🟢 HackerRank&nbsp;&nbsp;<span id="dHRHandle" style="font-weight:400;font-size:.72rem;opacity:.8"></span>
+        <span id="dHRScore" style="font-weight:800">—/20</span>
+      </div>
+      <div class="platform-section-body" id="dHRBody">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+const API = '';  // same origin
+
+let currentPage  = 1;
+let currentTotal = 0;
+let currentSort  = 'total_score';
+let currentOrder = 'desc';
+let searchTimer  = null;
+
+// ─── Toast ───────────────────────────────────────────────────────────────────
+function toast(msg, type='success') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.getElementById('toastWrap').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ─── Export CSV ──────────────────────────────────────────────────────────────
+function exportCSV() {
+  toast('Generating CSV export…');
+  const a = document.createElement('a');
+  a.href = `${API}/api/export`;
+  a.download = '';
+  a.click();
+}
+
+// ─── Load progress ───────────────────────────────────────────────────────────
+async function loadProgress() {
+  try {
+    const r = await fetch(`${API}/api/progress`);
+    const d = await r.json();
+    const pct = d.total > 0 ? Math.round(d.done / d.total * 100) : 0;
+    document.getElementById('progressText').textContent =
+      `${d.done}/${d.total || '?'} synced (${pct}%)`;
+    if (d.synced_at) {
+      const dt = new Date(d.synced_at);
+      document.getElementById('statSync').textContent =
+        dt.toLocaleDateString('en-IN', {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    }
+  } catch {}
+}
+
+// ─── Load leaderboard ────────────────────────────────────────────────────────
+async function loadLeaderboard() {
+  const search = document.getElementById('searchInput').value.trim();
+  const sort   = document.getElementById('sortSel').value;
+  const order  = document.getElementById('orderSel').value;
+
+  currentSort  = sort;
+  currentOrder = order;
+
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="loading-spinner"></div></div></td></tr>';
+
+  try {
+    const params = new URLSearchParams({ search, sort, order, page: currentPage, limit: 50 });
+    const r = await fetch(`${API}/api/leaderboard?${params}`);
+    const d = await r.json();
+
+    currentTotal = d.total;
+
+    // Update stats
+    if (d.data.length > 0) {
+      document.getElementById('statTotal').textContent = d.total;
+      const avg = d.data.slice(0, Math.min(d.data.length, 200)).reduce((a,b) => a + (b.total_score||0), 0) / d.data.length;
+      document.getElementById('statAvg').textContent = avg.toFixed(1);
+      if (currentPage === 1 && d.data[0]) {
+        document.getElementById('statTop').textContent = (d.data[0].total_score||0).toFixed(1);
+      }
+      document.getElementById('syncBanner').classList.add('hidden');
+    } else {
+      document.getElementById('syncBanner').classList.remove('hidden');
+    }
+
+    renderTable(d.data, d);
+    renderPagination(d.total, d.page, d.limit);
+    loadProgress();
+
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state">
+      <div class="empty-icon">⚠️</div>
+      <p>${err.message}</p>
+      <p style="font-size:.72rem;margin-top:6px">Is the backend running? <code>node server.js</code></p>
+    </div></td></tr>`;
+  }
+}
+
+// ─── Render table ─────────────────────────────────────────────────────────────
+function renderTable(rows, meta) {
+  const tbody = document.getElementById('tableBody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">🔍</div><p>No students found</p></div></td></tr>';
+    return;
+  }
+
+  const maxScore = rows[0]?.total_score || 1;
+
+  tbody.innerHTML = rows.map(s => {
+    const rankClass = s.rank === 1 ? 'rank-1' : s.rank === 2 ? 'rank-2' : s.rank === 3 ? 'rank-3' : '';
+    const rankIcon  = s.rank === 1 ? '🥇' : s.rank === 2 ? '🥈' : s.rank === 3 ? '🥉' : `#${s.rank}`;
+
+    const bar = (val, max, color) => `
+      <div class="score-bar-wrap">
+        <div class="score-bar-bg"><div class="score-bar-fill" style="width:${Math.round(val/max*100)}%;background:${color}"></div></div>
+        <span class="score-num" style="color:${color}">${val.toFixed(1)}</span>
+      </div>`;
+
+    const lcSolved = s.lc_detail?.total_solved || 0;
+    const lcRating = s.lc_detail?.contest_rating || 0;
+    const ccProbs  = s.cc_detail?.problems_solved || 0;
+    const ccRating = s.cc_detail?.current_rating || 0;
+    const ccStars  = s.cc_detail?.stars || 0;
+
+    const handles = [
+      s.lc_handle ? `<span class="platform-badge badge-lc">LC: ${s.lc_handle}</span>` : '',
+      s.cc_handle ? `<span class="platform-badge badge-cc">CC: ${s.cc_handle}</span>` : '',
+      s.hr_handle ? `<span class="platform-badge badge-hr">HR: ${s.hr_handle}</span>` : '',
+    ].filter(Boolean).join(' ');
+
+    return `<tr>
+      <td class="rank-cell ${rankClass}">${rankIcon}</td>
+      <td><div class="student-id">${s.student_id || '—'}</div></td>
+      <td style="max-width:220px">${handles || '<span style="color:var(--fg-subtle)">—</span>'}</td>
+      <td>${bar(s.total_score || 0, 100, '#3fb950')}</td>
+      <td>${bar(s.lc_score   || 0, 40,  '#f89f1b')}</td>
+      <td>${bar(s.cc_score   || 0, 40,  '#c8956a')}</td>
+      <td>${bar(s.hr_score   || 0, 20,  '#2ec866')}</td>
+      <td style="font-size:.75rem;color:var(--fg-muted)">
+        ${lcSolved ? `<b style="color:var(--fg)">${lcSolved}</b> solved` : '—'}<br/>
+        ${lcRating ? `Rating: <b style="color:var(--lc)">${lcRating}</b>` : ''}
+      </td>
+      <td style="font-size:.75rem;color:var(--fg-muted)">
+        ${ccProbs ? `<b style="color:var(--fg)">${ccProbs}</b> solved` : '—'}<br/>
+        ${ccRating ? `${ccStars}⭐ <b style="color:#c8956a">${ccRating}</b>` : ''}
+      </td>
+      <td><button class="detail-btn" onclick="openDrawer(${JSON.stringify(s).replace(/"/g,'&quot;')})">Details</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ─── Pagination ───────────────────────────────────────────────────────────────
+function renderPagination(total, page, limit) {
+  const totalPages = Math.ceil(total / limit);
+  const start = (page-1)*limit + 1;
+  const end   = Math.min(page*limit, total);
+  document.getElementById('pageInfo').textContent =
+    total ? `Showing ${start}–${end} of ${total} students` : 'No results';
+
+  const btns = document.getElementById('pageBtns');
+  btns.innerHTML = '';
+
+  const addBtn = (label, p, disabled=false, active=false) => {
+    const b = document.createElement('button');
+    b.className = `page-btn${active?' active':''}`;
+    b.textContent = label;
+    b.disabled = disabled;
+    b.onclick = () => { currentPage = p; loadLeaderboard(); };
+    btns.appendChild(b);
+  };
+
+  addBtn('← Prev', page-1, page<=1);
+
+  // Page numbers (show up to 7 around current)
+  const pages = [];
+  for (let i=1; i<=totalPages; i++) {
+    if (i===1 || i===totalPages || Math.abs(i-page)<=2) pages.push(i);
+    else if (pages[pages.length-1] !== '…') pages.push('…');
+  }
+
+  for (const p of pages) {
+    if (p === '…') {
+      const s = document.createElement('span');
+      s.textContent = '…'; s.style.padding = '5px 4px'; s.style.color = 'var(--fg-subtle)';
+      btns.appendChild(s);
+    } else {
+      addBtn(p, p, false, p===page);
+    }
+  }
+
+  addBtn('Next →', page+1, page>=totalPages);
+}
+
+// ─── Drawer ───────────────────────────────────────────────────────────────────
+function openDrawer(s) {
+  document.getElementById('drawerOverlay').classList.add('open');
+  document.getElementById('dRank').textContent   = `Rank #${s.rank}`;
+  document.getElementById('dTitle').textContent  = s.student_id || '—';
+  document.getElementById('dId').textContent     = '';
+
+  document.getElementById('dTotal').textContent  = (s.total_score || 0).toFixed(2);
+
+  // LC
+  document.getElementById('dLCHandle').textContent  = s.lc_handle ? `@${s.lc_handle}` : 'Not linked';
+  document.getElementById('dLCScore').textContent   = `${(s.lc_score||0).toFixed(2)}/40`;
+  document.getElementById('dLCProb').textContent    = (s.lc_prob   ||0).toFixed(2);
+  document.getElementById('dLCContest').textContent = (s.lc_contest||0).toFixed(2);
+  const ld = s.lc_detail || {};
+  document.getElementById('dLCBody').innerHTML = `
+    <div class="detail-row"><div class="detail-key">Easy Solved</div><div class="detail-val">${ld.easy_solved||0}</div></div>
+    <div class="detail-row"><div class="detail-key">Medium Solved</div><div class="detail-val">${ld.medium_solved||0}</div></div>
+    <div class="detail-row"><div class="detail-key">Hard Solved</div><div class="detail-val">${ld.hard_solved||0}</div></div>
+    <div class="detail-row"><div class="detail-key">Total Solved</div><div class="detail-val">${ld.total_solved||0}</div></div>
+    <div class="detail-row"><div class="detail-key">Contest Rating</div><div class="detail-val" style="color:var(--lc)">${ld.contest_rating||0}</div></div>
+    <div class="detail-row"><div class="detail-key">Contest Count</div><div class="detail-val">${ld.contest_count||0}</div></div>
+    <div class="detail-row"><div class="detail-key">Raw UDG Pts</div><div class="detail-val">${(ld.rawPts||0).toFixed(1)}</div></div>
+    <div class="detail-row"><div class="detail-key">Consistency Factor</div><div class="detail-val">${(ld.cf||0).toFixed(2)}</div></div>
+  `;
+
+  // CC
+  document.getElementById('dCCHandle').textContent  = s.cc_handle ? `@${s.cc_handle}` : 'Not linked';
+  document.getElementById('dCCScore').textContent   = `${(s.cc_score||0).toFixed(2)}/40`;
+  document.getElementById('dCCProb').textContent    = (s.cc_prob   ||0).toFixed(2);
+  document.getElementById('dCCContest').textContent = (s.cc_contest||0).toFixed(2);
+  const cd = s.cc_detail || {};
+  document.getElementById('dCCBody').innerHTML = `
+    <div class="detail-row"><div class="detail-key">Problems Solved</div><div class="detail-val">${cd.problems_solved||0}</div></div>
+    <div class="detail-row"><div class="detail-key">Current Rating</div><div class="detail-val" style="color:#c8956a">${cd.current_rating||0}</div></div>
+    <div class="detail-row"><div class="detail-key">Stars</div><div class="detail-val">${cd.stars||0} ⭐</div></div>
+    <div class="detail-row"><div class="detail-key">Contest Count</div><div class="detail-val">${cd.contest_count||0}</div></div>
+    <div class="detail-row"><div class="detail-key">Participation (P)</div><div class="detail-val">${((cd.P||0)*100).toFixed(0)}%</div></div>
+    <div class="detail-row"><div class="detail-key">Level Score (L)</div><div class="detail-val">${((cd.L||0)*100).toFixed(0)}%</div></div>
+  `;
+
+  // HR
+  document.getElementById('dHRHandle').textContent = s.hr_handle ? `@${s.hr_handle}` : 'Not linked';
+  document.getElementById('dHRScore').textContent  = `${(s.hr_score||0).toFixed(2)}/20`;
+  const hd = s.hr_detail || {};
+  document.getElementById('dHRBody').innerHTML = `
+    <div class="detail-row"><div class="detail-key">Problem Solving ★</div><div class="detail-val">${hd.psStars||0}</div></div>
+    <div class="detail-row"><div class="detail-key">SQL ★</div><div class="detail-val">${hd.sqlStars||0}</div></div>
+    <div class="detail-row"><div class="detail-key">Java ★</div><div class="detail-val">${hd.javStars||0}</div></div>
+    <div class="detail-row"><div class="detail-key">Python ★</div><div class="detail-val">${hd.pytStars||0}</div></div>
+    <div class="detail-row"><div class="detail-key">PS Points</div><div class="detail-val">${(hd.ps||0).toFixed(1)}</div></div>
+    <div class="detail-row"><div class="detail-key">SQL Points</div><div class="detail-val">${(hd.sql||0).toFixed(1)}</div></div>
+  `;
+}
+
+function closeDrawer(e) {
+  if (!e || e.target === document.getElementById('drawerOverlay') || e.currentTarget === undefined) {
+    document.getElementById('drawerOverlay').classList.remove('open');
+  }
+}
+
+// ─── Table header sort ────────────────────────────────────────────────────────
+document.querySelectorAll('thead th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const s = th.dataset.sort;
+    if (currentSort === s) {
+      currentOrder = currentOrder === 'desc' ? 'asc' : 'desc';
+    } else {
+      currentSort  = s;
+      currentOrder = 'desc';
+    }
+    document.getElementById('sortSel').value  = currentSort;
+    document.getElementById('orderSel').value = currentOrder;
+    document.querySelectorAll('thead th').forEach(t => {
+      t.classList.remove('sorted');
+      const arrow = t.querySelector('.sort-arrow');
+      if (arrow) arrow.textContent = '↓';
+    });
+    th.classList.add('sorted');
+    const arrow = th.querySelector('.sort-arrow');
+    if (arrow) arrow.textContent = currentOrder === 'asc' ? '↑' : '↓';
+    currentPage = 1;
+    loadLeaderboard();
+  });
+});
+
+// ─── Search debounce ──────────────────────────────────────────────────────────
+document.getElementById('searchInput').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { currentPage = 1; loadLeaderboard(); }, 350);
+});
+document.getElementById('sortSel').addEventListener('change', () => { currentPage=1; loadLeaderboard(); });
+document.getElementById('orderSel').addEventListener('change', () => { currentPage=1; loadLeaderboard(); });
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+loadLeaderboard();
+setInterval(loadProgress, 15000);  // refresh progress every 15s
+</script>
+</body>
+</html>
