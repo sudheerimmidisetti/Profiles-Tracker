@@ -78,6 +78,27 @@ app.get('/api/progress', (req, res) => {
   res.json(db.getProgress());
 });
 
+// ── GET /api/stats ─────────────────────────────────────────────────────────────
+// Returns true global statistics over ALL scored students (not page-scoped)
+app.get('/api/stats', (req, res) => {
+  const all = db.getAll().filter(s => s.total_score !== undefined);
+  if (all.length === 0) return res.json({ total: 0, avg: 0, top: 0, median: 0 });
+
+  const scores = all.map(s => s.total_score || 0).sort((a, b) => b - a);
+  const sum    = scores.reduce((a, b) => a + b, 0);
+  const mid    = Math.floor(scores.length / 2);
+  const median = scores.length % 2 === 0
+    ? (scores[mid - 1] + scores[mid]) / 2
+    : scores[mid];
+
+  res.json({
+    total:  all.length,
+    top:    +(scores[0]).toFixed(2),
+    avg:    +(sum / scores.length).toFixed(2),
+    median: +median.toFixed(2),
+  });
+});
+
 // ── GET /api/export ───────────────────────────────────────────────────────────
 // Returns CSV of all scored students
 app.get('/api/export', (req, res) => {
@@ -148,11 +169,14 @@ app.post('/api/sync-one', async (req, res) => {
   if (!s) return res.status(404).json({ error: 'Student not found in ODS' });
 
   try {
-    const [lc_data, cc_data, hr_data] = await Promise.all([
-      s.lc_handle ? fetchLCProfile(s.lc_handle) : null,
-      s.cc_handle ? fetchCCProfile(s.cc_handle) : null,
-      s.hr_handle ? fetchHRProfile(s.hr_handle) : null,
-    ]);
+    const delay = (ms) => new Promise(r => setTimeout(r, ms));
+
+    // Sequential fetches with delays to avoid rate limiting (especially HR)
+    const lc_data = s.lc_handle ? await fetchLCProfile(s.lc_handle) : null;
+    await delay(600);
+    const cc_data = s.cc_handle ? await fetchCCProfile(s.cc_handle) : null;
+    await delay(600);
+    const hr_data = s.hr_handle ? await fetchHRProfile(s.hr_handle) : null;
 
     const scored = computeScore({ ...s, lc_data, cc_data, hr_data });
     db.setStudent(student_id, { ...s, lc_data, cc_data, hr_data, ...scored });
@@ -171,6 +195,11 @@ app.get('/api/student/:id', (req, res) => {
 });
 
 // ── Serve frontend ────────────────────────────────────────────────────────────
+// Return JSON 404 for unmatched /api/* routes (avoids returning HTML for misspelled API paths)
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: `API route not found: ${req.method} /api${req.path}` });
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });

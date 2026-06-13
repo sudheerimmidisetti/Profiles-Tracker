@@ -543,6 +543,7 @@ let currentTotal = 0;
 let currentSort  = 'total_score';
 let currentOrder = 'desc';
 let searchTimer  = null;
+const studentMap = {};  // id → student object, avoids XSS via onclick JSON embedding
 
 // ─── Toast ───────────────────────────────────────────────────────────────────
 function toast(msg, type='success') {
@@ -578,7 +579,18 @@ async function loadProgress() {
   } catch {}
 }
 
-// ─── Load leaderboard ────────────────────────────────────────────────────────
+// ─── Load global stats ────────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const r = await fetch(`${API}/api/stats`);
+    const d = await r.json();
+    document.getElementById('statTotal').textContent = d.total || '—';
+    document.getElementById('statAvg').textContent   = d.avg   ? d.avg.toFixed(1)  : '—';
+    document.getElementById('statTop').textContent   = d.top   ? d.top.toFixed(1)  : '—';
+  } catch {}
+}
+
+// ─── Load leaderboard ─────────────────────────────────────────────────────────
 async function loadLeaderboard() {
   const search = document.getElementById('searchInput').value.trim();
   const sort   = document.getElementById('sortSel').value;
@@ -597,17 +609,12 @@ async function loadLeaderboard() {
 
     currentTotal = d.total;
 
-    // Update stats
-    if (d.data.length > 0) {
-      document.getElementById('statTotal').textContent = d.total;
-      const avg = d.data.slice(0, Math.min(d.data.length, 200)).reduce((a,b) => a + (b.total_score||0), 0) / d.data.length;
-      document.getElementById('statAvg').textContent = avg.toFixed(1);
-      if (currentPage === 1 && d.data[0]) {
-        document.getElementById('statTop').textContent = (d.data[0].total_score||0).toFixed(1);
-      }
-      document.getElementById('syncBanner').classList.add('hidden');
-    } else {
+    // Update stats from true global /api/stats (not page-scoped)
+    if (currentPage === 1) loadStats();  // refresh on first page / sort change
+    if (d.data.length === 0) {
       document.getElementById('syncBanner').classList.remove('hidden');
+    } else {
+      document.getElementById('syncBanner').classList.add('hidden');
     }
 
     renderTable(d.data, d);
@@ -632,6 +639,9 @@ function renderTable(rows, meta) {
   }
 
   const maxScore = rows[0]?.total_score || 1;
+
+  // Cache student objects by id for safe onclick lookup (avoids XSS via JSON embedding)
+  rows.forEach(s => { studentMap[s.student_id] = s; });
 
   tbody.innerHTML = rows.map(s => {
     const rankClass = s.rank === 1 ? 'rank-1' : s.rank === 2 ? 'rank-2' : s.rank === 3 ? 'rank-3' : '';
@@ -671,7 +681,7 @@ function renderTable(rows, meta) {
         ${ccProbs ? `<b style="color:var(--fg)">${ccProbs}</b> solved` : '—'}<br/>
         ${ccRating ? `${ccStars}⭐ <b style="color:#c8956a">${ccRating}</b>` : ''}
       </td>
-      <td><button class="detail-btn" onclick="openDrawer(${JSON.stringify(s).replace(/"/g,'&quot;')})">Details</button></td>
+      <td><button class="detail-btn" onclick="openDrawer('${s.student_id}')">Details</button></td>
     </tr>`;
   }).join('');
 }
@@ -719,7 +729,10 @@ function renderPagination(total, page, limit) {
 }
 
 // ─── Drawer ───────────────────────────────────────────────────────────────────
-function openDrawer(s) {
+function openDrawer(idOrObj) {
+  // Accept either a student_id string (new safe path) or full object (legacy)
+  const s = typeof idOrObj === 'string' ? studentMap[idOrObj] : idOrObj;
+  if (!s) return;
   document.getElementById('drawerOverlay').classList.add('open');
   document.getElementById('dRank').textContent   = `Rank #${s.rank}`;
   document.getElementById('dTitle').textContent  = s.student_id || '—';

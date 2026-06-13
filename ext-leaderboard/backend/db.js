@@ -37,7 +37,9 @@ function setStudent(student_id, data) {
   const db = load();
   db.students[student_id] = { ...data, updated_at: new Date().toISOString() };
   db.done = Object.keys(db.students).length;
-  save();
+  // Batch writes: flush to disk every 10 students to reduce I/O
+  // (sync.js should also call save() at the end to flush the remainder)
+  if (db.done % 10 === 0) save();
 }
 
 function getAll() {

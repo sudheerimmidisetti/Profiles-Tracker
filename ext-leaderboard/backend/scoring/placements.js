@@ -74,8 +74,11 @@ function lcScore(lcData) {
   // ── Contest score ─────────────────────────────────────────────────────────
   // P: Participation (40% weight within contest) — expected ~20 contests
   const P = clamp((lcData.contest_count || 0) / 20);
-  // L: Absolute level from rating (60% weight)
-  const L = lerp(LC_ANCHORS, lcData.contest_rating || 0);
+  // L: Absolute level from rating (60% weight).
+  // If student has never participated, L = 0 (not the lerp floor of 0.05)
+  const L = (lcData.contest_count || 0) > 0
+    ? lerp(LC_ANCHORS, lcData.contest_rating || 0)
+    : 0;
   const contestScore = maxContest * (0.40 * P + 0.60 * L);
 
   const total_score = +(probScore + contestScore).toFixed(4);

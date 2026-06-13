@@ -38,7 +38,13 @@ async function syncAll() {
   console.log(`📋 Total students in ODS: ${students.length}`);
   console.log(`   Mode: ${REFETCH ? 'REFETCH ALL' : 'SKIP already-fetched'}\n`);
 
-  let done = 0, skipped = 0, errors = 0;
+  if (REFETCH && LIMIT < Infinity) {
+    console.log(`⚠️  Warning: --refetch with --limit ${LIMIT} will refetch only the first ${LIMIT} students.`);
+    console.log(`   The remaining ${670 - LIMIT} students in db.json will keep OLD cached data.`);
+    console.log(`   Run without --limit to refetch all students.\n`);
+  }
+
+  let done = 0, skipped = 0, errors = 0, studentErrors = 0;
 
   for (const s of students) {
     const existing = db.getStudent(s.student_id);
@@ -52,12 +58,13 @@ async function syncAll() {
     process.stdout.write(`\n🔄 [${pad(done+1, 3)}/${students.length}] ${s.student_id}`);
 
     let lc_data = null, cc_data = null, hr_data = null;
+    studentErrors = 0; // reset per-student counter
 
     // Fetch LC
     if (s.lc_handle) {
       process.stdout.write(` | LC:${s.lc_handle}`);
       lc_data = await fetchLCProfile(s.lc_handle);
-      if (!lc_data) { process.stdout.write('❌'); errors++; }
+      if (!lc_data) { process.stdout.write('❌'); studentErrors++; }
       else process.stdout.write('✅');
       await sleep(DELAY_PLAT);
     }
@@ -66,7 +73,7 @@ async function syncAll() {
     if (s.cc_handle) {
       process.stdout.write(` | CC:${s.cc_handle}`);
       cc_data = await fetchCCProfile(s.cc_handle);
-      if (!cc_data) { process.stdout.write('❌'); errors++; }
+      if (!cc_data) { process.stdout.write('❌'); studentErrors++; }
       else process.stdout.write('✅');
       await sleep(DELAY_PLAT);
     }
@@ -75,9 +82,12 @@ async function syncAll() {
     if (s.hr_handle) {
       process.stdout.write(` | HR:${s.hr_handle}`);
       hr_data = await fetchHRProfile(s.hr_handle);
-      if (!hr_data) { process.stdout.write('❌'); errors++; }
+      if (!hr_data) { process.stdout.write('❌'); studentErrors++; }
       else process.stdout.write('✅');
     }
+
+    // Count this student as an error only if ALL attempted platforms failed
+    if (studentErrors > 0 && !lc_data && !cc_data && !hr_data) errors++;
 
     // Compute score + save
     const scored = computeScore({ ...s, lc_data, cc_data, hr_data });
@@ -93,11 +103,13 @@ async function syncAll() {
     await sleep(DELAY_MS);
   }
 
+  // Flush any remaining students not yet written (batch write remainder)
+  db.save();
   db.setDone(done, new Date().toISOString());
 
   console.log('\n\n═══════════════════════════════════════');
   console.log(`✅ Sync complete!`);
-  console.log(`   Fetched: ${done - skipped} | Skipped: ${skipped} | Errors: ${errors}`);
+  console.log(`   Fetched: ${done - skipped} | Skipped: ${skipped} | Fully failed: ${errors}`);
   console.log(`   Saved to db.json`);
   console.log('═══════════════════════════════════════\n');
 }
