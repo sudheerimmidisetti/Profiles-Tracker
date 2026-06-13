@@ -50,8 +50,17 @@ export const leaderboardAPI = {
                 api.get(`/api/leaderboard/${platform}`, { params: { filter, page, limit, search, branch } }),
   placements: (page = 1, limit = 50) =>
                 api.get('/api/leaderboard/placements', { params: { page, limit } }),
-  weekly:     (page = 1, limit = 50) =>
-                api.get('/api/leaderboard/weekly',     { params: { page, limit } }),
+  weekly:     (page = 1, limit = 50) => {
+                // Compute current week's Monday in IST (UTC+5:30) explicitly
+                // so admin and student views always agree on the same week boundary
+                const now = new Date()
+                const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000)
+                const day = ist.getUTCDay()
+                const mon = new Date(ist.getTime() - (day === 0 ? 6 : day - 1) * 86400000)
+                mon.setUTCHours(0, 0, 0, 0)
+                const week = mon.toISOString().slice(0, 10)
+                return api.get('/api/leaderboard/weekly', { params: { week, page, limit } })
+              },
   monthly:    (page = 1, limit = 50) =>
                 api.get('/api/leaderboard/monthly',    { params: { page, limit } }),
 }
