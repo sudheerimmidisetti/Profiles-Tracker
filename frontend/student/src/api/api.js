@@ -92,19 +92,22 @@ export const handlersAPI = {
 
 // ── Leaderboard ───────────────────────────────────────
 export const leaderboardAPI = {
+  // Dynamic filter options
+  getFilters: () => api.get('/api/admin/filters'),
   // Original platform leaderboard
-  get: (platform, filter = 'all', page = 1, limit = 50) =>
-    api.get(`/api/leaderboard/${platform}`, { params: { filter, page, limit } }),
+  get: (platform, filter = 'all', page = 1, limit = 50, search = '', branch = '', college = '', year = '') =>
+    api.get(`/api/leaderboard/${platform}`, { params: { filter, page, limit, search, branch, college, year } }),
   // Placements (6-month rolling)
-  placements: (page = 1, limit = 50) =>
-    api.get('/api/leaderboard/placements', { params: { page, limit } }),
+  placements: (page = 1, limit = 50, college = '', year = '') =>
+    api.get('/api/leaderboard/placements', { params: { page, limit, college, year } }),
   // Weekly (current week or specific week)
-  weekly: (week = null, page = 1, limit = 50) =>
-    api.get('/api/leaderboard/weekly', { params: { week, page, limit } }),
+  weekly: (week = null, page = 1, limit = 50, college = '', year = '') =>
+    api.get('/api/leaderboard/weekly', { params: { week, page, limit, college, year } }),
   // Monthly (current month or specific YYYY-MM)
-  monthly: (month = null, page = 1, limit = 50) =>
-    api.get('/api/leaderboard/monthly', { params: { month, page, limit } }),
+  monthly: (month = null, page = 1, limit = 50, college = '', year = '') =>
+    api.get('/api/leaderboard/monthly', { params: { month, page, limit, college, year } }),
 }
+
 
 // ── Analytics ─────────────────────────────────────────
 export const analyticsAPI = {

@@ -69,10 +69,18 @@ async function getLeaderboard(platform, filter = 'all', page = 1, limit = 50) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. PLACEMENTS LEADERBOARD (6-month rolling)
 // ─────────────────────────────────────────────────────────────────────────────
-async function getPlacementsLeaderboard(page = 1, limit = 50) {
+async function getPlacementsLeaderboard(page = 1, limit = 50, college = '', year = '') {
   const offset      = (page - 1) * limit;
   const windowStart = new Date(Date.now() - 182 * 24 * 60 * 60 * 1000);
   const windowISO   = windowStart.toISOString();
+
+  // Build dynamic WHERE for college/year filters
+  const extraConds = [];
+  const extraParams = [];
+  let pidx = 1;
+  if (college) { extraConds.push(`LOWER(s.college) = $${pidx++}`); extraParams.push(college.toLowerCase()); }
+  if (year)    { extraConds.push(`s.passout_year = $${pidx++}`);    extraParams.push(parseInt(year, 10)); }
+  const extraWhere = extraConds.length ? ' AND ' + extraConds.join(' AND ') : '';
 
   // 1. Fetch all verified, non-blocklisted students
   const studentsRes = await query(
@@ -92,8 +100,8 @@ async function getPlacementsLeaderboard(page = 1, limit = 50) {
      LEFT JOIN leetcode_profiles   lp  ON lp.student_email   = s.email
      LEFT JOIN codeforces_profiles cp  ON cp.student_email   = s.email
      LEFT JOIN codechef_profiles   dp  ON dp.student_email   = s.email
-     WHERE s.is_verified = TRUE AND s.is_blocklisted = FALSE`,
-    []
+     WHERE s.is_verified = TRUE AND s.is_blocklisted = FALSE${extraWhere}`,
+    extraParams
   );
 
   const students = studentsRes.rows;
@@ -332,10 +340,18 @@ async function getPlacementsLeaderboard(page = 1, limit = 50) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. WEEKLY LEADERBOARD
 // ─────────────────────────────────────────────────────────────────────────────
-async function getWeeklyLeaderboard(weekParam, page = 1, limit = 50) {
+async function getWeeklyLeaderboard(weekParam, page = 1, limit = 50, college = '', year = '') {
   const offset   = (page - 1) * limit;
   const wkStart  = weekParam || weekStart(); // 'YYYY-MM-DD' (Monday)
   const wkEnd    = new Date(new Date(wkStart).getTime() + 7 * 86400000).toISOString().slice(0, 10);
+
+  // Build dynamic WHERE for college/year
+  const extraConds = [];
+  const extraParams = [];
+  let pidx = 1;
+  if (college) { extraConds.push(`LOWER(s.college) = $${pidx++}`); extraParams.push(college.toLowerCase()); }
+  if (year)    { extraConds.push(`s.passout_year = $${pidx++}`);    extraParams.push(parseInt(year, 10)); }
+  const extraWhere = extraConds.length ? ' AND ' + extraConds.join(' AND ') : '';
 
   // Fetch all students
   const studentsRes = await query(
@@ -347,8 +363,8 @@ async function getWeeklyLeaderboard(weekParam, page = 1, limit = 50) {
      LEFT JOIN platform_profiles pp_lc ON pp_lc.student_email = s.email AND pp_lc.platform_name = 'leetcode'
      LEFT JOIN platform_profiles pp_cc ON pp_cc.student_email = s.email AND pp_cc.platform_name = 'codechef'
      LEFT JOIN platform_profiles pp_cf ON pp_cf.student_email = s.email AND pp_cf.platform_name = 'codeforces'
-     WHERE s.is_verified = TRUE AND s.is_blocklisted = FALSE`,
-    []
+     WHERE s.is_verified = TRUE AND s.is_blocklisted = FALSE${extraWhere}`,
+    extraParams
   );
   const students = studentsRes.rows;
   const emails   = students.map(s => s.email);
@@ -464,19 +480,27 @@ async function getWeeklyLeaderboard(weekParam, page = 1, limit = 50) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. MONTHLY LEADERBOARD
 // ─────────────────────────────────────────────────────────────────────────────
-async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50) {
+async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50, college = '', year = '') {
   const offset  = (page - 1) * limit;
   const now     = new Date();
   const [yr, mo] = monthParam
     ? monthParam.split('-').map(Number)
     : [now.getFullYear(), now.getMonth() + 1];
-  const year  = yr;
+  const yrNum = yr;
   const month = mo - 1; // 0-indexed
 
-  const monthStart = new Date(year, month, 1).toISOString();
-  const monthEnd   = new Date(year, month + 1, 1).toISOString();
-  const monthStartTs = Math.floor(new Date(year, month, 1).getTime() / 1000);
-  const monthEndTs   = Math.floor(new Date(year, month + 1, 1).getTime() / 1000);
+  const monthStart = new Date(yrNum, month, 1).toISOString();
+  const monthEnd   = new Date(yrNum, month + 1, 1).toISOString();
+  const monthStartTs = Math.floor(new Date(yrNum, month, 1).getTime() / 1000);
+  const monthEndTs   = Math.floor(new Date(yrNum, month + 1, 1).getTime() / 1000);
+
+  // Build dynamic WHERE for college/year
+  const extraConds = [];
+  const extraParams = [];
+  let pidx = 1;
+  if (college) { extraConds.push(`LOWER(s.college) = $${pidx++}`); extraParams.push(college.toLowerCase()); }
+  if (year)    { extraConds.push(`s.passout_year = $${pidx++}`);    extraParams.push(parseInt(year, 10)); }
+  const extraWhere = extraConds.length ? ' AND ' + extraConds.join(' AND ') : '';
 
   const studentsRes = await query(
     `SELECT s.email, s.full_name, s.roll_number, s.branch,
@@ -485,12 +509,13 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50) {
      LEFT JOIN platform_profiles pp_lc ON pp_lc.student_email = s.email AND pp_lc.platform_name = 'leetcode'
      LEFT JOIN platform_profiles pp_cc ON pp_cc.student_email = s.email AND pp_cc.platform_name = 'codechef'
      LEFT JOIN platform_profiles pp_cf ON pp_cf.student_email = s.email AND pp_cf.platform_name = 'codeforces'
-     WHERE s.is_verified = TRUE AND s.is_blocklisted = FALSE`,
-    []
+     WHERE s.is_verified = TRUE AND s.is_blocklisted = FALSE${extraWhere}`,
+    extraParams
   );
   const students = studentsRes.rows;
   const emails   = students.map(s => s.email);
   if (!emails.length) return { month: `${yr}-${String(mo).padStart(2,'0')}`, page, limit, total: 0, data: [] };
+
 
   // Try to get weekly_board scores (table may not exist yet — fall back gracefully)
   let weeklyRows = [];

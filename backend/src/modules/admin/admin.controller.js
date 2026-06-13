@@ -4,6 +4,7 @@ const analyticsService    = require('../analytics/analytics.service');
 const { syncAllStudents } = require('../../jobs/syncProfiles.job');
 const { query }           = require('../../config/db');
 const logger              = require('../../utils/logger');
+const syncState           = require('../../utils/syncState');
 const {
   getCodeforcesDetail,
   getCodechefDetail,
@@ -17,11 +18,21 @@ async function listStudents(req, res, next) {
     const limit       = Math.min(200, parseInt(req.query.limit || '50', 10));
     const verified    = req.query.verified    !== undefined ? req.query.verified    === 'true' : undefined;
     const blocklisted = req.query.blocklisted !== undefined ? req.query.blocklisted === 'true' : undefined;
-    const search      = req.query.search  || undefined;
-    const branch      = req.query.branch  || undefined;
-    const platform    = req.query.platform || undefined; // 'leetcode'|'codeforces'|'codechef'|'hackerrank'
-    const result = await adminService.listStudents({ page, limit, verified, blocklisted, search, branch, platform });
+    const search      = req.query.search      || undefined;
+    const branch      = req.query.branch      || undefined;
+    const college     = req.query.college     || undefined;
+    const passout_year = req.query.year       || undefined;
+    const platform    = req.query.platform    || undefined;
+    const result = await adminService.listStudents({ page, limit, verified, blocklisted, search, branch, platform, college, passout_year });
     res.status(200).json({ success: true, ...result });
+  } catch (err) { next(err); }
+}
+
+// GET /api/admin/filters  — public, returns dynamic filter options
+async function getFilters(req, res, next) {
+  try {
+    const data = await adminService.getFilters();
+    res.status(200).json({ success: true, data });
   } catch (err) { next(err); }
 }
 
@@ -117,13 +128,25 @@ async function getContestDetail(req, res, next) {
 
 // POST /api/admin/sync  — manually trigger a full data sync (fire-and-forget)
 async function triggerSync(req, res) {
+  const state = syncState.getState();
+  if (state.running) {
+    return res.status(202).json({ success: true, message: 'Sync already running.', data: state });
+  }
   logger.info('[Admin] Manual sync triggered via UI');
   setImmediate(() => {
     syncAllStudents()
       .then(() => logger.info('[Admin] Manual sync complete'))
-      .catch((err) => logger.error(`[Admin] Manual sync error: ${err.message}`));
+      .catch((err) => {
+        logger.error(`[Admin] Manual sync error: ${err.message}`);
+        syncState.finish(err.message);
+      });
   });
-  res.status(202).json({ success: true, message: 'Sync started in background. Check server logs for progress.' });
+  res.status(202).json({ success: true, message: 'Sync started. Poll /api/admin/sync-status for progress.' });
+}
+
+// GET /api/admin/sync-status
+async function getSyncStatus(req, res) {
+  res.json({ success: true, data: syncState.getState() });
 }
 
 // GET /api/admin/students/:email/platform/:platform
@@ -137,9 +160,10 @@ async function getPlatformDetail(req, res, next) {
 }
 
 module.exports = {
-  listStudents, getStudent, getOverview,
+  listStudents, getStudent, getOverview, getFilters,
   blockStudent, unblockStudent,
   updateHandle, syncStudentNow,
-  triggerSync, getPlatformDetail,
+  triggerSync, getSyncStatus,
+  getPlatformDetail,
   getContestDetail,
 };

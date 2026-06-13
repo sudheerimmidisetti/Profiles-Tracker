@@ -8,6 +8,7 @@ const cron   = require('node-cron');
 const { query, getClient } = require('../config/db');
 const redis  = require('../config/redis');   // ← for distributed lock
 const logger = require('../utils/logger');
+const syncState = require('../utils/syncState');
 
 const leetcodeScraper  = require('../scrapers/leetcode.scraper');
 const codeforcesScraper = require('../scrapers/codeforces.scraper');
@@ -48,18 +49,25 @@ async function syncAllStudents() {
   const emails = Object.keys(studentMap);
   logger.info(`[SyncJob] Syncing ${emails.length} students...`);
 
+  // Initialise shared progress state
+  syncState.start(emails.length);
+
   let success = 0, failed = 0;
 
   for (const email of emails) {
     try {
+      syncState.progress(email, 'start', 'Syncing...');
       await syncStudent(email, studentMap[email]);
       success++;
+      syncState.progress(email, 'ok', `✅ Sync complete`);
     } catch (err) {
       failed++;
       logger.error(`[SyncJob] Failed to sync ${email}: ${err.message}`);
+      syncState.progress(email, 'err', `❌ Failed: ${err.message}`);
     }
   }
 
+  syncState.finish(null);
   logger.info(`✅ [SyncJob] Sync complete. Success: ${success}, Failed: ${failed}`);
 }
 

@@ -152,7 +152,7 @@ async function verifyOtp(email, otp) {
 
 async function listAdmins() {
   const res = await query(
-    'SELECT email, added_by, created_at, is_active FROM admin_users ORDER BY created_at ASC'
+    'SELECT email, added_by, created_at, is_active, is_system_admin FROM admin_users ORDER BY created_at ASC'
   );
   return res.rows;
 }
@@ -177,6 +177,34 @@ async function removeAdmin(email, requestedBy) {
   if (normalized === requestedBy) {
     throw Object.assign(new Error('You cannot remove your own admin access.'), { statusCode: 400 });
   }
+
+  // Check target is not a system admin
+  const targetRes = await query(
+    'SELECT is_system_admin, added_by FROM admin_users WHERE email = $1',
+    [normalized]
+  );
+  if (targetRes.rows[0]?.is_system_admin) {
+    throw Object.assign(
+      new Error('System admins cannot be removed. Contact the development team.'),
+      { statusCode: 403 }
+    );
+  }
+
+  // Non-system admins can only remove someone they added (or system admins can remove anyone)
+  const requesterRes = await query(
+    'SELECT is_system_admin FROM admin_users WHERE email = $1',
+    [requestedBy]
+  );
+  const requesterIsSysAdmin = requesterRes.rows[0]?.is_system_admin === true;
+  const targetAddedBy = targetRes.rows[0]?.added_by;
+
+  if (!requesterIsSysAdmin && targetAddedBy !== requestedBy) {
+    throw Object.assign(
+      new Error('You can only remove admins that you personally added.'),
+      { statusCode: 403 }
+    );
+  }
+
   await query('UPDATE admin_users SET is_active = FALSE WHERE email = $1', [normalized]);
   logger.info(`[AdminAuth] Admin removed: ${normalized} by ${requestedBy}`);
   return { email: normalized };

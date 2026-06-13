@@ -12,6 +12,9 @@ const router = Router();
 router.post('/auth/request-otp', authCtrl.requestOtp);
 router.post('/auth/verify-otp',  authCtrl.verifyOtp);
 
+// PUBLIC: Dynamic filter options (student leaderboard also needs this)
+router.get('/filters', ctrl.getFilters);
+
 // ── All remaining routes require admin auth ──────────────────────────────────
 router.use(adminAuth);
 
@@ -37,9 +40,10 @@ router.put  ('/blocklist/:email',    ctrl.blockStudent);
 router.put  ('/unblocklist/:email',  ctrl.unblockStudent);
 
 // Sync
-router.post ('/sync',                ctrl.triggerSync);
+router.post ('/sync',               ctrl.triggerSync);
+router.get  ('/sync-status',        ctrl.getSyncStatus);
 
 // Overview
-router.get  ('/overview',            ctrl.getOverview);
+router.get  ('/overview',           ctrl.getOverview);
 
 module.exports = router;

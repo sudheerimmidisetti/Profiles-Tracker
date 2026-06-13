@@ -36,6 +36,8 @@ export const adminAPI = {
   block:            (email)                      => api.put(`/api/admin/blocklist/${encodeURIComponent(email)}`),
   unblock:          (email)                      => api.put(`/api/admin/unblocklist/${encodeURIComponent(email)}`),
   triggerSync:      ()                           => api.post('/api/admin/sync'),
+  syncStatus:       ()                           => api.get('/api/admin/sync-status'),
+  getFilters:       ()                           => api.get('/api/admin/filters'),
   updateHandle:     (email, platform, username)  => api.put(`/api/admin/students/${encodeURIComponent(email)}/handle`, { platform, username }),
   syncStudent:      (email)                      => api.post(`/api/admin/students/${encodeURIComponent(email)}/sync`),
   // Admin user management
@@ -46,14 +48,14 @@ export const adminAPI = {
 
 // ── Leaderboard ───────────────────────────────────────────────────────────────
 export const leaderboardAPI = {
-  get:        (platform, filter = 'all', page = 1, limit = 50, search = '', branch = '') =>
-                api.get(`/api/leaderboard/${platform}`, { params: { filter, page, limit, search, branch } }),
-  placements: (page = 1, limit = 50) =>
-                api.get('/api/leaderboard/placements', { params: { page, limit } }),
-  weekly:     (week = null, page = 1, limit = 50) =>
-                api.get('/api/leaderboard/weekly', { params: { week, page, limit } }),
-  monthly:    (month = null, page = 1, limit = 50) =>
-                api.get('/api/leaderboard/monthly',    { params: { month, page, limit } }),
+  get:        (platform, filter = 'all', page = 1, limit = 50, search = '', branch = '', college = '', year = '') =>
+                api.get(`/api/leaderboard/${platform}`, { params: { filter, page, limit, search, branch, college, year } }),
+  placements: (page = 1, limit = 50, college = '', year = '') =>
+                api.get('/api/leaderboard/placements', { params: { page, limit, college, year } }),
+  weekly:     (week = null, page = 1, limit = 50, college = '', year = '') =>
+                api.get('/api/leaderboard/weekly', { params: { week, page, limit, college, year } }),
+  monthly:    (month = null, page = 1, limit = 50, college = '', year = '') =>
+                api.get('/api/leaderboard/monthly', { params: { month, page, limit, college, year } }),
 }
 
 // ── Analytics ─────────────────────────────────────────────────────────────────

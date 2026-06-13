@@ -1,4 +1,4 @@
-// PlacementsLeaderboard.jsx — ported from student (api import updated)
+// PlacementsLeaderboard.jsx
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, X } from 'lucide-react'
@@ -34,6 +34,8 @@ function PlacementRow({ row, rank }) {
   const total = row.final_score ?? row.total_score ?? row.total ?? 0
 
   const lcData = row.lc ?? {}
+  const ccData = row.cc ?? {}
+  const cfData = row.cf ?? {}
   const hrData = row.hr ?? {}
 
   function recalcPos() {
@@ -53,10 +55,18 @@ function PlacementRow({ row, rank }) {
   function handleLeave() { setTip(false) }
 
   return (
-    <div ref={rowRef} className="lb-row" onMouseEnter={handleEnter} onMouseLeave={handleLeave}>
+    <div
+      ref={rowRef}
+      className="lb-row"
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+    >
+      {/* Rank */}
       <div style={{ width: 28, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
         <RankCell rank={rank} />
       </div>
+
+      {/* Identity */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--fg)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {row.full_name}
@@ -72,6 +82,8 @@ function PlacementRow({ row, rank }) {
           {row.hr_handle && <span className="plat-chip hr">HR</span>}
         </div>
       </div>
+
+      {/* Per-platform scores */}
       <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
         {[
           { label: 'LC', val: lc, max: 30, cls: 'lc' },
@@ -88,34 +100,64 @@ function PlacementRow({ row, rank }) {
           </div>
         ))}
       </div>
+
+      {/* Divider */}
       <div style={{ width: 1, height: 36, background: 'var(--border-subtle)', flexShrink: 0 }} />
+
+      {/* Total */}
       <div className="lb-score-cell" style={{ width: 72, minWidth: 72 }}>
         <div className="lb-score-num">{total.toFixed(1)}</div>
         <div className="lb-score-denom">/ 100</div>
         <ScoreBar value={total} />
       </div>
+
+      {/* Portal Tooltip */}
       {tip && createPortal(
-        <div ref={tipRef} className="lb-tip lb-tip-portal"
-          style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999, minWidth: 250 }}>
+        <div
+          ref={tipRef}
+          className="lb-tip lb-tip-portal"
+          style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999, minWidth: 250 }}
+        >
           <div className="lb-tip-title">Score breakdown</div>
-          <div className="lb-tip-row"><span>LeetCode</span><span style={{ color: 'var(--lc)' }}>{fmt(lc)} / 30</span></div>
+          <div className="lb-tip-row">
+            <span>LeetCode</span><span style={{ color: 'var(--lc)' }}>{fmt(lc)} / 30</span>
+          </div>
           {lcData.prob && <>
-            <div className="lb-tip-row" style={{ paddingLeft: 10 }}><span>Problems (UDG)</span><span>{fmt(lcData.prob.cappedPts)} pts</span></div>
-            <div className="lb-tip-row" style={{ paddingLeft: 10 }}><span>Active weeks</span><span>{lcData.prob.activeWeeks}/26</span></div>
+            <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
+              <span>Problems (UDG)</span><span>{fmt(lcData.prob.cappedPts)} pts</span>
+            </div>
+            <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
+              <span>Active weeks</span><span>{lcData.prob.activeWeeks}/26</span>
+            </div>
           </>}
-          {lcData.contest && <div className="lb-tip-row" style={{ paddingLeft: 10 }}><span>Contests</span><span>{lcData.contest.attended}/{lcData.contest.expected}</span></div>}
+          {lcData.contest && <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
+            <span>Contests</span><span>{lcData.contest.attended}/{lcData.contest.expected}</span>
+          </div>}
+
           <div className="lb-tip-divider" />
-          <div className="lb-tip-row"><span>CodeChef</span><span style={{ color: 'var(--cc)' }}>{fmt(cc)} / 30</span></div>
+          <div className="lb-tip-row">
+            <span>CodeChef</span><span style={{ color: 'var(--cc)' }}>{fmt(cc)} / 30</span>
+          </div>
+
           <div className="lb-tip-divider" />
-          <div className="lb-tip-row"><span>Codeforces</span><span style={{ color: 'var(--cf)' }}>{fmt(cf)} / 20</span></div>
+          <div className="lb-tip-row">
+            <span>Codeforces</span><span style={{ color: 'var(--cf)' }}>{fmt(cf)} / 20</span>
+          </div>
+
           <div className="lb-tip-divider" />
-          <div className="lb-tip-row"><span>HackerRank</span><span>{fmt(hr)} / 20</span></div>
+          <div className="lb-tip-row">
+            <span>HackerRank</span><span>{fmt(hr)} / 20</span>
+          </div>
           {hrData.psStars !== undefined && <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
             <span>PS / SQL / Java / Py</span>
             <span>{hrData.psStars}★ · {hrData.sqlStars ?? 0}★ · {hrData.javStars ?? 0}★ · {hrData.pytStars ?? 0}★</span>
           </div>}
+
           <div className="lb-tip-divider" />
-          <div className="lb-tip-row"><span style={{ fontWeight: 700, color: 'var(--fg)' }}>Total</span><span style={{ fontWeight: 700, color: 'var(--fg)' }}>{fmt(total)} / 100</span></div>
+          <div className="lb-tip-row">
+            <span style={{ fontWeight: 700, color: 'var(--fg)' }}>Total</span>
+            <span style={{ fontWeight: 700, color: 'var(--fg)' }}>{fmt(total)} / 100</span>
+          </div>
         </div>,
         document.body
       )}
@@ -129,16 +171,26 @@ export default function PlacementsLeaderboard() {
   const [error,   setError]   = useState('')
   const [page,    setPage]    = useState(1)
   const [search,  setSearch]  = useState('')
-  const [branch,  setBranch]  = useState('All')
+  const [branch,  setBranch]  = useState('')
+  const [college, setCollege] = useState('')
+  const [year,    setYear]    = useState('')
+  const [filterOpts, setFilterOpts] = useState({ branches: [], colleges: [], years: [] })
   const searchRef = useRef(null)
 
   useEffect(() => {
-    setLoading(true); setError('')
-    leaderboardAPI.placements(page, 50)
+    leaderboardAPI.getFilters()
+      .then(r => setFilterOpts(r.data.data || { branches: [], colleges: [], years: [] }))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    setLoading(true)
+    setError('')
+    leaderboardAPI.placements(page, 50, college, year)
       .then(r => setData(r.data))
       .catch(e => setError(e.response?.data?.message || 'Failed to load'))
       .finally(() => setLoading(false))
-  }, [page])
+  }, [page, college, year])
 
   const allRows = data?.data  || []
   const total   = data?.total || 0
@@ -150,14 +202,25 @@ export default function PlacementsLeaderboard() {
       const q = search.toLowerCase()
       r = r.filter(x => (x.full_name || '').toLowerCase().includes(q) || (x.roll_number || '').toLowerCase().includes(q))
     }
-    if (branch !== 'All') r = r.filter(x => (x.branch || '').toLowerCase() === branch.toLowerCase())
+    if (branch) r = r.filter(x => (x.branch || '').toLowerCase() === branch.toLowerCase())
     return r
   }, [allRows, search, branch])
 
   const clearSearch = () => { setSearch(''); searchRef.current?.focus() }
+  const hasFilters  = college || year || branch || search
+
+  const selectStyle = {
+    background: 'var(--card)', border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)', color: 'var(--fg)',
+    fontSize: '0.78rem', padding: '4px 28px 4px 10px',
+    cursor: 'pointer', outline: 'none', appearance: 'none',
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
+    backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center',
+  }
 
   return (
     <div className="card">
+      {/* Header */}
       <div className="lb-card-header">
         <div>
           <div className="lb-card-title">Placements Leaderboard</div>
@@ -165,22 +228,50 @@ export default function PlacementsLeaderboard() {
         </div>
         {total > 0 && <span className="badge badge-gray">{total} students</span>}
       </div>
-      <div className="lb-search-bar">
+
+      {/* Search + filter bar */}
+      <div className="lb-search-bar" style={{ flexWrap: 'wrap', gap: 8 }}>
         <div className="lb-search-input-wrap">
           <Search size={13} />
-          <input ref={searchRef} className="lb-search-input" placeholder="Search name or roll…"
-            value={search} onChange={e => setSearch(e.target.value)} />
+          <input
+            ref={searchRef}
+            className="lb-search-input"
+            placeholder="Search name or roll…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
           {search && <button className="lb-search-clear" onClick={clearSearch}><X size={12} /></button>}
         </div>
-        <div className="lb-filter-pills">
-          {BRANCHES.map(b => (
-            <button key={b} className={`lb-f-pill${branch === b ? ' active' : ''}`} onClick={() => setBranch(b)}>{b}</button>
-          ))}
-        </div>
+        {filterOpts.branches.length > 0 && (
+          <select style={selectStyle} value={branch} onChange={e => { setBranch(e.target.value); setPage(1) }}>
+            <option value="">All Branches</option>
+            {filterOpts.branches.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+        )}
+        {filterOpts.colleges.length > 0 && (
+          <select style={selectStyle} value={college} onChange={e => { setCollege(e.target.value); setPage(1) }}>
+            <option value="">All Colleges</option>
+            {filterOpts.colleges.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        )}
+        {filterOpts.years.length > 0 && (
+          <select style={selectStyle} value={year} onChange={e => { setYear(e.target.value); setPage(1) }}>
+            <option value="">All Years</option>
+            {filterOpts.years.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        )}
+        {hasFilters && (
+          <button className="lb-f-pill" style={{ marginLeft: 0 }}
+            onClick={() => { setSearch(''); setBranch(''); setCollege(''); setYear(''); setPage(1) }}>
+            <X size={10} /> Clear
+          </button>
+        )}
         <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--fg-subtle)' }}>
           {rows.length} student{rows.length !== 1 ? 's' : ''}
         </span>
       </div>
+
+      {/* Column labels */}
       {!loading && rows.length > 0 && (
         <div className="lb-col-header">
           <div style={{ width: 28 }}>#</div>
@@ -194,6 +285,8 @@ export default function PlacementsLeaderboard() {
           <div style={{ width: 72, textAlign: 'right' }} className="lb-col-label">Score</div>
         </div>
       )}
+
+      {/* Body */}
       <div style={{ padding: '6px 0' }}>
         {loading ? (
           <div className="loading-center"><div className="spinner" /> Computing scores…</div>
@@ -201,7 +294,7 @@ export default function PlacementsLeaderboard() {
           <div className="msg msg-error" style={{ margin: '20px 16px' }}>{error}</div>
         ) : rows.length === 0 ? (
           <div className="lb-no-results">
-            {search || branch !== 'All' ? 'No students match your filters.' : 'No data yet. Sync profiles to populate.'}
+            {hasFilters ? 'No students match your filters.' : 'No data yet. Sync profiles to populate.'}
           </div>
         ) : (
           <div className="lb-rows-list" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -211,6 +304,7 @@ export default function PlacementsLeaderboard() {
           </div>
         )}
       </div>
+
       {pages > 1 && (
         <div className="lb-pagination">
           <button className="lb-page-btn" onClick={() => setPage(p => p - 1)} disabled={page === 1}>‹</button>

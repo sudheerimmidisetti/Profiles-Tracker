@@ -6,7 +6,7 @@ const logger          = require('../../utils/logger');
 /**
  * List all students with their verification + blocklist status
  */
-async function listStudents({ page = 1, limit = 50, verified, blocklisted, search, branch, platform }) {
+async function listStudents({ page = 1, limit = 50, verified, blocklisted, search, branch, platform, college, passout_year }) {
   const offset = (page - 1) * limit;
   const conditions = ['1=1'];
   const params     = [];
@@ -33,6 +33,14 @@ async function listStudents({ page = 1, limit = 50, verified, blocklisted, searc
   if (branch) {
     conditions.push(`LOWER(branch) = $${idx++}`);
     params.push(branch.toLowerCase());
+  }
+  if (college) {
+    conditions.push(`LOWER(college) = $${idx++}`);
+    params.push(college.toLowerCase());
+  }
+  if (passout_year) {
+    conditions.push(`passout_year = $${idx++}`);
+    params.push(parseInt(passout_year, 10));
   }
 
   const where = conditions.join(' AND ');
@@ -104,7 +112,7 @@ async function getStudent(email) {
  * Overview dashboard stats — single round-trip for all KPIs
  */
 async function getOverview() {
-  const [studStats, platformStats, recentStudents, branchDist, activeStats] = await Promise.all([
+  const [studStats, platformStats, recentStudents, branchDist, activeStats, hrBadges] = await Promise.all([
     // Student counts
     query(`
       SELECT
@@ -116,14 +124,17 @@ async function getOverview() {
       FROM students
     `),
 
-    // Per-platform student & solved counts
+    // Per-platform: students, solved, avg/max rating, avg solved per linked student
     query(`
       SELECT
         platform_name,
-        COUNT(DISTINCT student_email)       AS students,
-        SUM(total_solved)                   AS total_solved,
-        AVG(current_rating)                 AS avg_rating,
-        MAX(current_rating)                 AS max_rating
+        COUNT(DISTINCT student_email)                                AS students,
+        SUM(total_solved)                                            AS total_solved,
+        CASE WHEN COUNT(DISTINCT student_email) > 0
+             THEN ROUND(SUM(total_solved)::numeric / COUNT(DISTINCT student_email), 1)
+             ELSE 0 END                                             AS avg_solved_per_student,
+        AVG(current_rating)                                         AS avg_rating,
+        MAX(current_rating)                                         AS max_rating
       FROM platform_profiles
       WHERE username IS NOT NULL AND username != ''
       GROUP BY platform_name
@@ -153,18 +164,37 @@ async function getOverview() {
       FROM platform_daily_snapshots
       WHERE snapshot_date > NOW() - INTERVAL '7 days'
     `),
+
+    // HackerRank total badge stars across all students
+    query(`
+      SELECT
+        COUNT(*) AS students_with_hr,
+        COALESCE(SUM(
+          COALESCE(problem_solving_stars,0) +
+          COALESCE(sql_stars,0) +
+          COALESCE(java_stars,0) +
+          COALESCE(python_stars,0)
+        ), 0) AS total_badges
+      FROM hackerrank_profiles
+    `).catch(() => ({ rows: [{ students_with_hr: 0, total_badges: 0 }] })),
   ]);
 
   const s = studStats.rows[0];
+  const hrRow = hrBadges.rows[0] || {};
   const platformMap = {};
   for (const r of platformStats.rows) {
     platformMap[r.platform_name] = {
-      students:   parseInt(r.students,     10) || 0,
-      solved:     parseInt(r.total_solved, 10) || 0,
-      avg_rating: parseFloat(r.avg_rating)     || 0,
-      max_rating: parseFloat(r.max_rating)     || 0,
+      students:              parseInt(r.students,             10) || 0,
+      solved:                parseInt(r.total_solved,         10) || 0,
+      avg_solved_per_student: parseFloat(r.avg_solved_per_student) || 0,
+      avg_rating:            parseFloat(r.avg_rating)             || 0,
+      max_rating:            parseFloat(r.max_rating)             || 0,
     };
   }
+  // Attach HR badge data
+  if (!platformMap.hackerrank) platformMap.hackerrank = { students: 0, solved: 0, avg_solved_per_student: 0, avg_rating: 0, max_rating: 0 };
+  platformMap.hackerrank.badges          = parseInt(hrRow.total_badges,       10) || 0;
+  platformMap.hackerrank.students_with_hr = parseInt(hrRow.students_with_hr, 10) || 0;
 
   return {
     students: {
@@ -178,6 +208,23 @@ async function getOverview() {
     platforms: platformMap,
     recentStudents: recentStudents.rows,
     branchDist: branchDist.rows,
+  };
+}
+
+/**
+ * Dynamic filter options — colleges, passout years, branches from DB.
+ * Used by both admin and student frontends.
+ */
+async function getFilters() {
+  const [collegesRes, yearsRes, branchesRes] = await Promise.all([
+    query(`SELECT DISTINCT college FROM students WHERE college IS NOT NULL AND college != '' ORDER BY college`),
+    query(`SELECT DISTINCT passout_year FROM students WHERE passout_year IS NOT NULL ORDER BY passout_year DESC`),
+    query(`SELECT DISTINCT branch FROM students WHERE branch IS NOT NULL AND branch != '' ORDER BY branch`),
+  ]);
+  return {
+    colleges: collegesRes.rows.map(r => r.college),
+    years:    yearsRes.rows.map(r => r.passout_year),
+    branches: branchesRes.rows.map(r => r.branch),
   };
 }
 
@@ -320,7 +367,7 @@ async function syncStudentNow(email) {
 }
 
 module.exports = {
-  listStudents, getStudent, getOverview,
+  listStudents, getStudent, getOverview, getFilters,
   blockStudent, unblockStudent,
   updateHandle, syncStudentNow, syncStudentNowAndWait,
 };

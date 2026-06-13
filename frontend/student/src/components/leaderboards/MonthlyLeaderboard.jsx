@@ -172,17 +172,25 @@ export default function MonthlyLeaderboard() {
   const [error,   setError]   = useState('')
   const [page,    setPage]    = useState(1)
   const [search,  setSearch]  = useState('')
-  const [branch,  setBranch]  = useState('All')
+  const [branch,  setBranch]  = useState('')
+  const [college, setCollege] = useState('')
+  const [year,    setYear]    = useState('')
+  const [filterOpts, setFilterOpts] = useState({ branches: [], colleges: [], years: [] })
   const searchRef = useRef(null)
 
   useEffect(() => {
+    leaderboardAPI.getFilters()
+      .then(r => setFilterOpts(r.data.data || { branches: [], colleges: [], years: [] }))
+      .catch(() => {})
+  }, [])
+  useEffect(() => {
     setLoading(true)
     setError('')
-    leaderboardAPI.monthly(selMonth, page, 50)
+    leaderboardAPI.monthly(selMonth, page, 50, college, year)
       .then(r => setData(r.data))
       .catch(e => setError(e.response?.data?.message || 'Failed to load'))
       .finally(() => setLoading(false))
-  }, [selMonth, page])
+  }, [selMonth, page, college, year])
 
   const allRows = data?.data || []
   const total   = data?.total || 0
@@ -195,11 +203,21 @@ export default function MonthlyLeaderboard() {
       const q = search.toLowerCase()
       r = r.filter(x => (x.full_name || '').toLowerCase().includes(q) || (x.roll_number || '').toLowerCase().includes(q))
     }
-    if (branch !== 'All') r = r.filter(x => (x.branch || '').toLowerCase() === branch.toLowerCase())
+    if (branch) r = r.filter(x => (x.branch || '').toLowerCase() === branch.toLowerCase())
     return r
   }, [allRows, search, branch])
 
   const clearSearch = () => { setSearch(''); searchRef.current?.focus() }
+  const hasFilters  = college || year || branch || search
+
+  const selectStyle = {
+    background: 'var(--card)', border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)', color: 'var(--fg)',
+    fontSize: '0.78rem', padding: '4px 28px 4px 10px',
+    cursor: 'pointer', outline: 'none', appearance: 'none',
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
+    backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center',
+  }
 
   return (
     <div className="card">
@@ -235,7 +253,7 @@ export default function MonthlyLeaderboard() {
       </div>
 
       {/* Search + filter bar */}
-      <div className="lb-search-bar">
+      <div className="lb-search-bar" style={{ flexWrap: 'wrap', gap: 8 }}>
         <div className="lb-search-input-wrap">
           <Search size={13} />
           <input
@@ -247,11 +265,30 @@ export default function MonthlyLeaderboard() {
           />
           {search && <button className="lb-search-clear" onClick={clearSearch}><X size={12} /></button>}
         </div>
-        <div className="lb-filter-pills">
-          {BRANCHES.map(b => (
-            <button key={b} className={`lb-f-pill${branch === b ? ' active' : ''}`} onClick={() => setBranch(b)}>{b}</button>
-          ))}
-        </div>
+        {filterOpts.branches.length > 0 && (
+          <select style={selectStyle} value={branch} onChange={e => { setBranch(e.target.value); setPage(1) }}>
+            <option value="">All Branches</option>
+            {filterOpts.branches.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+        )}
+        {filterOpts.colleges.length > 0 && (
+          <select style={selectStyle} value={college} onChange={e => { setCollege(e.target.value); setPage(1) }}>
+            <option value="">All Colleges</option>
+            {filterOpts.colleges.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        )}
+        {filterOpts.years.length > 0 && (
+          <select style={selectStyle} value={year} onChange={e => { setYear(e.target.value); setPage(1) }}>
+            <option value="">All Years</option>
+            {filterOpts.years.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        )}
+        {hasFilters && (
+          <button className="lb-f-pill" style={{ marginLeft: 0 }}
+            onClick={() => { setSearch(''); setBranch(''); setCollege(''); setYear(''); setPage(1) }}>
+            <X size={10} /> Clear
+          </button>
+        )}
         <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--fg-subtle)' }}>
           {rows.length} student{rows.length !== 1 ? 's' : ''}
         </span>
@@ -280,7 +317,7 @@ export default function MonthlyLeaderboard() {
           <div className="msg msg-error" style={{ margin: '20px 16px' }}>{error}</div>
         ) : rows.length === 0 ? (
           <div className="lb-no-results">
-            {search || branch !== 'All' ? 'No students match your filters.' : `No data for ${fmtMonth(selMonth)}.`}
+            {hasFilters ? 'No students match your filters.' : `No data for ${fmtMonth(selMonth)}.`}
           </div>
         ) : (
           <div className="lb-rows-list" style={{ display: 'flex', flexDirection: 'column' }}>
