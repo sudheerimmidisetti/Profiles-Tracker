@@ -333,6 +333,86 @@ td {
 .wc-cc { background: rgba(139,94,60,.15);  color: #c8956a; border: 1px solid rgba(139,94,60,.3); }
 .wc-hr { background: rgba(46,200,102,.15); color: var(--hr); border: 1px solid rgba(46,200,102,.3); }
 .wc-note { font-size: 0.65rem; color: var(--fg-subtle); display: flex; align-items: center; }
+
+/* ─── Sync Modal ──────────────────────────────────────────────────────────────── */
+.sync-modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.75);
+  backdrop-filter: blur(6px); z-index: 300;
+  display: none; align-items: center; justify-content: center;
+}
+.sync-modal-overlay.open { display: flex; }
+.sync-modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; width: 520px; max-width: 95vw;
+  padding: 28px; box-shadow: 0 24px 64px rgba(0,0,0,.6);
+  animation: modalIn .25s ease;
+}
+@keyframes modalIn { from { opacity:0; transform:scale(.95); } to { opacity:1; transform:scale(1); } }
+.sync-modal-title {
+  font-size: 1.1rem; font-weight: 700; margin-bottom: 6px;
+  display: flex; align-items: center; gap: 10px;
+}
+.sync-modal-sub { font-size: 0.75rem; color: var(--fg-muted); margin-bottom: 20px; }
+
+/* Progress bar */
+.sync-progress-wrap {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; overflow: hidden; margin-bottom: 12px;
+  height: 12px;
+}
+.sync-progress-fill {
+  height: 100%; border-radius: 8px;
+  background: linear-gradient(90deg, #238636, #3fb950);
+  transition: width .5s ease;
+  position: relative; overflow: hidden;
+}
+.sync-progress-fill::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.15) 50%, transparent 100%);
+  animation: shimmer 1.5s infinite;
+}
+@keyframes shimmer { from{transform:translateX(-100%)} to{transform:translateX(200%)} }
+
+.sync-counts {
+  display: flex; justify-content: space-between;
+  font-size: 0.78rem; color: var(--fg-muted); margin-bottom: 16px;
+}
+.sync-pct { font-weight: 700; color: var(--accent-glow); font-size: 1rem; }
+
+/* Log window */
+.sync-log {
+  background: #0d1117; border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; height: 160px; overflow-y: auto;
+  font-family: 'Roboto Mono', monospace; font-size: 0.68rem;
+  color: var(--fg-muted); line-height: 1.6; margin-bottom: 16px;
+}
+.sync-log-line { color: var(--fg-muted); }
+.sync-log-line.ok  { color: #3fb950; }
+.sync-log-line.err { color: var(--danger); }
+
+/* Status states */
+.sync-status-idle    { color: var(--fg-muted); }
+.sync-status-running { color: #f89f1b; }
+.sync-status-done    { color: #3fb950; }
+.sync-status-error   { color: var(--danger); }
+
+.sync-done-banner {
+  background: linear-gradient(135deg, rgba(35,134,54,.15), rgba(63,185,80,.08));
+  border: 1px solid #2ea043; border-radius: 10px;
+  padding: 16px; text-align: center; margin-bottom: 16px; display: none;
+}
+.sync-done-banner.show { display: block; }
+.sync-done-icon { font-size: 2rem; margin-bottom: 6px; }
+.sync-done-text { font-size: 0.9rem; font-weight: 600; color: #3fb950; }
+.sync-done-sub  { font-size: 0.72rem; color: var(--fg-muted); margin-top: 4px; }
+
+.sync-modal-footer { display: flex; gap: 10px; justify-content: flex-end; }
+.btn-sync-all {
+  background: linear-gradient(135deg, #1f6feb, #388bfd);
+  color: #fff; border-color: transparent;
+}
+.btn-sync-all:hover { background: linear-gradient(135deg, #388bfd, #58a6ff); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(56,139,253,.4); }
+.btn-sync-all:disabled { opacity: .5; cursor: not-allowed; transform: none !important; }
 </style>
 </head>
 <body>
@@ -419,6 +499,13 @@ td {
       <option value="asc">↑ Ascending</option>
     </select>
 
+    <button class="btn btn-sync-all" id="syncAllBtn" onclick="openSyncModal()">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+      </svg>
+      Sync All
+    </button>
+
     <button class="btn btn-export" id="exportBtn" onclick="exportCSV()">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
@@ -463,6 +550,51 @@ td {
     <div class="page-btns" id="pageBtns"></div>
   </div>
 </main>
+
+<!-- Sync All Modal -->
+<div class="sync-modal-overlay" id="syncModalOverlay">
+  <div class="sync-modal">
+    <div class="sync-modal-title">
+      <span id="syncModalIcon">🔄</span> Sync All Students
+    </div>
+    <div class="sync-modal-sub" id="syncModalSub">
+      Fetches live data from LeetCode, CodeChef &amp; HackerRank for all 670 students.<br/>
+      This takes ~35&ndash;40 minutes. The server stays in sync even if you close this window.
+    </div>
+
+    <!-- Progress bar -->
+    <div class="sync-progress-wrap">
+      <div class="sync-progress-fill" id="syncProgressFill" style="width:0%"></div>
+    </div>
+    <div class="sync-counts">
+      <span id="syncCountText">Ready to sync</span>
+      <span class="sync-pct" id="syncPct">0%</span>
+    </div>
+
+    <!-- Log window -->
+    <div class="sync-log" id="syncLog">
+      <div class="sync-log-line" style="color:var(--fg-subtle);font-style:italic">Waiting to start…</div>
+    </div>
+
+    <!-- Done banner -->
+    <div class="sync-done-banner" id="syncDoneBanner">
+      <div class="sync-done-icon">✅</div>
+      <div class="sync-done-text">Sync Completed!</div>
+      <div class="sync-done-sub" id="syncDoneSub">All students have been updated.</div>
+    </div>
+
+    <!-- Footer buttons -->
+    <div class="sync-modal-footer">
+      <button class="btn btn-ghost" id="syncCloseBtn" onclick="closeSyncModal()">Close</button>
+      <button class="btn btn-sync-all" id="syncStartBtn" onclick="startSync()">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+        </svg>
+        <span id="syncStartBtnText">Start Sync</span>
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- Detail Drawer -->
 <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer(event)">
@@ -578,6 +710,129 @@ async function loadProgress() {
     }
   } catch {}
 }
+
+// ─── Sync All Modal ──────────────────────────────────────────────────────────
+let syncPollTimer = null;
+
+function openSyncModal() {
+  document.getElementById('syncModalOverlay').classList.add('open');
+  // Check if a sync is already running on the server
+  checkSyncStatus();
+}
+
+function closeSyncModal() {
+  document.getElementById('syncModalOverlay').classList.remove('open');
+  // Don't stop the poll — sync keeps running on server
+}
+
+async function startSync() {
+  const btn = document.getElementById('syncStartBtn');
+  btn.disabled = true;
+  document.getElementById('syncStartBtnText').textContent = 'Starting…';
+
+  try {
+    const r = await fetch(`${API}/api/sync-all`, { method: 'POST' });
+    const d = await r.json();
+
+    if (d.status === 'already_running') {
+      toast('Sync already running on server — showing live progress', 'success');
+    } else if (d.status === 'started') {
+      toast('Sync started! Fetching all 670 students…', 'success');
+    }
+    // Begin polling regardless
+    startSyncPoll();
+  } catch (err) {
+    toast('Failed to start sync: ' + err.message, 'error');
+    btn.disabled = false;
+    document.getElementById('syncStartBtnText').textContent = 'Start Sync';
+  }
+}
+
+async function checkSyncStatus() {
+  try {
+    const r = await fetch(`${API}/api/sync-status`);
+    const d = await r.json();
+    updateSyncUI(d);
+    if (d.status === 'running') startSyncPoll();
+  } catch {}
+}
+
+function startSyncPoll() {
+  if (syncPollTimer) return; // already polling
+  syncPollTimer = setInterval(async () => {
+    try {
+      const r = await fetch(`${API}/api/sync-status`);
+      const d = await r.json();
+      updateSyncUI(d);
+      if (d.status !== 'running') {
+        clearInterval(syncPollTimer);
+        syncPollTimer = null;
+        // Refresh leaderboard data after sync completes
+        if (d.status === 'done') {
+          setTimeout(() => { loadLeaderboard(); loadStats(); }, 1500);
+        }
+      }
+    } catch {}
+  }, 2500); // poll every 2.5s
+}
+
+function updateSyncUI(d) {
+  const total  = d.total || 670;
+  const done   = d.done  || 0;
+  const pct    = total > 0 ? Math.round(done / total * 100) : 0;
+  const isRun  = d.status === 'running';
+  const isDone = d.status === 'done';
+  const isErr  = d.status === 'error';
+
+  // Progress bar
+  document.getElementById('syncProgressFill').style.width = pct + '%';
+  document.getElementById('syncPct').textContent = pct + '%';
+  document.getElementById('syncCountText').textContent =
+    isRun  ? `Syncing… ${done} / ${total} students` :
+    isDone ? `Completed — ${done} students synced` :
+    isErr  ? `Error after ${done} students` :
+             `Ready to sync ${total} students`;
+
+  // Log window
+  if (d.log && d.log.length > 0) {
+    const logEl = document.getElementById('syncLog');
+    logEl.innerHTML = d.log.map(line => {
+      const cls = line.includes('✅') ? 'ok' : line.includes('❌') || line.includes('Error') ? 'err' : '';
+      return `<div class="sync-log-line ${cls}">${line.replace(/</g,'&lt;')}</div>`;
+    }).join('');
+    logEl.scrollTop = logEl.scrollHeight; // auto-scroll to bottom
+  }
+
+  // Start button state
+  const startBtn     = document.getElementById('syncStartBtn');
+  const startBtnText = document.getElementById('syncStartBtnText');
+  startBtn.disabled  = isRun;
+  startBtnText.textContent = isRun ? 'Syncing…' : isDone ? 'Sync Again' : 'Start Sync';
+
+  // Modal icon + sub text
+  document.getElementById('syncModalIcon').textContent =
+    isRun ? '🔄' : isDone ? '✅' : isErr ? '❌' : '🔄';
+
+  // Done banner
+  const doneBanner = document.getElementById('syncDoneBanner');
+  if (isDone) {
+    doneBanner.classList.add('show');
+    const synced_at = d.synced_at ? new Date(d.synced_at).toLocaleString('en-IN') : 'just now';
+    document.getElementById('syncDoneSub').textContent =
+      `All ${done} students updated · ${synced_at}`;
+    loadProgress(); // update header badge
+  } else if (isErr) {
+    doneBanner.classList.add('show');
+    doneBanner.style.borderColor = 'var(--danger)';
+    document.querySelector('.sync-done-icon').textContent = '❌';
+    document.querySelector('.sync-done-text').textContent = 'Sync Error';
+    document.querySelector('.sync-done-text').style.color = 'var(--danger)';
+    document.getElementById('syncDoneSub').textContent = `Failed after ${done} students.`;
+  } else {
+    doneBanner.classList.remove('show');
+  }
+}
+
 
 // ─── Load global stats ────────────────────────────────────────────────────────
 async function loadStats() {

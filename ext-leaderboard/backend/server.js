@@ -6,12 +6,19 @@
 const express = require('express');
 const cors    = require('cors');
 const path    = require('path');
+const { spawn } = require('child_process');
 const { computeScore } = require('./scoring/placements');
 const db               = require('./db');
 const { parseOds }     = require('./parse-ods');
 const { fetchLCProfile } = require('./scrapers/lc');
 const { fetchCCProfile } = require('./scrapers/cc');
 const { fetchHRProfile } = require('./scrapers/hr');
+
+// ── Sync process state ─────────────────────────────────────────────────────────────
+let syncProc   = null;
+let syncStatus = 'idle'; // idle | running | done | error
+let syncLog    = [];     // last 20 log lines
+let syncExitCode = null;
 
 const app  = express();
 const PORT = process.env.PORT || 4500;
@@ -96,6 +103,52 @@ app.get('/api/stats', (req, res) => {
     top:    +(scores[0]).toFixed(2),
     avg:    +(sum / scores.length).toFixed(2),
     median: +median.toFixed(2),
+  });
+});
+
+// ── POST /api/sync-all ────────────────────────────────────────────────────────
+// Spawns `node sync.js --refetch` as a background child process.
+// Returns immediately — poll /api/sync-status for progress.
+app.post('/api/sync-all', (req, res) => {
+  if (syncStatus === 'running') {
+    return res.json({ status: 'already_running', message: 'Sync already in progress' });
+  }
+
+  syncLog      = [];
+  syncExitCode = null;
+  syncStatus   = 'running';
+
+  const args = ['sync.js', '--refetch'];
+  syncProc = spawn('node', args, { cwd: __dirname });
+
+  const addLog = (line) => {
+    const clean = line.replace(/\x1b\[[0-9;]*m/g, '').trim(); // strip ANSI
+    if (!clean) return;
+    syncLog.push(clean);
+    if (syncLog.length > 50) syncLog.shift(); // keep last 50 lines
+  };
+
+  syncProc.stdout.on('data', d => d.toString().split('\n').forEach(addLog));
+  syncProc.stderr.on('data', d => d.toString().split('\n').forEach(addLog));
+
+  syncProc.on('close', (code) => {
+    syncExitCode = code;
+    syncStatus   = code === 0 ? 'done' : 'error';
+    syncProc     = null;
+  });
+
+  res.json({ status: 'started' });
+});
+
+// ── GET /api/sync-status ──────────────────────────────────────────────────────
+// Returns live sync status + progress counter + last log lines.
+app.get('/api/sync-status', (req, res) => {
+  const progress = db.getProgress();
+  res.json({
+    status:    syncStatus,           // idle | running | done | error
+    exit_code: syncExitCode,
+    ...progress,
+    log: syncLog.slice(-10),         // last 10 log lines
   });
 });
 
