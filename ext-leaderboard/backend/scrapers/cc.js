@@ -1,5 +1,10 @@
 // scrapers/cc.js
-// CodeChef public profile scraper — same approach as main project.
+// CodeChef public profile scraper.
+//
+// BUG-1+2 FIX (2026-06-13):
+//   - Rating:          Parse `all_rating` JS array (last entry) — NOT `.rating-number` CSS class
+//   - Problems Solved: Parse `<h3>Total Problems Solved: N</h3>` HTML text — NOT CSS selectors
+//   - Non-existent:    Detect redirect-to-homepage via page title check
 'use strict';
 
 const axios   = require('axios');
@@ -13,15 +18,8 @@ const HEADERS = {
 };
 
 function safeInt(str) {
-  const n = parseInt(String(str || '').replace(/[^0-9-]/g, ''), 10);
+  const n = parseInt(String(str || '').replace(/[^0-9]/g, ''), 10);
   return isNaN(n) ? 0 : n;
-}
-
-function extractJsonVar(html, varName) {
-  const re = new RegExp(`(?:var\\s+)?${varName}\\s*=\\s*([\\[{][\\s\\S]*?)[;\\n]\\s*(?:var |\\$|jQuery|<\\/script)`, '');
-  const m = html.match(re);
-  if (!m) return null;
-  try { return JSON.parse(m[1].trim().replace(/;$/, '')); } catch { return null; }
 }
 
 function starsFromRating(r) {
@@ -41,10 +39,10 @@ async function fetchCCProfile(username) {
     const resp = await axios.get(`${BASE}/users/${username}`, {
       headers: HEADERS,
       timeout: 25000,
-      validateStatus: (s) => s < 500, // don't throw on 404
+      validateStatus: (s) => s < 500,
     });
 
-    // ── Non-existent user: CodeChef returns 404 or redirects to /users ──
+    // Non-existent user: CodeChef returns 404
     if (resp.status === 404) {
       console.warn(`[CC] ${username}: profile not found (404)`);
       return null;
@@ -53,39 +51,62 @@ async function fetchCCProfile(username) {
     const html = resp.data;
     const $    = cheerio.load(html);
 
-    // Detect non-existent users:
-    // CodeChef returns HTTP 200 + homepage (generic title) for invalid usernames.
-    // A real profile page title contains the username, e.g. "gowrishjanapareddy | CodeChef"
-    const pageTitle = $('title').text().trim();
+    // ── Detect non-existent users ──────────────────────────────────────────────
+    // CodeChef returns HTTP 200 + generic homepage for invalid usernames.
+    // A real profile page title contains the username.
+    const pageTitle    = $('title').text().trim();
     const isProfilePage = pageTitle.toLowerCase().includes(username.toLowerCase()) ||
-                          $('section.rating-header').length > 0 ||
                           $('.rating-number').length > 0 ||
-                          $('[class*="user-details"]').length > 0;
+                          html.includes('all_rating');
 
     if (!isProfilePage) {
       console.warn(`[CC] ${username}: profile not found (redirected to homepage)`);
       return null;
     }
 
-    // ── Rating: must be a realistic number (1000–3500) ──
-    const ratingRaw = safeInt($('.rating-number').first().text().trim());
-    // CodeChef ratings are always 1000-3500; reject garbage values
-    const current_rating = (ratingRaw >= 1000 && ratingRaw <= 4000) ? ratingRaw : 0;
+    // ── Rating: parse `all_rating` JS array — last entry is the current rating ─
+    // CodeChef embeds: var all_rating = [{..., "rating":"1228", ...}, ...];
+    let current_rating = 0;
+    let contest_count  = 0;
+
+    const allRatingM = html.match(/all_rating\s*=\s*(\[[\s\S]*?\]);\s*\n/);
+    if (allRatingM) {
+      try {
+        const arr = JSON.parse(allRatingM[1]);
+        contest_count = arr.length;
+        if (arr.length > 0) {
+          // Last entry in the array = most recent contest = current rating
+          const latest = arr[arr.length - 1];
+          current_rating = safeInt(latest?.rating);
+        }
+      } catch { /* ignore parse error */ }
+    }
+
+    // Fallback: try `current_user_rating` variable (also embedded in page)
+    if (current_rating === 0) {
+      const curRatingM = html.match(/current_user_rating\s*=\s*(\d+)/);
+      if (curRatingM) current_rating = safeInt(curRatingM[1]);
+    }
+
+    // Sanity check: CodeChef ratings are always 1000–4000 range
+    if (current_rating < 1000 || current_rating > 4000) current_rating = 0;
+
     const stars = starsFromRating(current_rating);
 
-    // ── Problems solved ──
+    // ── Problems Solved: parse `Total Problems Solved: N` from HTML ───────────
+    // CodeChef embeds: <h3>Total Problems Solved: 586</h3>
     let problems_solved = 0;
-    $('section, div').each((_, el) => {
-      const text = $(el).text();
-      const m = text.match(/(\d+)\s*(?:Problems?\s*Solved|Solved\s*Problems?)/i);
-      if (m) { problems_solved = Math.max(problems_solved, safeInt(m[1])); }
-    });
-
-    // ── Contest count from embedded JSON ──
-    let contest_count = 0;
-    const contestJson = extractJsonVar(html, 'all_rating');
-    if (Array.isArray(contestJson)) {
-      contest_count = contestJson.length;
+    const psM = html.match(/Total Problems Solved:\s*(\d+)/i);
+    if (psM) {
+      problems_solved = safeInt(psM[1]);
+    } else {
+      // Fallback: cheerio search
+      $('h3, h5').each((_, el) => {
+        const t = $(el).text();
+        const m = t.match(/Total Problems Solved:\s*(\d+)/i) ||
+                  t.match(/(\d+)\s*Problems?\s*Solved/i);
+        if (m) problems_solved = Math.max(problems_solved, safeInt(m[1]));
+      });
     }
 
     return {
