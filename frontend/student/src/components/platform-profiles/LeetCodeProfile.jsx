@@ -136,10 +136,11 @@ function BadgeIcon({ icon, name, size = 40 }) {
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export default function LeetCodeProfile({ data, onBack }) {
-  const [tab,             setTab]             = useState('Profile')
+export default function LeetCodeProfile({ data, onBack, email: emailProp }) {
+  const [tab, setTab] = useState('Profile')
   const [selectedContest, setSelectedContest] = useState(null)
-  const email = localStorage.getItem('email') || ''
+  // emailProp is passed by admin; fall back to localStorage for student website
+  const email = emailProp || localStorage.getItem('email') || ''
 
   const { detail, contests } = data
   const d = detail || {}

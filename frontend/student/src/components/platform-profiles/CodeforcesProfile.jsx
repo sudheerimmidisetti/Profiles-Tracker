@@ -146,10 +146,11 @@ function TierDonut({ d }) {
 const LANG_COLORS = ['#1a8cff','#f89f1b','#22c55e','#a855f7','#ef4444','#06b6d4','#ec4899','#84cc16']
 
 // ── Main Component ─────────────────────────────────────────────────────────────
-export default function CodeforcesProfile({ data, onBack }) {
+export default function CodeforcesProfile({ data, onBack, email: emailProp }) {
   const [tab,              setTab]              = useState('Profile')
   const [selectedContest,  setSelectedContest]  = useState(null)
-  const email = localStorage.getItem('email') || ''
+  // emailProp is passed by admin; fall back to localStorage for student website
+  const email = emailProp || localStorage.getItem('email') || ''
 
   const { detail: d, contests } = data
   if (!d) return null

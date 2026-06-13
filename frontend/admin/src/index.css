@@ -1802,3 +1802,9 @@ tbody tr:last-child td {
 }
 /* ── Spin utility for rotating icons (e.g. refresh) ── */
 .spin { animation: spin 0.8s linear infinite; }
+
+/* ── Admin student profile wrapper ───────────────────────────────────────────
+   Hides the ← back button inside student platform profile components.
+   The sidebar handles navigation in admin — the button is redundant/confusing.
+   ─────────────────────────────────────────────────────────────────────────── */
+.admin-profile-wrapper .lcp-back { display: none !important; }

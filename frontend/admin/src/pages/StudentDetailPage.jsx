@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { adminAPI } from '../api/api'
 import AdminHeader from '../components/AdminHeader'
-import { ArrowLeft, RefreshCw, UserX, UserCheck, AlertCircle, Pencil } from 'lucide-react'
+import { ArrowLeft, RefreshCw, UserX, UserCheck, AlertCircle, Pencil, CheckCircle, XCircle } from 'lucide-react'
 
 // ── Student components reused exactly from student website ──────────────────
 import KPICards        from '@student/components/KPICards'
@@ -112,12 +112,15 @@ function PlatformSection({ email, platform, handles }) {
     </div>
   )
 
-  // Render exact same component as student website — just no onBack (we handle nav ourselves)
+  // Render exact same component as student website
+  // Pass email so ContestDetailPanel gets the right student email (not localStorage)
+  // onBack is a no-op — sidebar handles navigation in admin
+  // The .admin-profile-wrapper CSS hides the ← back button that's inside these components
   const noBack = () => {}
 
-  if (platform === 'leetcode')   return <LeetCodeProfile   data={data} onBack={noBack} />
-  if (platform === 'codechef')   return <CodeChefProfile   data={data} onBack={noBack} />
-  if (platform === 'codeforces') return <CodeforcesProfile data={data} onBack={noBack} />
+  if (platform === 'leetcode')   return <LeetCodeProfile   data={data} onBack={noBack} email={email} />
+  if (platform === 'codechef')   return <CodeChefProfile   data={data} onBack={noBack} email={email} />
+  if (platform === 'codeforces') return <CodeforcesProfile data={data} onBack={noBack} email={email} />
   if (platform === 'hackerrank') return <HackerRankProfile data={data} onBack={noBack} />
   return null
 }
@@ -219,9 +222,11 @@ export default function StudentDetailPage() {
   const [loading, setLoading]   = useState(true)
   const [error,   setError]     = useState(null)
   const [section, setSection]   = useState('dashboard')
-  const [syncing, setSyncing]   = useState(false)
-  const [syncMsg, setSyncMsg]   = useState('')
-  const [blocking, setBlocking] = useState(false)
+
+  // Sync state: idle | syncing | done | error
+  const [syncState,  setSyncState]  = useState('idle')  // 'idle' | 'syncing' | 'done' | 'error'
+  const [syncMsg,    setSyncMsg]    = useState('')
+  const [blocking,   setBlocking]   = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
@@ -238,13 +243,20 @@ export default function StudentDetailPage() {
   useEffect(() => { load() }, [load])
 
   async function handleSync() {
-    setSyncing(true); setSyncMsg('')
+    setSyncState('syncing')
+    setSyncMsg('')
     try {
-      await adminAPI.syncStudent(decodedEmail)
-      setSyncMsg('Sync started! Data will refresh in a few minutes.')
+      const res = await adminAPI.syncStudent(decodedEmail)
+      setSyncState('done')
+      setSyncMsg(res.data?.message || 'Sync complete!')
+      // Reload student data so UI reflects fresh data
+      await load()
+      // Auto-clear success state after 4s
+      setTimeout(() => setSyncState('idle'), 4000)
     } catch (e) {
-      setSyncMsg(e.response?.data?.message || 'Sync failed')
-    } finally { setSyncing(false) }
+      setSyncState('error')
+      setSyncMsg(e.response?.data?.message || e.message || 'Sync failed — please try again')
+    }
   }
 
   async function handleBlock() {
@@ -303,14 +315,34 @@ export default function StudentDetailPage() {
             <ArrowLeft size={14} /> Students
           </button>
           <div style={{ flex: 1 }} />
-          {syncMsg && (
-            <span style={{ fontSize: '0.78rem', color: syncMsg.includes('fail') ? 'var(--danger)' : 'var(--success)' }}>
-              {syncMsg}
+
+          {/* ── Sync feedback ── */}
+          {syncState === 'syncing' && (
+            <span style={{ fontSize: '0.78rem', color: 'var(--fg-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <RefreshCw size={12} className="spin" /> Syncing all platforms…
             </span>
           )}
-          <button className="btn btn-ghost btn-sm" onClick={handleSync} disabled={syncing}>
-            <RefreshCw size={13} className={syncing ? 'spin' : ''} />
-            {syncing ? 'Syncing…' : 'Sync Now'}
+          {syncState === 'done' && (
+            <span style={{ fontSize: '0.78rem', color: 'var(--success, #22c55e)', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <CheckCircle size={13} /> {syncMsg}
+            </span>
+          )}
+          {syncState === 'error' && (
+            <span style={{ fontSize: '0.78rem', color: 'var(--danger, #ef4444)', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <XCircle size={13} /> {syncMsg}
+              <button className="btn btn-ghost" style={{ height: 22, fontSize: '0.68rem', padding: '0 6px', marginLeft: 4 }}
+                onClick={() => setSyncState('idle')}>Dismiss</button>
+            </span>
+          )}
+
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={handleSync}
+            disabled={syncState === 'syncing'}
+            title="Fetch latest data from all platforms for this student"
+          >
+            <RefreshCw size={13} className={syncState === 'syncing' ? 'spin' : ''} />
+            {syncState === 'syncing' ? 'Syncing…' : 'Sync Now'}
           </button>
           <button
             className={`btn btn-sm ${student?.is_blocklisted ? 'btn-success' : 'btn-danger'}`}
@@ -391,8 +423,8 @@ export default function StudentDetailPage() {
             </nav>
           </aside>
 
-          {/* ── Main content ──────────────────────────────────────────────── */}
-          <main style={{ flex: 1, overflow: 'auto', padding: '24px', minWidth: 0 }}>
+          {/* ── Main content — wrapped so we can hide the back button via CSS ──── */}
+          <main className="admin-profile-wrapper" style={{ flex: 1, overflow: 'auto', padding: '24px', minWidth: 0 }}>
             {section === 'dashboard' && (
               <DashboardSection
                 student={student}

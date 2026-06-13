@@ -26,6 +26,9 @@ router.get  ('/students/:email',       ctrl.getStudent);
 router.put  ('/students/:email/handle', ctrl.updateHandle);
 router.post ('/students/:email/sync',  ctrl.syncStudentNow);
 
+// Contest detail for admin (bypasses student-JWT requirement)
+router.get  ('/students/:email/contest/detail', ctrl.getContestDetail);
+
 // Platform detail for admin (same as analytics but no JWT needed)
 router.get  ('/students/:email/platform/:platform', ctrl.getPlatformDetail);
 

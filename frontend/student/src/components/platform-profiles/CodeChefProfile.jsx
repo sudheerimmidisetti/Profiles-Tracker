@@ -166,11 +166,12 @@ const TYPE_COLORS = {
 const PAGE_SIZE = 10
 
 // ── Main Component ─────────────────────────────────────────────────────────────
-export default function CodeChefProfile({ data, onBack }) {
+export default function CodeChefProfile({ data, onBack, email: emailProp }) {
   const [tab, setTab] = useState('Profile')
   const [selectedContest, setSelectedContest] = useState(null)
   const PAGE_SIZE = 10   // kept for the Contests tab preview in Statistics
-  const email = localStorage.getItem('email') || ''
+  // emailProp is passed by admin; fall back to localStorage for student website
+  const email = emailProp || localStorage.getItem('email') || ''
 
   const { detail: d, contests } = data
   if (!d) return null

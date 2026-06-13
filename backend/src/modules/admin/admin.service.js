@@ -270,7 +270,32 @@ async function updateHandle(email, platform, username) {
 }
 
 /**
+ * Force an immediate re-sync for a single student and WAIT for it to finish.
+ * Unlike syncStudentNow, this does NOT fire-and-forget — it awaits completion
+ * so the API endpoint can return a real success/error response.
+ */
+async function syncStudentNowAndWait(email) {
+  const ppRes = await query(
+    `SELECT platform_name, username FROM platform_profiles WHERE student_email = $1`,
+    [email]
+  );
+  if (!ppRes.rows.length) {
+    const err = new Error('No platform profiles found for this student');
+    err.statusCode = 404;
+    throw err;
+  }
+  const handles = {};
+  for (const r of ppRes.rows) handles[r.platform_name] = r.username;
+
+  // Await the sync — any thrown error will propagate to the controller
+  await syncStudent(email, handles);
+
+  return { email, handles, synced: true };
+}
+
+/**
  * Force an immediate re-sync for a single student using their current handles.
+ * Fire-and-forget version (used by updateHandle).
  */
 async function syncStudentNow(email) {
   const ppRes = await query(
@@ -297,5 +322,5 @@ async function syncStudentNow(email) {
 module.exports = {
   listStudents, getStudent, getOverview,
   blockStudent, unblockStudent,
-  updateHandle, syncStudentNow,
+  updateHandle, syncStudentNow, syncStudentNowAndWait,
 };

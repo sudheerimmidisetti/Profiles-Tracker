@@ -2,7 +2,13 @@
 const adminService        = require('./admin.service');
 const analyticsService    = require('../analytics/analytics.service');
 const { syncAllStudents } = require('../../jobs/syncProfiles.job');
+const { query }           = require('../../config/db');
 const logger              = require('../../utils/logger');
+const {
+  getCodeforcesDetail,
+  getCodechefDetail,
+  getLeetcodeDetail,
+} = require('../contest/contest.service');
 
 // GET /api/admin/students?page=1&limit=50&verified=true&blocklisted=false&search=&branch=CSE
 async function listStudents(req, res, next) {
@@ -65,11 +71,47 @@ async function updateHandle(req, res, next) {
 }
 
 // POST /api/admin/students/:email/sync
+// Awaits completion so the UI knows when it's truly done.
 async function syncStudentNow(req, res, next) {
   try {
     const email = decodeURIComponent(req.params.email);
-    const data  = await adminService.syncStudentNow(email);
-    res.status(202).json({ success: true, message: 'Re-sync started in background.', data });
+    const data  = await adminService.syncStudentNowAndWait(email);
+    res.status(200).json({ success: true, message: 'Sync complete. Data is up to date.', data });
+  } catch (err) { next(err); }
+}
+
+// GET /api/admin/students/:email/contest/detail?platform=...&contestId=...
+// Admin-auth-protected proxy to contest service — avoids student-JWT requirement.
+async function getContestDetail(req, res, next) {
+  try {
+    const email      = decodeURIComponent(req.params.email);
+    const { platform, contestId } = req.query;
+    if (!platform || !contestId) {
+      return res.status(400).json({ success: false, message: 'platform and contestId are required' });
+    }
+    let result;
+    if (platform === 'codeforces') {
+      const r = await query(
+        `SELECT pp.username FROM platform_profiles pp WHERE pp.student_email=$1 AND pp.platform_name='codeforces' LIMIT 1`,
+        [email]
+      );
+      const handle = r.rows[0]?.username;
+      if (!handle) return res.status(404).json({ success: false, message: 'Codeforces handle not found' });
+      result = await getCodeforcesDetail(contestId, handle);
+    } else if (platform === 'codechef') {
+      result = await getCodechefDetail(contestId, email, query);
+    } else if (platform === 'leetcode') {
+      const r = await query(
+        `SELECT pp.username FROM platform_profiles pp WHERE pp.student_email=$1 AND pp.platform_name='leetcode' LIMIT 1`,
+        [email]
+      );
+      const handle = r.rows[0]?.username;
+      if (!handle) return res.status(404).json({ success: false, message: 'LeetCode handle not found' });
+      result = await getLeetcodeDetail(contestId, email, query);
+    } else {
+      return res.status(400).json({ success: false, message: `Unknown platform: ${platform}` });
+    }
+    res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
 
@@ -99,4 +141,5 @@ module.exports = {
   blockStudent, unblockStudent,
   updateHandle, syncStudentNow,
   triggerSync, getPlatformDetail,
+  getContestDetail,
 };
