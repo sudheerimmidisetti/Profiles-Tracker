@@ -46,4 +46,10 @@ router.get  ('/sync-status',        ctrl.getSyncStatus);
 // Overview
 router.get  ('/overview',           ctrl.getOverview);
 
+// Handle Update Requests (student requests to change handles)
+router.get  ('/handle-requests',               ctrl.listHandleRequests);
+router.put  ('/handle-requests/:id/approve',   ctrl.approveHandleRequest);
+router.put  ('/handle-requests/:id/reject',    ctrl.rejectHandleRequest);
+
 module.exports = router;
+

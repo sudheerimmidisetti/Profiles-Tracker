@@ -72,22 +72,27 @@ api.interceptors.response.use(
 
 // ── Admin API ─────────────────────────────────────────────────────────────────
 export const adminAPI = {
-  overview:         ()                           => api.get('/api/admin/overview'),
-  listStudents:     (params)                     => api.get('/api/admin/students', { params }),
-  getStudent:       (email)                      => api.get(`/api/admin/students/${encodeURIComponent(email)}`),
-  getPlatform:      (email, platform)            => api.get(`/api/admin/students/${encodeURIComponent(email)}/platform/${platform}`),
-  block:            (email)                      => api.put(`/api/admin/blocklist/${encodeURIComponent(email)}`),
-  unblock:          (email)                      => api.put(`/api/admin/unblocklist/${encodeURIComponent(email)}`),
-  triggerSync:      ()                           => api.post('/api/admin/sync'),
-  syncStatus:       ()                           => api.get('/api/admin/sync-status'),
-  getFilters:       ()                           => api.get('/api/admin/filters'),
-  updateHandle:     (email, platform, username)  => api.put(`/api/admin/students/${encodeURIComponent(email)}/handle`, { platform, username }),
-  syncStudent:      (email)                      => api.post(`/api/admin/students/${encodeURIComponent(email)}/sync`),
+  overview:              ()                           => api.get('/api/admin/overview'),
+  listStudents:          (params)                     => api.get('/api/admin/students', { params }),
+  getStudent:            (email)                      => api.get(`/api/admin/students/${encodeURIComponent(email)}`),
+  getPlatform:           (email, platform)            => api.get(`/api/admin/students/${encodeURIComponent(email)}/platform/${platform}`),
+  block:                 (email)                      => api.put(`/api/admin/blocklist/${encodeURIComponent(email)}`),
+  unblock:               (email)                      => api.put(`/api/admin/unblocklist/${encodeURIComponent(email)}`),
+  triggerSync:           ()                           => api.post('/api/admin/sync'),
+  syncStatus:            ()                           => api.get('/api/admin/sync-status'),
+  getFilters:            ()                           => api.get('/api/admin/filters'),
+  updateHandle:          (email, platform, username)  => api.put(`/api/admin/students/${encodeURIComponent(email)}/handle`, { platform, username }),
+  syncStudent:           (email)                      => api.post(`/api/admin/students/${encodeURIComponent(email)}/sync`),
   // Admin user management
-  listAdmins:       ()                           => api.get('/api/admin/auth/admins'),
-  addAdmin:         (email)                      => api.post('/api/admin/auth/add-admin', { email }),
-  removeAdmin:      (email)                      => api.delete('/api/admin/auth/remove-admin', { data: { email } }),
+  listAdmins:            ()                           => api.get('/api/admin/auth/admins'),
+  addAdmin:              (email)                      => api.post('/api/admin/auth/add-admin', { email }),
+  removeAdmin:           (email)                      => api.delete('/api/admin/auth/remove-admin', { data: { email } }),
+  // Handle Update Requests
+  listHandleRequests:    (params)                     => api.get('/api/admin/handle-requests', { params }),
+  approveHandleRequest:  (id)                         => api.put(`/api/admin/handle-requests/${id}/approve`),
+  rejectHandleRequest:   (id, reason)                 => api.put(`/api/admin/handle-requests/${id}/reject`, { reason }),
 }
+
 
 // ── Leaderboard ───────────────────────────────────────────────────────────────
 export const leaderboardAPI = {

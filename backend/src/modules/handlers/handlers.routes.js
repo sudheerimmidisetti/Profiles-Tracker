@@ -8,8 +8,9 @@ const router = Router();
 // All handlers routes require authentication
 router.use(authenticate);
 
-router.post('/submit',        ctrl.submit);       // Submit handles → get verification code
-router.get('/verify-status',  ctrl.verifyStatus); // Check pending/current verification state
-router.post('/confirm',       ctrl.confirm);      // Scrape all platforms → confirm names → verify
+router.post('/submit',         ctrl.submit);        // Submit handles (first-time → code flow; verified → admin request)
+router.get('/verify-status',   ctrl.verifyStatus);  // Check first-time verification state
+router.get('/request-status',  ctrl.requestStatus); // Check handle update request status (verified students)
+router.post('/confirm',        ctrl.confirm);        // Scrape + confirm first-time verification
 
 module.exports = router;

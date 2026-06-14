@@ -12,6 +12,8 @@ const submitSchema = z.object({
 });
 
 // POST /api/handlers/submit
+// - Unverified students: starts code-verification flow
+// - Verified students: creates handle update request for admin approval
 async function submit(req, res, next) {
   try {
     const handles = submitSchema.parse(req.body);
@@ -32,6 +34,17 @@ async function verifyStatus(req, res, next) {
   }
 }
 
+// GET /api/handlers/request-status
+// Returns pending/recent handle update requests for the current student
+async function requestStatus(req, res, next) {
+  try {
+    const result = await handlersService.getHandleRequestStatus(req.user.email);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // POST /api/handlers/confirm
 async function confirm(req, res, next) {
   try {
@@ -43,4 +56,4 @@ async function confirm(req, res, next) {
   }
 }
 
-module.exports = { submit, verifyStatus, confirm };
+module.exports = { submit, verifyStatus, requestStatus, confirm };

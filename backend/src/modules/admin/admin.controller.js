@@ -159,6 +159,36 @@ async function getPlatformDetail(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// GET /api/admin/handle-requests?status=pending&page=1&limit=50
+async function listHandleRequests(req, res, next) {
+  try {
+    const status = req.query.status || null; // 'pending' | 'approved' | 'rejected' | null (all)
+    const page   = Math.max(1,  parseInt(req.query.page  || '1',  10));
+    const limit  = Math.min(100, parseInt(req.query.limit || '50', 10));
+    const result = await adminService.listHandleRequests({ status, page, limit });
+    res.status(200).json({ success: true, ...result });
+  } catch (err) { next(err); }
+}
+
+// PUT /api/admin/handle-requests/:id/approve
+async function approveHandleRequest(req, res, next) {
+  try {
+    const id     = parseInt(req.params.id, 10);
+    const result = await adminService.approveHandleRequest(id, req.user?.email || 'admin');
+    res.status(200).json({ success: true, ...result });
+  } catch (err) { next(err); }
+}
+
+// PUT /api/admin/handle-requests/:id/reject
+async function rejectHandleRequest(req, res, next) {
+  try {
+    const id     = parseInt(req.params.id, 10);
+    const reason = req.body?.reason || '';
+    const result = await adminService.rejectHandleRequest(id, req.user?.email || 'admin', reason);
+    res.status(200).json({ success: true, ...result });
+  } catch (err) { next(err); }
+}
+
 module.exports = {
   listStudents, getStudent, getOverview, getFilters,
   blockStudent, unblockStudent,
@@ -166,4 +196,6 @@ module.exports = {
   triggerSync, getSyncStatus,
   getPlatformDetail,
   getContestDetail,
+  listHandleRequests, approveHandleRequest, rejectHandleRequest,
 };
+

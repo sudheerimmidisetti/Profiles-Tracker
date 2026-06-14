@@ -1,32 +1,29 @@
 import { NavLink, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, Users, Trophy, BarChart2,
-  Code2, ShieldOff, LogOut, Database, UserCog
+  Code2, ShieldOff, LogOut, Database, UserCog, RefreshCw
 } from 'lucide-react'
 import { useAdminAuth } from '../context/AdminAuthContext'
-
-const NAV = [
-  {
-    title: 'OVERVIEW',
-    items: [
-      { to: '/',            label: 'Dashboard',      icon: LayoutDashboard },
-      { to: '/students',    label: 'All Students',   icon: Users },
-      { to: '/leaderboard', label: 'Leaderboard',    icon: Trophy },
-      { to: '/analytics',   label: 'Analytics',      icon: BarChart2 },
-    ],
-  },
-  {
-    title: 'MANAGEMENT',
-    items: [
-      { to: '/blocklist',   label: 'Blocked Students', icon: ShieldOff },
-      { to: '/team',        label: 'Admin Team',        icon: UserCog },
-    ],
-  },
-]
+import { adminAPI } from '../api/api'
 
 export default function AdminSidebar() {
   const { logout } = useAdminAuth()
   const navigate   = useNavigate()
+  const [pendingHandles, setPendingHandles] = useState(0)
+
+  // Poll for pending handle requests every 60 seconds
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const r = await adminAPI.listHandleRequests({ status: 'pending', limit: 1 })
+        setPendingHandles(r.data.pendingCount || 0)
+      } catch {}
+    }
+    load()
+    const id = setInterval(load, 60000)
+    return () => clearInterval(id)
+  }, [])
 
   const handleLogout = () => {
     logout()
@@ -40,6 +37,31 @@ export default function AdminSidebar() {
       return JSON.parse(atob(token.split('.')[1])).email
     } catch { return null }
   })()
+
+  const NAV = [
+    {
+      title: 'OVERVIEW',
+      items: [
+        { to: '/',            label: 'Dashboard',      icon: LayoutDashboard },
+        { to: '/students',    label: 'All Students',   icon: Users },
+        { to: '/leaderboard', label: 'Leaderboard',    icon: Trophy },
+        { to: '/analytics',   label: 'Analytics',      icon: BarChart2 },
+      ],
+    },
+    {
+      title: 'MANAGEMENT',
+      items: [
+        {
+          to: '/handle-requests',
+          label: 'Handle Requests',
+          icon: RefreshCw,
+          badge: pendingHandles > 0 ? pendingHandles : null,
+        },
+        { to: '/blocklist',   label: 'Blocked Students', icon: ShieldOff },
+        { to: '/team',        label: 'Admin Team',        icon: UserCog },
+      ],
+    },
+  ]
 
   return (
     <aside className="sidebar">
@@ -69,6 +91,20 @@ export default function AdminSidebar() {
                   >
                     <item.icon size={16} />
                     {item.label}
+                    {item.badge && (
+                      <span style={{
+                        marginLeft: 'auto',
+                        background: 'var(--danger)',
+                        color: 'white',
+                        borderRadius: '9999px',
+                        padding: '1px 7px',
+                        fontSize: '0.68rem',
+                        fontWeight: 700,
+                        lineHeight: '1.4',
+                      }}>
+                        {item.badge}
+                      </span>
+                    )}
                   </NavLink>
                 </li>
               ))}

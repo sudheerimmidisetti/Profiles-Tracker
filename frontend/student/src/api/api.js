@@ -85,10 +85,12 @@ export const profileAPI = {
 
 // ── Handlers ─────────────────────────────────────────
 export const handlersAPI = {
-  submit:        (handles)  => api.post('/api/handlers/submit', handles),
-  verifyStatus:  ()         => api.get('/api/handlers/verify-status'),
-  confirm:       ()         => api.post('/api/handlers/confirm'),
+  submit:         (handles)  => api.post('/api/handlers/submit', handles),
+  verifyStatus:   ()         => api.get('/api/handlers/verify-status'),
+  requestStatus:  ()         => api.get('/api/handlers/request-status'), // for verified students
+  confirm:        ()         => api.post('/api/handlers/confirm'),
 }
+
 
 // ── Leaderboard ───────────────────────────────────────
 export const leaderboardAPI = {

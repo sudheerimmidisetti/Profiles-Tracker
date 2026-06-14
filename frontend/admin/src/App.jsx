@@ -10,6 +10,7 @@ import LeaderboardPage   from './pages/LeaderboardPage'
 import AnalyticsPage     from './pages/AnalyticsPage'
 import BlocklistPage     from './pages/BlocklistPage'
 import AdminTeamPage     from './pages/AdminTeamPage'
+import HandleRequestsPage from './pages/HandleRequestsPage'
 
 function ProtectedRoute({ children }) {
   const { loggedIn } = useAdminAuth()
@@ -34,6 +35,7 @@ export default function App() {
             <Route path="/analytics"        element={<AnalyticsPage />} />
             <Route path="/blocklist"        element={<BlocklistPage />} />
             <Route path="/team"             element={<AdminTeamPage />} />
+            <Route path="/handle-requests" element={<HandleRequestsPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

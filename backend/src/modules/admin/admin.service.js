@@ -366,8 +366,151 @@ async function syncStudentNow(email) {
   return { email, handles, syncing: true };
 }
 
+// ─────────────────────────────────────────────────────────────
+// Handle Update Requests (admin-side)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * List handle update requests with optional status filter + pagination.
+ */
+async function listHandleRequests({ status = null, page = 1, limit = 50 } = {}) {
+  const offset = (page - 1) * limit;
+  const conds  = [];
+  const params = [];
+  let   idx    = 1;
+
+  if (status) { conds.push(`r.status = $${idx++}`); params.push(status); }
+
+  const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+
+  const res = await query(
+    `SELECT r.*,
+            s.full_name, s.roll_number, s.branch, s.college
+     FROM handle_update_requests r
+     JOIN students s ON s.email = r.student_email
+     ${where}
+     ORDER BY
+       CASE r.status WHEN 'pending' THEN 0 ELSE 1 END,
+       r.requested_at DESC
+     LIMIT $${idx++} OFFSET $${idx++}`,
+    [...params, limit, offset]
+  );
+
+  const countRes = await query(
+    `SELECT COUNT(*) FROM handle_update_requests r ${where}`,
+    params
+  );
+
+  // Also get count of pending requests for badge
+  const pendingRes = await query(
+    `SELECT COUNT(*) FROM handle_update_requests WHERE status = 'pending'`
+  );
+
+  return {
+    total:        parseInt(countRes.rows[0].count, 10),
+    pendingCount: parseInt(pendingRes.rows[0].count, 10),
+    data:         res.rows,
+  };
+}
+
+/**
+ * Approve a handle update request:
+ * - Update platform_profiles with new handles
+ * - Mark request as approved
+ * - Trigger async sync
+ */
+async function approveHandleRequest(requestId, adminEmail) {
+  const res = await query(
+    `SELECT * FROM handle_update_requests WHERE id = $1`,
+    [requestId]
+  );
+  if (!res.rows.length) {
+    const err = new Error('Handle update request not found'); err.statusCode = 404; throw err;
+  }
+  const req = res.rows[0];
+  if (req.status !== 'pending') {
+    const err = new Error(`Request is already ${req.status}`); err.statusCode = 400; throw err;
+  }
+
+  const email = req.student_email;
+
+  // Apply new handles to platform_profiles
+  const platformMap = {
+    leetcode:   req.lc_handle,
+    codeforces: req.cf_handle,
+    codechef:   req.cc_handle,
+    hackerrank: req.hr_handle,
+  };
+
+  const handleMap = {};
+  for (const [platform, handle] of Object.entries(platformMap)) {
+    if (!handle) continue;
+    await query(
+      `INSERT INTO platform_profiles (student_email, platform_name, username)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (student_email, platform_name) DO UPDATE SET username = EXCLUDED.username`,
+      [email, platform, handle]
+    );
+    handleMap[platform] = handle;
+  }
+
+  // Mark request approved
+  await query(
+    `UPDATE handle_update_requests
+     SET status = 'approved', reviewed_at = NOW(), reviewed_by = $1
+     WHERE id = $2`,
+    [adminEmail, requestId]
+  );
+
+  logger.info(`[Admin] Handle update request #${requestId} approved for ${email} by ${adminEmail}`);
+
+  // Trigger async re-sync so new data loads right away
+  const currentHandlesRes = await query(
+    `SELECT platform_name, username FROM platform_profiles WHERE student_email = $1`,
+    [email]
+  );
+  const fullHandles = {};
+  for (const r of currentHandlesRes.rows) fullHandles[r.platform_name] = r.username;
+
+  setImmediate(() => {
+    syncStudent(email, fullHandles)
+      .then(() => logger.info(`[Admin] Handle-request sync complete for ${email}`))
+      .catch(e  => logger.warn(`[Admin] Handle-request sync failed for ${email}: ${e.message}`));
+  });
+
+  return { approved: true, email, handles: fullHandles, syncing: true };
+}
+
+/**
+ * Reject a handle update request.
+ */
+async function rejectHandleRequest(requestId, adminEmail, reason = '') {
+  const res = await query(
+    `SELECT id, status, student_email FROM handle_update_requests WHERE id = $1`,
+    [requestId]
+  );
+  if (!res.rows.length) {
+    const err = new Error('Handle update request not found'); err.statusCode = 404; throw err;
+  }
+  if (res.rows[0].status !== 'pending') {
+    const err = new Error(`Request is already ${res.rows[0].status}`); err.statusCode = 400; throw err;
+  }
+
+  await query(
+    `UPDATE handle_update_requests
+     SET status = 'rejected', reviewed_at = NOW(), reviewed_by = $1, reject_reason = $2
+     WHERE id = $3`,
+    [adminEmail, reason || null, requestId]
+  );
+
+  logger.info(`[Admin] Handle update request #${requestId} rejected for ${res.rows[0].student_email} by ${adminEmail}`);
+  return { rejected: true };
+}
+
 module.exports = {
   listStudents, getStudent, getOverview, getFilters,
   blockStudent, unblockStudent,
   updateHandle, syncStudentNow, syncStudentNowAndWait,
+  listHandleRequests, approveHandleRequest, rejectHandleRequest,
 };
+
