@@ -48,6 +48,8 @@ export const adminAPI = {
 
 // ── Leaderboard ───────────────────────────────────────────────────────────────
 export const leaderboardAPI = {
+  getFilters: ()                                                                 =>
+                api.get('/api/admin/filters'),
   get:        (platform, filter = 'all', page = 1, limit = 50, search = '', branch = '', college = '', year = '') =>
                 api.get(`/api/leaderboard/${platform}`, { params: { filter, page, limit, search, branch, college, year } }),
   placements: (page = 1, limit = 50, college = '', year = '') =>
@@ -57,6 +59,7 @@ export const leaderboardAPI = {
   monthly:    (month = null, page = 1, limit = 50, college = '', year = '') =>
                 api.get('/api/leaderboard/monthly', { params: { month, page, limit, college, year } }),
 }
+
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
 export const analyticsAPI = {
