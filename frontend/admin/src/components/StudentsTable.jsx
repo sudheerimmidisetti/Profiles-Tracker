@@ -3,7 +3,7 @@ import { Eye, ShieldOff, ShieldCheck, ChevronLeft, ChevronRight, Search, Refresh
 import { adminAPI } from '../api/api'
 import { useNavigate } from 'react-router-dom'
 
-export default function StudentsTable({ students = [], total, page, onPageChange, onRefresh, showSyncButton = false }) {
+export default function StudentsTable({ students = [], total, page, onPageChange, onRefresh }) {
   const [blocking,  setBlocking]  = useState(null)
   const [syncingId, setSyncingId] = useState(null)
   const [search,    setSearch]    = useState('')
@@ -131,16 +131,14 @@ export default function StudentsTable({ students = [], total, page, onPageChange
                           >
                             <Eye size={14} />
                           </button>
-                          {showSyncButton && (
-                            <button
-                              className="btn btn-ghost btn-sm btn-icon"
-                              title="Sync now"
-                              onClick={() => handleSync(s.email)}
-                              disabled={syncingId === s.email}
-                            >
-                              <RefreshCw size={13} className={syncingId === s.email ? 'spin' : ''} />
-                            </button>
-                          )}
+                          <button
+                            className="btn btn-ghost btn-sm btn-icon"
+                            title="Sync now"
+                            onClick={() => handleSync(s.email)}
+                            disabled={syncingId === s.email}
+                          >
+                            <RefreshCw size={13} className={syncingId === s.email ? 'spin' : ''} />
+                          </button>
                           {s.is_blocklisted ? (
                             <button
                               className="btn btn-success btn-sm"

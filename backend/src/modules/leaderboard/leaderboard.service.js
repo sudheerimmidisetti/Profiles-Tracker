@@ -630,7 +630,8 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50, college =
     const result = computeMonthlyScore({
       weeklyScores: d.weeklyScores,
       solves:       d.solves,
-      year, month,
+      year: yrNum,  // calendar year number (not the passout-year filter string)
+      month,        // 0-indexed month
     });
     return {
       student_email:  s.email,
