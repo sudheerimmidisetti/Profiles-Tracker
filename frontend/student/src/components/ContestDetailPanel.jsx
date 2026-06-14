@@ -3,6 +3,10 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import './ContestDetailPanel.css'
 import api from '../api/api'
 
+// Default fetch function using the student api
+const defaultFetch = (url, config) => api.get(url, config)
+
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtDate(ts) {
   if (!ts) return '—'
@@ -344,7 +348,10 @@ function CodeViewer({ submission }) {
 }
 
 // ── Main Panel ────────────────────────────────────────────────────────────────
-export default function ContestDetailPanel({ contest, platform, email, onClose }) {
+export default function ContestDetailPanel({ contest, platform, email, onClose, apiFetch }) {
+  // apiFetch: optional custom fetch function (admin passes its own to avoid
+  //           the student api's 401→logout interceptor). Defaults to student api.
+  const fetchFn = apiFetch || defaultFetch
   const [tab,         setTab]         = useState('Problems')
   const [data,        setData]        = useState(null)
   const [loading,     setLoading]     = useState(true)
@@ -368,11 +375,11 @@ export default function ContestDetailPanel({ contest, platform, email, onClose }
   useEffect(() => {
     if (!contestId) { setError('Contest ID not found'); setLoading(false); return }
     setLoading(true); setError(null); setSelectedSub(null); setData(null)
-    api.get('/api/contest/detail', { params: { platform, contestId, email } })
+    fetchFn('/api/contest/detail', { params: { platform, contestId, email } })
       .then(r => setData(r.data.data))
       .catch(e => setError(e.response?.data?.message || e.message || 'Failed to load'))
       .finally(() => setLoading(false))
-  }, [contestId, platform, email])
+  }, [contestId, platform, email, fetchFn])
 
   useEffect(() => {
     const onKey = e => { if (e.key === 'Escape') onClose() }

@@ -136,7 +136,7 @@ function BadgeIcon({ icon, name, size = 40 }) {
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export default function LeetCodeProfile({ data, onBack, email: emailProp }) {
+export default function LeetCodeProfile({ data, onBack, email: emailProp, apiFetch }) {
   const [tab, setTab] = useState('Profile')
   const [selectedContest, setSelectedContest] = useState(null)
   // emailProp is passed by admin; fall back to localStorage for student website
@@ -825,6 +825,7 @@ export default function LeetCodeProfile({ data, onBack, email: emailProp }) {
           platform="leetcode"
           email={email}
           onClose={() => setSelectedContest(null)}
+          apiFetch={apiFetch}
         />
       )}
     </div>

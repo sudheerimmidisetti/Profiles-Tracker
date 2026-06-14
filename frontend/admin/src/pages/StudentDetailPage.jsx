@@ -9,6 +9,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { adminAPI } from '../api/api'
 import AdminHeader from '../components/AdminHeader'
 import { ArrowLeft, RefreshCw, UserX, UserCheck, AlertCircle, Pencil, CheckCircle, XCircle } from 'lucide-react'
+import axios from 'axios'
 
 // ── Student components reused exactly from student website ──────────────────
 import KPICards        from '@student/components/KPICards'
@@ -21,6 +22,33 @@ import HackerRankProfile from '@student/components/platform-profiles/HackerRankP
 
 // Student CSS needed by these components
 import '@student/styles/platform-profile.css'
+
+// ── Admin contest-detail fetcher ────────────────────────────────────────────────────────────────
+// ContestDetailPanel calls api.get('/api/contest/detail', { params }). In admin,
+// the student api's JWT interceptor would catch the resulting 401 and call
+// window.location='/login', logging the admin out. This fetcher intercepts
+// '/api/contest/detail' and redirects it to the admin-protected endpoint instead.
+const _adminHttp = axios.create({ baseURL: import.meta.env.VITE_API_URL || '', timeout: 30000 })
+_adminHttp.interceptors.request.use(cfg => {
+  const tok = localStorage.getItem('adminToken') || ''
+  if (tok) cfg.headers['Authorization'] = `Bearer ${tok}`
+  return cfg
+})
+
+function makeAdminApiFetch(email) {
+  return function adminApiFetch(url, config = {}) {
+    if (url === '/api/contest/detail') {
+      const { platform, contestId } = config.params || {}
+      if (email && platform && contestId) {
+        return _adminHttp.get(
+          `/api/admin/students/${encodeURIComponent(email)}/contest/detail`,
+          { params: { platform, contestId } }
+        )
+      }
+    }
+    return _adminHttp.get(url, config)
+  }
+}
 
 // ── Sidebar items ─────────────────────────────────────────────────────────────
 const SECTIONS = [
@@ -72,7 +100,7 @@ function HandleEdit({ platform, handle, onSave }) {
 }
 
 // ── Platform section wrapper — loads data and renders the exact profile component ──
-function PlatformSection({ email, platform, handles }) {
+function PlatformSection({ email, platform, handles, apiFetch }) {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(null)
@@ -115,12 +143,12 @@ function PlatformSection({ email, platform, handles }) {
   // Render exact same component as student website
   // Pass email so ContestDetailPanel gets the right student email (not localStorage)
   // onBack is a no-op — sidebar handles navigation in admin
-  // The .admin-profile-wrapper CSS hides the ← back button that's inside these components
+  // apiFetch bypasses the student JWT interceptor for contest detail calls
   const noBack = () => {}
 
-  if (platform === 'leetcode')   return <LeetCodeProfile   data={data} onBack={noBack} email={email} />
-  if (platform === 'codechef')   return <CodeChefProfile   data={data} onBack={noBack} email={email} />
-  if (platform === 'codeforces') return <CodeforcesProfile data={data} onBack={noBack} email={email} />
+  if (platform === 'leetcode')   return <LeetCodeProfile   data={data} onBack={noBack} email={email} apiFetch={apiFetch} />
+  if (platform === 'codechef')   return <CodeChefProfile   data={data} onBack={noBack} email={email} apiFetch={apiFetch} />
+  if (platform === 'codeforces') return <CodeforcesProfile data={data} onBack={noBack} email={email} apiFetch={apiFetch} />
   if (platform === 'hackerrank') return <HackerRankProfile data={data} onBack={noBack} />
   return null
 }
@@ -443,6 +471,7 @@ export default function StudentDetailPage() {
                   codechef:   platformsObj.codechef?.username,
                   hackerrank: platformsObj.hackerrank?.username,
                 }}
+                apiFetch={makeAdminApiFetch(decodedEmail)}
               />
             )}
           </main>

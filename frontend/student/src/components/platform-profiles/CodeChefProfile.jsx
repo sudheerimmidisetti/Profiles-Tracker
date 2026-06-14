@@ -166,7 +166,7 @@ const TYPE_COLORS = {
 const PAGE_SIZE = 10
 
 // ── Main Component ─────────────────────────────────────────────────────────────
-export default function CodeChefProfile({ data, onBack, email: emailProp }) {
+export default function CodeChefProfile({ data, onBack, email: emailProp, apiFetch }) {
   const [tab, setTab] = useState('Profile')
   const [selectedContest, setSelectedContest] = useState(null)
   const PAGE_SIZE = 10   // kept for the Contests tab preview in Statistics
@@ -826,6 +826,7 @@ export default function CodeChefProfile({ data, onBack, email: emailProp }) {
           platform="codechef"
           email={email}
           onClose={() => setSelectedContest(null)}
+          apiFetch={apiFetch}
         />
       )}
     </div>
