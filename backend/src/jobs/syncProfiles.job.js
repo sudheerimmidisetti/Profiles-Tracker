@@ -53,17 +53,24 @@ async function syncAllStudents() {
   syncState.start(emails.length);
 
   let success = 0, failed = 0;
+  const i_total = emails.length;
 
-  for (const email of emails) {
+  for (let i = 0; i < emails.length; i++) {
+    const email = emails[i];
+    const handles = studentMap[email];
+    const platforms = Object.entries(handles)
+      .filter(([, h]) => h)
+      .map(([p]) => p.replace('leetcode','LC').replace('codeforces','CF').replace('codechef','CC').replace('hackerrank','HR'))
+      .join(', ');
     try {
-      syncState.progress(email, 'start', 'Syncing...');
-      await syncStudent(email, studentMap[email]);
+      syncState.progress(email, 'start', `[${i + 1}/${i_total}] Starting → ${platforms || 'no platforms'}`);
+      await syncStudent(email, handles);
       success++;
-      syncState.progress(email, 'ok', `✅ Sync complete`);
+      syncState.progress(email, 'ok', `[${i + 1}/${i_total}] ✅ Done`);
     } catch (err) {
       failed++;
       logger.error(`[SyncJob] Failed to sync ${email}: ${err.message}`);
-      syncState.progress(email, 'err', `❌ Failed: ${err.message}`);
+      syncState.progress(email, 'err', `[${i + 1}/${i_total}] ❌ Failed: ${err.message}`);
     }
   }
 

@@ -16,11 +16,23 @@ api.interceptors.request.use(config => {
 api.interceptors.response.use(
   res => res,
   err => {
-    if (err.response?.status === 401 || err.response?.status === 403) {
-      // Token expired / revoked — clear and redirect to login
-      clearAdminToken()
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login'
+    const status = err.response?.status
+    if (status === 401 || status === 403) {
+      // Only force logout if the admin token is actually gone or the message
+      // says "Session expired" / "Invalid token" (not a contest/platform 401).
+      const msg   = err.response?.data?.message || ''
+      const isAuthFailure =
+        msg.includes('Session expired') ||
+        msg.includes('Invalid token') ||
+        msg.includes('No token') ||
+        msg.includes('Admin access revoked') ||
+        !localStorage.getItem('adminToken')
+
+      if (isAuthFailure) {
+        clearAdminToken()
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login'
+        }
       }
     }
     return Promise.reject(err)

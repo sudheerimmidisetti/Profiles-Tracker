@@ -100,7 +100,8 @@ export default function AnalyticsPage() {
                     <tr>
                       <th>Platform</th>
                       <th style={{ textAlign: 'right' }}>Linked Students</th>
-                      <th style={{ textAlign: 'right' }}>Coverage</th>
+                      <th style={{ textAlign: 'right' }}>% of Total</th>
+                      <th style={{ textAlign: 'right' }}>Avg Solved / Student</th>
                       <th style={{ textAlign: 'right' }}>Total Solved</th>
                       <th style={{ textAlign: 'right' }}>Avg Rating</th>
                       <th style={{ textAlign: 'right' }}>Peak Rating</th>
@@ -108,8 +109,9 @@ export default function AnalyticsPage() {
                   </thead>
                   <tbody>
                     {PLATFORM_ORDER.map(p => {
-                      const d = platformSummary[p] || {}
+                      const d        = platformSummary[p] || {}
                       const coverage = totalStudents > 0 ? Math.round((d.students / totalStudents) * 100) : 0
+                      const isHR     = p === 'hackerrank'
                       return (
                         <tr key={p}>
                           <td>
@@ -127,7 +129,16 @@ export default function AnalyticsPage() {
                               <span style={{ fontSize: '0.8rem', color: 'var(--fg-muted)', minWidth: 32 }}>{coverage}%</span>
                             </div>
                           </td>
-                          <td style={{ textAlign: 'right' }}>{(d.solved || 0).toLocaleString()}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            {isHR
+                              ? <span title="Avg badge stars per linked student">{d.avg_solved_per_student > 0 ? d.avg_solved_per_student.toFixed(1) : '—'} ⭐/stu</span>
+                              : (d.avg_solved_per_student > 0 ? d.avg_solved_per_student.toFixed(1) : '—')}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            {isHR
+                              ? <span title="Total HackerRank badge stars">{(d.badges || 0).toLocaleString()} 🏅</span>
+                              : (d.solved || 0).toLocaleString()}
+                          </td>
                           <td style={{ textAlign: 'right', color: PLATFORM_COLORS[p], fontWeight: 600 }}>
                             {d.avg_rating ? Math.round(d.avg_rating) : '—'}
                           </td>
