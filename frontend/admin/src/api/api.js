@@ -5,10 +5,41 @@ const BASE = import.meta.env.VITE_API_URL || ''
 
 const api = axios.create({ baseURL: BASE, timeout: 30000 })
 
-const getToken  = () => localStorage.getItem('adminToken') || ''
+// ── Token helpers ────────────────────────────────────────────────────────────
+export const setAdminToken    = (t) => localStorage.setItem('adminToken', t)
+export const clearAdminToken  = ()  => localStorage.removeItem('adminToken')
+export const isAdminLoggedIn  = ()  => {
+  const t = localStorage.getItem('adminToken')
+  if (!t) return false
+  try {
+    const { exp } = JSON.parse(atob(t.split('.')[1]))
+    return !exp || Date.now() / 1000 < exp
+  } catch { return false }
+}
 
+// ── Admin JWT-aware response interceptor ─────────────────────────────────────
+// Only logs out when the admin JWT is provably invalid / expired.
+// Never redirects on platform-level 401s (e.g., contest service errors).
+let _redirecting = false   // guard: prevent multiple concurrent redirects
+
+function forceLogout() {
+  if (_redirecting) return
+  _redirecting = true
+  clearAdminToken()
+  // Prefer React state-based logout (AdminAuthContext registers window.__adminForceLogout)
+  // This avoids a full hard-reload and lets React Router handle the /login redirect.
+  if (typeof window.__adminForceLogout === 'function') {
+    window.__adminForceLogout()
+    // Reset _redirecting after a tick so subsequent calls can flow normally
+    setTimeout(() => { _redirecting = false }, 2000)
+  } else {
+    window.location.href = '/login'
+  }
+}
+
+// ── Request interceptor — attach admin Bearer token ─────────────────────────
 api.interceptors.request.use(config => {
-  const token = getToken()
+  const token = localStorage.getItem('adminToken') || ''
   if (token) config.headers['Authorization'] = `Bearer ${token}`
   return config
 })
@@ -18,22 +49,22 @@ api.interceptors.response.use(
   err => {
     const status = err.response?.status
     if (status === 401 || status === 403) {
-      // Only force logout if the admin token is actually gone or the message
-      // says "Session expired" / "Invalid token" (not a contest/platform 401).
-      const msg   = err.response?.data?.message || ''
-      const isAuthFailure =
+      const msg = err.response?.data?.message || ''
+      // Only force logout if:
+      // 1. The admin token is missing/expired (checked client-side)
+      // 2. OR the backend explicitly says the token is invalid/expired
+      const tokenInvalid = !isAdminLoggedIn()
+      const backendSaysInvalid =
         msg.includes('Session expired') ||
         msg.includes('Invalid token') ||
+        msg.includes('Invalid or expired') ||
         msg.includes('No token') ||
-        msg.includes('Admin access revoked') ||
-        !localStorage.getItem('adminToken')
+        msg.includes('Admin access revoked')
 
-      if (isAuthFailure) {
-        clearAdminToken()
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login'
-        }
+      if (tokenInvalid || backendSaysInvalid) {
+        forceLogout()
       }
+      // Otherwise (e.g., 403 from contest service, platform error) — do NOT logout
     }
     return Promise.reject(err)
   }
@@ -78,11 +109,6 @@ export const analyticsAPI = {
   snapshots: (email) => api.get(`/api/analytics/snapshot/${encodeURIComponent(email)}`),
   summary:   (email) => api.get(`/api/analytics/summary/${encodeURIComponent(email)}`),
 }
-
-// ── Auth helpers ──────────────────────────────────────────────────────────────
-export const setAdminToken    = (t) => localStorage.setItem('adminToken', t)
-export const clearAdminToken  = ()  => localStorage.removeItem('adminToken')
-export const isAdminLoggedIn  = ()  => !!localStorage.getItem('adminToken')
 
 // Legacy compatibility (for any code still using setAdminSecret)
 export const setAdminSecret   = setAdminToken
