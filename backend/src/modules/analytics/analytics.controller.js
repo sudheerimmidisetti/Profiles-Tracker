@@ -52,4 +52,16 @@ async function getSubmissions(req, res, next) {
   }
 }
 
-module.exports = { getSnapshots, getSummary, getPlatformDetail, getSubmissions };
+// GET /api/analytics/heatmap  — combined cross-platform heatmap for the logged-in student
+async function getHeatmap(req, res, next) {
+  try {
+    const email = req.user.email === 'admin' ? req.query.email : req.user.email;
+    if (!email) return res.status(400).json({ success: false, message: 'Email required' });
+    const data = await analyticsService.getHeatmap(email);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getSnapshots, getSummary, getPlatformDetail, getSubmissions, getHeatmap };

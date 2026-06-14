@@ -55,11 +55,25 @@ function parseCalendar(calendar) {
   return map
 }
 
-// ── Find years with data ───────────────────────────────────────────────────────
-function getAvailableYears(map) {
-  const years = new Set(Object.keys(map).map(iso => iso.slice(0, 4)))
-  const currentYear = String(new Date().getFullYear())
-  years.add(currentYear)
+// ── Find years from firstDate to current year ────────────────────────────────
+function getAvailableYears(map, firstDate) {
+  const currentYear = new Date().getFullYear()
+  const years = new Set()
+
+  // Add years from firstDate param (most reliable — from backend)
+  if (firstDate) {
+    const first = parseInt(firstDate.slice(0, 4))
+    if (!isNaN(first)) {
+      for (let y = first; y <= currentYear; y++) years.add(String(y))
+    }
+  }
+
+  // Also include any years that actually have data (catches edge cases)
+  Object.keys(map).forEach(iso => years.add(iso.slice(0, 4)))
+
+  // Always include current year
+  years.add(String(currentYear))
+
   return [...years].sort().reverse()
 }
 
@@ -156,16 +170,34 @@ function DayDrawer({ cell, platform, recentSubs, color, onClose }) {
 
   // Fetch from student_submissions table on mount
   useEffect(() => {
-    if (!cell?.iso || !platform) return
+    if (!cell?.iso) return
     setLoading(true)
     const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
-    axios.get(`/api/analytics/submissions/${platform}`, {
-      params: { date: cell.iso },
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then(r => setDbSubs(r.data?.data || []))
-      .catch(() => setDbSubs([]))  // fall back silently
-      .finally(() => setLoading(false))
+    const headers = token ? { Authorization: `Bearer ${token}` } : {}
+
+    if (platform === 'all') {
+      // Fetch for all tracked platforms in parallel
+      const platforms = ['leetcode', 'codeforces', 'codechef']
+      Promise.all(
+        platforms.map(p =>
+          axios.get(`/api/analytics/submissions/${p}`, { params: { date: cell.iso }, headers })
+            .then(r => (r.data?.data || []).map(s => ({ ...s, _platform: p })))
+            .catch(() => [])
+        )
+      )
+        .then(results => setDbSubs(results.flat()))
+        .finally(() => setLoading(false))
+    } else if (platform) {
+      axios.get(`/api/analytics/submissions/${platform}`, {
+        params: { date: cell.iso },
+        headers,
+      })
+        .then(r => setDbSubs(r.data?.data || []))
+        .catch(() => setDbSubs([]))
+        .finally(() => setLoading(false))
+    } else {
+      setLoading(false)
+    }
   }, [cell?.iso, platform])
 
   // Merge: prefer DB rows; fall back to in-memory recentSubs for same date
@@ -244,6 +276,9 @@ function DayDrawer({ cell, platform, recentSubs, color, onClose }) {
                       <div className="ahm-drawer-row-info">
                         <span className="ahm-drawer-prob">{name}</span>
                         <div className="ahm-drawer-row-meta">
+                          {s._platform && (
+                            <span className="ahm-drawer-lang" style={{ textTransform: 'capitalize' }}>{s._platform}</span>
+                          )}
                           {s.language && <span className="ahm-drawer-lang">{s.language}</span>}
                           {s.runtime_ms && (
                             <span className="ahm-drawer-perf">⏱ {s.runtime_ms} ms</span>
@@ -278,15 +313,16 @@ function DayDrawer({ cell, platform, recentSubs, color, onClose }) {
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function ActivityHeatmap({
   calendar,
+  firstDate         = null,          // 'YYYY-MM-DD' from backend — determines year range
   color             = '#22c55e',
   platformLabel     = '',
-  platform          = '',           // e.g. 'leetcode' | 'codeforces' | 'codechef'
+  platform          = '',           // e.g. 'leetcode' | 'codeforces' | 'codechef' | 'all'
   recentSubmissions = [],
   title             = 'Submission Activity',
 }) {
 
   const dayMap = useMemo(() => parseCalendar(calendar), [calendar])
-  const years  = useMemo(() => getAvailableYears(dayMap), [dayMap])
+  const years  = useMemo(() => getAvailableYears(dayMap, firstDate), [dayMap, firstDate])
 
   const [selYear,     setSelYear]     = useState(() => years[0] || String(new Date().getFullYear()))
   const [hovered,     setHovered]     = useState(null)

@@ -266,4 +266,104 @@ async function getSubmissions(email, platform, date) {
   return res.rows;
 }
 
-module.exports = { getSnapshots, getSummary, getPlatformDetail, getSubmissions };
+/**
+ * Combined cross-platform submission heatmap for one student.
+ * Merges: LC contribution_calendar (unix ts→count), CF submission_calendar (YYYY-MM-DD→count),
+ *         CC heat_map (array {date,count}), and student_submissions table.
+ * Returns: { calendarMap: {'YYYY-MM-DD': count}, firstDate: 'YYYY-MM-DD' | null }
+ */
+async function getHeatmap(email) {
+  // ── 1. Pull platform calendars in parallel ──────────────────────────────────
+  const [lcRes, cfRes, ccRes, ssRes] = await Promise.all([
+    query(`SELECT contribution_calendar FROM leetcode_profiles   WHERE student_email = $1`, [email]),
+    query(`SELECT submission_calendar   FROM codeforces_profiles WHERE student_email = $1`, [email]),
+    query(`SELECT heat_map              FROM codechef_profiles   WHERE student_email = $1`, [email]),
+    // student_submissions covers ALL platforms and is the most granular
+    query(
+      `SELECT submitted_at::date AS day, COUNT(*) AS cnt
+       FROM student_submissions
+       WHERE student_email = $1
+       GROUP BY submitted_at::date`,
+      [email]
+    ),
+  ]);
+
+  const map = {};  // 'YYYY-MM-DD' → total count
+
+  // helper: pad two digits
+  const p = n => String(n).padStart(2, '0');
+  // helper: local ISO from Date object
+  function localISO(d) { return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}` }
+
+  // ── 2. LeetCode: { "unix_timestamp": count } ────────────────────────────────
+  try {
+    let cal = lcRes.rows[0]?.contribution_calendar;
+    if (typeof cal === 'string') cal = JSON.parse(cal);
+    if (cal && typeof cal === 'object' && !Array.isArray(cal)) {
+      for (const [key, cnt] of Object.entries(cal)) {
+        const num = Number(key);
+        const dt  = !isNaN(num) && num > 1e9 ? new Date(num * 1000) : new Date(key);
+        if (!isNaN(dt)) {
+          const iso = localISO(dt);
+          map[iso] = (map[iso] || 0) + (parseInt(cnt) || 0);
+        }
+      }
+    }
+  } catch { /* skip if malformed */ }
+
+  // ── 3. Codeforces: { "YYYY-MM-DD": count } ──────────────────────────────────
+  try {
+    let cal = cfRes.rows[0]?.submission_calendar;
+    if (typeof cal === 'string') cal = JSON.parse(cal);
+    if (cal && typeof cal === 'object' && !Array.isArray(cal)) {
+      for (const [key, cnt] of Object.entries(cal)) {
+        const num = Number(key);
+        const dt  = !isNaN(num) && num > 1e9 ? new Date(num * 1000) : new Date(key);
+        if (!isNaN(dt)) {
+          const iso = localISO(dt);
+          map[iso] = (map[iso] || 0) + (parseInt(cnt) || 0);
+        }
+      }
+    }
+  } catch { /* skip */ }
+
+  // ── 4. CodeChef: [ {date: "2024-6-10", count: 32} ] ─────────────────────────
+  try {
+    let hm = ccRes.rows[0]?.heat_map;
+    if (typeof hm === 'string') hm = JSON.parse(hm);
+    if (Array.isArray(hm)) {
+      for (const { date, count } of hm) {
+        if (!date) continue;
+        const parts = String(date).split('-');
+        if (parts.length === 3) {
+          const iso = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
+          map[iso] = (map[iso] || 0) + (parseInt(count) || 0);
+        }
+      }
+    }
+  } catch { /* skip */ }
+
+  // ── 5. student_submissions: authoritative per-day counts ────────────────────
+  //    These are deduplicated/verified submissions — add on top of profile calendars
+  //    but only for days NOT already covered by a platform calendar (avoid double-counting).
+  //    Strategy: build a set of days we already have from profile calendars, then
+  //    for student_submissions days, take the MAX(platform_cal, ss_count) not the sum
+  //    because platform calendars count ALL submissions, ss only counts synced ones.
+  const ssMap = {};
+  for (const row of ssRes.rows) {
+    const iso = localISO(new Date(row.day));
+    ssMap[iso] = (ssMap[iso] || 0) + parseInt(row.cnt, 10);
+  }
+  // Merge: for each day in ssMap, take max (not sum) to avoid double-count
+  for (const [iso, cnt] of Object.entries(ssMap)) {
+    map[iso] = Math.max(map[iso] || 0, cnt);
+  }
+
+  // ── 6. Find first active date ────────────────────────────────────────────────
+  const dates = Object.keys(map).filter(d => map[d] > 0).sort();
+  const firstDate = dates[0] || null;
+
+  return { calendarMap: map, firstDate };
+}
+
+module.exports = { getSnapshots, getSummary, getPlatformDetail, getSubmissions, getHeatmap };

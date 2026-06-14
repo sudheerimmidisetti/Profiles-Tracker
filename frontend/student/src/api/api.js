@@ -117,6 +117,8 @@ export const analyticsAPI = {
     api.get(`/api/analytics/detail/${platform}`, {
       headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
     }),
+  heatmap: () => api.get('/api/analytics/heatmap'),  // combined cross-platform heatmap
 }
+
 
 export default api

@@ -11,6 +11,8 @@ router.get('/snapshot/:email',      ctrl.getSnapshots);      // Historical time-
 router.get('/summary/:email',        ctrl.getSummary);        // Cross-platform aggregated summary
 router.get('/detail/:platform',      ctrl.getPlatformDetail); // Full platform profile (uses JWT email)
 router.get('/submissions/:platform', ctrl.getSubmissions);    // All AC submissions for a date
+router.get('/heatmap',               ctrl.getHeatmap);        // Combined cross-platform heatmap
+
 
 
 module.exports = router;
