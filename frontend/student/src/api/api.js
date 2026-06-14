@@ -100,6 +100,9 @@ export const leaderboardAPI = {
   // Placements (6-month rolling)
   placements: (page = 1, limit = 50, college = '', year = '') =>
     api.get('/api/leaderboard/placements', { params: { page, limit, college, year } }),
+  // Overall (all-time, same metrics as placements)
+  overall: (page = 1, limit = 50, college = '', year = '', search = '') =>
+    api.get('/api/leaderboard/overall', { params: { page, limit, college, year, search } }),
   // Weekly (current week or specific week)
   weekly: (week = null, page = 1, limit = 50, college = '', year = '') =>
     api.get('/api/leaderboard/weekly', { params: { week, page, limit, college, year } }),
@@ -107,6 +110,7 @@ export const leaderboardAPI = {
   monthly: (month = null, page = 1, limit = 50, college = '', year = '') =>
     api.get('/api/leaderboard/monthly', { params: { month, page, limit, college, year } }),
 }
+
 
 
 // ── Analytics ─────────────────────────────────────────

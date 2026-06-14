@@ -61,4 +61,19 @@ async function getMonthlyLeaderboard(req, res, next) {
   }
 }
 
-module.exports = { getLeaderboard, getPlacementsLeaderboard, getWeeklyLeaderboard, getMonthlyLeaderboard };
+// GET /api/leaderboard/overall?page=1&limit=50&college=...&year=...&search=...
+async function getOverallLeaderboard(req, res, next) {
+  try {
+    const page    = Math.max(1,   parseInt(req.query.page  || '1',  10));
+    const limit   = Math.min(100, parseInt(req.query.limit || '50', 10));
+    const college = req.query.college || '';
+    const year    = req.query.year    || '';
+    const search  = req.query.search  || '';
+    const result = await leaderboardService.getOverallLeaderboard(page, limit, college, year, search);
+    res.status(200).json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getLeaderboard, getPlacementsLeaderboard, getOverallLeaderboard, getWeeklyLeaderboard, getMonthlyLeaderboard };

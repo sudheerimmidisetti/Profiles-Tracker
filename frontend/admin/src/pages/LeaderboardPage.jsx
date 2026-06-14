@@ -4,12 +4,14 @@
 import { useState } from 'react'
 import AdminHeader from '../components/AdminHeader'
 import PlacementsLeaderboard from '../components/leaderboards/PlacementsLeaderboard'
+import OverallLeaderboard    from '../components/leaderboards/OverallLeaderboard'
 import WeeklyLeaderboard     from '../components/leaderboards/WeeklyLeaderboard'
 import MonthlyLeaderboard    from '../components/leaderboards/MonthlyLeaderboard'
-import { Trophy, Medal, Target } from 'lucide-react'
+import { Trophy, Star, Medal, Target } from 'lucide-react'
 
 const TABS = [
   { key: 'placements', label: 'Placements', icon: Trophy },
+  { key: 'overall',    label: 'Overall',    icon: Star   },
   { key: 'weekly',     label: 'Weekly',     icon: Medal  },
   { key: 'monthly',    label: 'Monthly',    icon: Target },
 ]
@@ -35,6 +37,7 @@ export default function LeaderboardPage() {
         </div>
 
         {tab === 'placements' && <PlacementsLeaderboard />}
+        {tab === 'overall'    && <OverallLeaderboard />}
         {tab === 'weekly'     && <WeeklyLeaderboard />}
         {tab === 'monthly'    && <MonthlyLeaderboard />}
       </div>

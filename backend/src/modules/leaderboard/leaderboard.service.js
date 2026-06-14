@@ -8,7 +8,7 @@
 'use strict';
 
 const { query }                  = require('../../config/db');
-const { computePlacementsScore } = require('./scoring/placements.scorer');
+const { computePlacementsScore, computeOverallScore } = require('./scoring/placements.scorer');
 const { computeWeeklyScore, weekStart } = require('./scoring/weekly.scorer');
 const { computeMonthlyScore }    = require('./scoring/monthly.scorer');
 
@@ -353,6 +353,224 @@ async function getPlacementsLeaderboard(page = 1, limit = 50, college = '', year
 
   const page_data = scored.slice(offset, offset + limit);
   return { page, limit, total: scored.length, data: page_data };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2b. OVERALL LEADERBOARD (all-time, same metrics as Placements but no time window)
+// ─────────────────────────────────────────────────────────────────────────────
+async function getOverallLeaderboard(page = 1, limit = 50, college = '', year = '', search = '') {
+  const offset = (page - 1) * limit;
+  // No time window — include all history from epoch start
+  const windowStart    = new Date(0);
+  const windowISO      = windowStart.toISOString();
+  const windowUnixSecs = 0;
+
+  const extraConds = [];
+  const extraParams = [];
+  let pidx = 1;
+  if (college) { extraConds.push(`LOWER(s.college) = $${pidx++}`); extraParams.push(college.toLowerCase()); }
+  if (year)    { extraConds.push(`s.passout_year = $${pidx++}`);    extraParams.push(parseInt(year, 10)); }
+  const extraWhere = extraConds.length ? ' AND ' + extraConds.join(' AND ') : '';
+
+  const studentsRes = await query(
+    `SELECT s.email, s.full_name, s.roll_number, s.branch, s.college,
+            pp_lc.username  AS lc_handle,
+            pp_cc.username  AS cc_handle,
+            pp_cf.username  AS cf_handle,
+            pp_hr.username  AS hr_handle,
+            lp.contest_rating AS lc_rating,
+            cp.current_rating AS cf_rating,
+            dp.current_rating AS cc_rating
+     FROM students s
+     LEFT JOIN platform_profiles pp_lc ON pp_lc.student_email = s.email AND pp_lc.platform_name = 'leetcode'
+     LEFT JOIN platform_profiles pp_cc ON pp_cc.student_email = s.email AND pp_cc.platform_name = 'codechef'
+     LEFT JOIN platform_profiles pp_cf ON pp_cf.student_email = s.email AND pp_cf.platform_name = 'codeforces'
+     LEFT JOIN platform_profiles pp_hr ON pp_hr.student_email = s.email AND pp_hr.platform_name = 'hackerrank'
+     LEFT JOIN leetcode_profiles   lp  ON lp.student_email   = s.email
+     LEFT JOIN codeforces_profiles cp  ON cp.student_email   = s.email
+     LEFT JOIN codechef_profiles   dp  ON dp.student_email   = s.email
+     WHERE s.is_verified = TRUE AND s.is_blocklisted = FALSE${extraWhere}`,
+    extraParams
+  );
+
+  const students = studentsRes.rows;
+  const emails   = students.map(s => s.email);
+  if (!emails.length) return { page, limit, total: 0, data: [] };
+
+  // Batch-fetch all historical data (no date filter)
+  const [subRes, lcContRes, ccContRes, cfContRes, hrRes, lcDiffRes] = await Promise.all([
+    query(
+      `SELECT student_email, platform, problem_id, submitted_at
+       FROM student_submissions
+       WHERE student_email = ANY($1) AND status = 'AC'
+       ORDER BY submitted_at ASC`,
+      [emails]
+    ),
+    query(
+      `SELECT student_email, contest_title, contest_time, rank_achieved,
+              finish_time_seconds, problems_solved, rating_after_contest, total_problems, trend_direction
+       FROM leetcode_contest_history WHERE student_email = ANY($1)`,
+      [emails]
+    ),
+    query(
+      `SELECT student_email, contest_code, contest_name, rank_achieved,
+              rating_after_contest, rating_change, contest_date, division, problems_solved_count
+       FROM codechef_contest_history WHERE student_email = ANY($1)`,
+      [emails]
+    ),
+    query(
+      `SELECT student_email, contest_id, contest_name, rank_achieved,
+              old_rating, new_rating, rating_change, timestamp_seconds, problems_solved
+       FROM codeforces_contest_history WHERE student_email = ANY($1)`,
+      [emails]
+    ),
+    query(
+      `SELECT student_email, problem_solving_stars, sql_stars, java_stars, python_stars
+       FROM hackerrank_profiles WHERE student_email = ANY($1)`,
+      [emails]
+    ),
+    query(
+      `SELECT student_email, easy_solved, medium_solved, hard_solved, total_solved
+       FROM leetcode_profiles WHERE student_email = ANY($1)`,
+      [emails]
+    ),
+  ]);
+
+  const cfProfileRes = await query(
+    `SELECT student_email, recent_ac_submissions FROM codeforces_profiles WHERE student_email = ANY($1)`,
+    [emails]
+  );
+
+  const byEmail = {};
+  for (const s of students) byEmail[s.email] = { ...s, lcSolves: [], ccSolves: [], cfSolves: [], lcContests: [], ccContests: [], cfContests: [], hrProfile: null };
+
+  const lcDiffMap = {};
+  for (const row of lcDiffRes.rows) lcDiffMap[row.student_email] = { easy: row.easy_solved||0, medium: row.medium_solved||0, hard: row.hard_solved||0, total: row.total_solved||0 };
+
+  const cfProbRating = {};
+  for (const row of cfProfileRes.rows) {
+    let subs = row.recent_ac_submissions;
+    if (typeof subs === 'string') { try { subs = JSON.parse(subs); } catch { subs = []; } }
+    for (const sub of (subs || [])) {
+      if (sub.problemId && sub.problemRating) cfProbRating[sub.problemId] = sub.problemRating;
+    }
+  }
+
+  for (const row of subRes.rows) {
+    if (!byEmail[row.student_email]) continue;
+    const solve = { problem_id: row.problem_id, difficulty_tag: null, acceptance_rate: null, total_submissions: null, submitted_at: row.submitted_at, cf_rating: cfProbRating[row.problem_id]||0, cc_rating: 0 };
+    if (row.platform === 'leetcode')   byEmail[row.student_email].lcSolves.push(solve);
+    if (row.platform === 'codechef')   byEmail[row.student_email].ccSolves.push(solve);
+    if (row.platform === 'codeforces') byEmail[row.student_email].cfSolves.push(solve);
+  }
+
+  // LC fairness fix: supplement with difficulty-profile synthetic solves (same as placements)
+  for (const email of emails) {
+    const d = byEmail[email];
+    const diff = lcDiffMap[email];
+    if (!diff || diff.total === 0) continue;
+    const capturedLC = d.lcSolves.filter(s => !s._synthetic).length;
+    if (capturedLC >= diff.total * 0.8) continue;
+    d.lcSolves = d.lcSolves.filter(s => s.platform !== 'leetcode');
+    // Spread synthetic solves from epoch to now
+    const spanMs = Date.now();
+    const batches = [
+      { count: diff.easy,   tag: 'Easy'   },
+      { count: diff.medium, tag: 'Medium' },
+      { count: diff.hard,   tag: 'Hard'   },
+    ];
+    let idx = 0;
+    const totalSynth = diff.easy + diff.medium + diff.hard;
+    for (const { count, tag } of batches) {
+      for (let i = 0; i < count; i++) {
+        const frac = totalSynth > 1 ? idx / (totalSynth - 1) : 0.5;
+        const ts   = new Date(frac * spanMs).toISOString();
+        d.lcSolves.push({ problem_id: `synth_${tag}_${i}`, difficulty_tag: tag, acceptance_rate: tag==='Easy'?0.6:tag==='Medium'?0.4:0.2, total_submissions: 10000, submitted_at: ts, cf_rating: 0, cc_rating: 0, _synthetic: true });
+        idx++;
+      }
+    }
+  }
+
+  for (const row of lcContRes.rows)   byEmail[row.student_email]?.lcContests.push(row);
+  for (const row of ccContRes.rows)   byEmail[row.student_email]?.ccContests.push(row);
+  for (const row of cfContRes.rows)   byEmail[row.student_email]?.cfContests.push(row);
+  for (const row of hrRes.rows)       { if (byEmail[row.student_email]) byEmail[row.student_email].hrProfile = row; }
+
+  // Determine each student's journey start (earliest submission)
+  const journeyStart = {};
+  for (const row of subRes.rows) {
+    const ts = new Date(row.submitted_at).getTime();
+    if (!journeyStart[row.student_email] || ts < journeyStart[row.student_email]) {
+      journeyStart[row.student_email] = ts;
+    }
+  }
+  // Also check LC contest time
+  for (const row of lcContRes.rows) {
+    const ts = (row.contest_time || 0) * 1000;
+    if (ts > 0 && (!journeyStart[row.student_email] || ts < journeyStart[row.student_email])) {
+      journeyStart[row.student_email] = ts;
+    }
+  }
+
+  // Score every student using all-time data
+  const scored = students.map(s => {
+    const d = byEmail[s.email];
+    const result = computeOverallScore({
+      lcSolves:   d.lcSolves,
+      ccSolves:   d.ccSolves,
+      cfSolves:   d.cfSolves,
+      lcContests: d.lcContests.map(c => ({ ...c, timestamp_seconds: c.contest_time })),
+      ccContests: d.ccContests,
+      cfContests: d.cfContests,
+      lcRating:   s.lc_rating || 0,
+      ccRating:   s.cc_rating || 0,
+      cfRating:   s.cf_rating || 0,
+      hrProfile:  d.hrProfile,
+    }, journeyStart[s.email] || 0);
+
+    return {
+      student_email: s.email,
+      full_name:     s.full_name,
+      roll_number:   s.roll_number,
+      branch:        s.branch,
+      college:       s.college,
+      lc_handle:     s.lc_handle,
+      cc_handle:     s.cc_handle,
+      cf_handle:     s.cf_handle,
+      hr_handle:     s.hr_handle,
+      final_score:   result.total,
+      total_score:   result.total,
+      cf_rating:     s.cf_rating || 0,
+      cc_rating:     s.cc_rating || 0,
+      lc_score:      result.lc?.score || 0,
+      cc_score:      result.cc?.score || 0,
+      cf_score:      result.cf?.score || 0,
+      hr_score:      result.hr?.score || 0,
+      total_solved:  (d.lcSolves.length + d.ccSolves.length + d.cfSolves.length),
+      lc:            result.lc,
+      cc:            result.cc,
+      cf:            result.cf,
+      hr:            result.hr,
+    };
+  });
+
+  scored.sort((a, b) => b.final_score - a.final_score);
+  scored.forEach((s, i) => { s.rank = i + 1; });
+
+  // Apply client-side search filter (name / roll / handles)
+  const q = search?.trim().toLowerCase() || '';
+  const filtered = q
+    ? scored.filter(s =>
+        (s.full_name  || '').toLowerCase().includes(q) ||
+        (s.roll_number|| '').toLowerCase().includes(q) ||
+        (s.lc_handle  || '').toLowerCase().includes(q) ||
+        (s.cf_handle  || '').toLowerCase().includes(q) ||
+        (s.cc_handle  || '').toLowerCase().includes(q)
+      )
+    : scored;
+
+  const page_data = filtered.slice(offset, offset + limit);
+  return { page, limit, total: filtered.length, data: page_data };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -772,4 +990,5 @@ function buildConsistencyLeaderboard(platform, limit, offset) {
     LIMIT $2 OFFSET $3`;
 }
 
-module.exports = { getLeaderboard, getPlacementsLeaderboard, getWeeklyLeaderboard, getMonthlyLeaderboard };
+module.exports = { getLeaderboard, getPlacementsLeaderboard, getOverallLeaderboard, getWeeklyLeaderboard, getMonthlyLeaderboard };
+

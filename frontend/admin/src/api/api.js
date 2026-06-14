@@ -97,11 +97,14 @@ export const leaderboardAPI = {
                 api.get(`/api/leaderboard/${platform}`, { params: { filter, page, limit, search, branch, college, year } }),
   placements: (page = 1, limit = 50, college = '', year = '') =>
                 api.get('/api/leaderboard/placements', { params: { page, limit, college, year } }),
+  overall:    (page = 1, limit = 50, college = '', year = '', search = '') =>
+                api.get('/api/leaderboard/overall', { params: { page, limit, college, year, search } }),
   weekly:     (week = null, page = 1, limit = 50, college = '', year = '') =>
                 api.get('/api/leaderboard/weekly', { params: { week, page, limit, college, year } }),
   monthly:    (month = null, page = 1, limit = 50, college = '', year = '') =>
                 api.get('/api/leaderboard/monthly', { params: { month, page, limit, college, year } }),
 }
+
 
 
 // ── Analytics ─────────────────────────────────────────────────────────────────

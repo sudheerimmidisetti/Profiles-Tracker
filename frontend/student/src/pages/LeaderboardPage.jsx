@@ -4,12 +4,14 @@ import { useSearchParams } from 'react-router-dom'
 import Header from '../components/Header'
 import Leaderboard from '../components/Leaderboard'
 import PlacementsLeaderboard from '../components/leaderboards/PlacementsLeaderboard'
+import OverallLeaderboard from '../components/leaderboards/OverallLeaderboard'
 import WeeklyLeaderboard from '../components/leaderboards/WeeklyLeaderboard'
 import MonthlyLeaderboard from '../components/leaderboards/MonthlyLeaderboard'
 
 const TABS = [
   { id: 'platform',   label: 'Platform' },
   { id: 'placements', label: 'Placements' },
+  { id: 'overall',    label: 'Overall' },
   { id: 'weekly',     label: 'Weekly' },
   { id: 'monthly',    label: 'Monthly' },
 ]
@@ -33,7 +35,7 @@ export default function LeaderboardPage() {
       <Header title="Leaderboard" breadcrumb="Overview" />
       <div className="page">
 
-        {/* Tab selector — uses app's .pills/.pill pattern */}
+        {/* Tab selector */}
         <div className="card" style={{ padding: '10px 16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
             <div className="pills">
@@ -68,6 +70,7 @@ export default function LeaderboardPage() {
         {/* Content */}
         {activeTab === 'platform'   && <Leaderboard platform={platform} />}
         {activeTab === 'placements' && <PlacementsLeaderboard />}
+        {activeTab === 'overall'    && <OverallLeaderboard />}
         {activeTab === 'weekly'     && <WeeklyLeaderboard />}
         {activeTab === 'monthly'    && <MonthlyLeaderboard />}
 
