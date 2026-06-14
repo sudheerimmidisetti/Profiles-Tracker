@@ -18,7 +18,7 @@ const VALID_FILTERS   = ['all', 'contest', 'consistency', 'problems'];
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. ORIGINAL PLATFORM LEADERBOARD (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
-async function getLeaderboard(platform, filter = 'all', page = 1, limit = 50) {
+async function getLeaderboard(platform, filter = 'all', page = 1, limit = 50, search = '') {
   if (!VALID_PLATFORMS.includes(platform)) {
     const err = new Error(`Invalid platform. Choose from: ${VALID_PLATFORMS.join(', ')}`);
     err.statusCode = 400; throw err;
@@ -29,15 +29,29 @@ async function getLeaderboard(platform, filter = 'all', page = 1, limit = 50) {
   }
 
   const offset = (page - 1) * limit;
+  const q      = search?.trim() || '';
+
   let sql, params;
 
   if (filter === 'contest') {
-    sql    = buildContestLeaderboard(platform, limit, offset);
-    params = [platform, limit, offset];
+    // Wrap buildContestLeaderboard in a subquery to apply search + pagination
+    const inner = buildContestLeaderboard(platform, 10000, 0);  // fetch all, filter after
+    sql = `
+      SELECT * FROM (${inner}) ranked
+      WHERE 1=1 ${q ? `AND (LOWER(full_name) LIKE $4 OR LOWER(roll_number) LIKE $4 OR LOWER(username) LIKE $4)` : ''}
+      ORDER BY rank ASC
+      LIMIT $2 OFFSET $3`;
+    params = q ? [platform, limit, offset, `%${q.toLowerCase()}%`] : [platform, limit, offset];
   } else if (filter === 'consistency') {
-    sql    = buildConsistencyLeaderboard(platform, limit, offset);
-    params = [platform, limit, offset];
+    const inner = buildConsistencyLeaderboard(platform, 10000, 0);
+    sql = `
+      SELECT * FROM (${inner}) ranked
+      WHERE 1=1 ${q ? `AND (LOWER(full_name) LIKE $4 OR LOWER(roll_number) LIKE $4 OR LOWER(username) LIKE $4)` : ''}
+      ORDER BY rank ASC
+      LIMIT $2 OFFSET $3`;
+    params = q ? [platform, limit, offset, `%${q.toLowerCase()}%`] : [platform, limit, offset];
   } else {
+    const whereExtra = q ? `AND (LOWER(s.full_name) LIKE $4 OR LOWER(s.roll_number) LIKE $4 OR LOWER(pp.username) LIKE $4)` : '';
     sql = `
       SELECT
         s.email, s.full_name, s.roll_number, s.branch,
@@ -50,17 +64,21 @@ async function getLeaderboard(platform, filter = 'all', page = 1, limit = 50) {
       WHERE pp.platform_name = $1
         AND s.is_verified    = TRUE
         AND s.is_blocklisted = FALSE
+        ${whereExtra}
       ORDER BY pp.total_solved DESC
       LIMIT $2 OFFSET $3`;
-    params = [platform, limit, offset];
+    params = q ? [platform, limit, offset, `%${q.toLowerCase()}%`] : [platform, limit, offset];
   }
 
   const res   = await query(sql, params);
+
+  // Count total matching (for pagination)
+  const countWhereExtra = q ? `AND (LOWER(s.full_name) LIKE $2 OR LOWER(s.roll_number) LIKE $2 OR LOWER(pp.username) LIKE $2)` : '';
   const count = await query(
     `SELECT COUNT(*) FROM platform_profiles pp
      JOIN students s ON s.email = pp.student_email
-     WHERE pp.platform_name = $1 AND s.is_verified = TRUE AND s.is_blocklisted = FALSE`,
-    [platform]
+     WHERE pp.platform_name = $1 AND s.is_verified = TRUE AND s.is_blocklisted = FALSE ${countWhereExtra}`,
+    q ? [platform, `%${q.toLowerCase()}%`] : [platform]
   );
 
   return { platform, filter, page, limit, total: parseInt(count.rows[0].count, 10), data: res.rows };

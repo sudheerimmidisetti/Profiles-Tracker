@@ -1,31 +1,17 @@
-import { useState } from 'react'
-import { Search, Bell } from 'lucide-react'
+// Header.jsx — top navigation bar (no global search bar)
+import { Bell } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
-const PLATFORMS = [
-  { id: 'all', label: 'All' },
-  { id: 'leetcode',   label: 'LC' },
-  { id: 'codeforces', label: 'CF' },
-  { id: 'codechef',   label: 'CC' },
-  { id: 'hackerrank', label: 'HR' },
-]
-
-export default function Header({ title, breadcrumb, onPlatformChange, activePlatform: externalPlatform }) {
+export default function Header({ title, breadcrumb }) {
   const { user } = useAuth()
-  const [active, setActive] = useState(externalPlatform || 'all')
 
   const initials = user?.full_name
     ? user.full_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
     : '?'
 
-  const handlePill = (id) => {
-    setActive(id)
-    onPlatformChange?.(id)
-  }
-
   return (
     <header className="header">
-      {/* Left */}
+      {/* Left — breadcrumb + title */}
       <div className="header-left">
         {breadcrumb && (
           <div className="breadcrumb">
@@ -36,27 +22,8 @@ export default function Header({ title, breadcrumb, onPlatformChange, activePlat
         <h1 className="header-title">{title}</h1>
       </div>
 
-      {/* Center */}
-      <div className="header-search">
-        <Search className="search-ico" size={14} />
-        <input type="text" placeholder="Search students, handles…" />
-      </div>
-
-      {/* Right */}
+      {/* Right — notifications + avatar */}
       <div className="header-right">
-        {/* Platform pills */}
-        <div className="pills">
-          {PLATFORMS.map(p => (
-            <button
-              key={p.id}
-              className={`pill${active === p.id ? ' active' : ''}`}
-              onClick={() => handlePill(p.id)}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-
         {/* Notifications */}
         <button className="icon-btn">
           <Bell size={17} />
