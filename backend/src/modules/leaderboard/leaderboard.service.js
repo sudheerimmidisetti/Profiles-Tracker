@@ -8,7 +8,7 @@
 'use strict';
 
 const { query }                  = require('../../config/db');
-const { computePlacementsScore, computeOverallScore } = require('./scoring/placements.scorer');
+const { computePlacementsScore, computeOverallScore, computeRawProblemPts } = require('./scoring/placements.scorer');
 const { computeWeeklyScore, weekStart } = require('./scoring/weekly.scorer');
 const { computeMonthlyScore }    = require('./scoring/monthly.scorer');
 
@@ -287,7 +287,22 @@ async function getPlacementsLeaderboard(page = 1, limit = 50, college = '', year
   for (const row of cfContRes.rows)   byEmail[row.student_email]?.cfContests.push({ ...row, timestamp_seconds: row.timestamp_seconds });
   for (const row of hrRes.rows)       { if (byEmail[row.student_email]) byEmail[row.student_email].hrProfile = row; }
 
-  // 3. Score every student
+  // 3. Two-pass cohort-relative scoring
+  // Pass 1: compute raw effectivePoints per platform for every student
+  const windowStart6m = Date.now() - 182 * 24 * 60 * 60 * 1000;
+  let maxLcPts = 0, maxCcPts = 0, maxCfPts = 0;
+  for (const s of students) {
+    const d = byEmail[s.email];
+    const lcRaw = computeRawProblemPts(d.lcSolves, 'leetcode',   windowStart6m);
+    const ccRaw = computeRawProblemPts(d.ccSolves, 'codechef',   windowStart6m);
+    const cfRaw = computeRawProblemPts(d.cfSolves, 'codeforces', windowStart6m);
+    if (lcRaw.effectivePoints > maxLcPts) maxLcPts = lcRaw.effectivePoints;
+    if (ccRaw.effectivePoints > maxCcPts) maxCcPts = ccRaw.effectivePoints;
+    if (cfRaw.effectivePoints > maxCfPts) maxCfPts = cfRaw.effectivePoints;
+  }
+  const cohortMaxPts = { lc: maxLcPts, cc: maxCcPts, cf: maxCfPts };
+
+  // Pass 2: score every student relative to cohort max
   const scored = students.map(s => {
     const d = byEmail[s.email];
     const result = computePlacementsScore({
@@ -301,6 +316,7 @@ async function getPlacementsLeaderboard(page = 1, limit = 50, college = '', year
       ccRating:    s.cc_rating || 0,
       cfRating:    s.cf_rating || 0,
       hrProfile:   d.hrProfile,
+      cohortMaxPts,
     });
 
     return {
@@ -512,20 +528,35 @@ async function getOverallLeaderboard(page = 1, limit = 50, college = '', year = 
     }
   }
 
-  // Score every student using all-time data
+  // Two-pass cohort-relative scoring (all-time window)
+  // Pass 1: find cohort-max effectivePoints per platform
+  let ovMaxLcPts = 0, ovMaxCcPts = 0, ovMaxCfPts = 0;
+  for (const s of students) {
+    const d = byEmail[s.email];
+    const lcRaw = computeRawProblemPts(d.lcSolves, 'leetcode',   0);
+    const ccRaw = computeRawProblemPts(d.ccSolves, 'codechef',   0);
+    const cfRaw = computeRawProblemPts(d.cfSolves, 'codeforces', 0);
+    if (lcRaw.effectivePoints > ovMaxLcPts) ovMaxLcPts = lcRaw.effectivePoints;
+    if (ccRaw.effectivePoints > ovMaxCcPts) ovMaxCcPts = ccRaw.effectivePoints;
+    if (cfRaw.effectivePoints > ovMaxCfPts) ovMaxCfPts = cfRaw.effectivePoints;
+  }
+  const overallCohortMaxPts = { lc: ovMaxLcPts, cc: ovMaxCcPts, cf: ovMaxCfPts };
+
+  // Pass 2: score everyone relative to cohort max
   const scored = students.map(s => {
     const d = byEmail[s.email];
     const result = computeOverallScore({
-      lcSolves:   d.lcSolves,
-      ccSolves:   d.ccSolves,
-      cfSolves:   d.cfSolves,
-      lcContests: d.lcContests.map(c => ({ ...c, timestamp_seconds: c.contest_time })),
-      ccContests: d.ccContests,
-      cfContests: d.cfContests,
-      lcRating:   s.lc_rating || 0,
-      ccRating:   s.cc_rating || 0,
-      cfRating:   s.cf_rating || 0,
-      hrProfile:  d.hrProfile,
+      lcSolves:    d.lcSolves,
+      ccSolves:    d.ccSolves,
+      cfSolves:    d.cfSolves,
+      lcContests:  d.lcContests.map(c => ({ ...c, timestamp_seconds: c.contest_time })),
+      ccContests:  d.ccContests,
+      cfContests:  d.cfContests,
+      lcRating:    s.lc_rating || 0,
+      ccRating:    s.cc_rating || 0,
+      cfRating:    s.cf_rating || 0,
+      hrProfile:   d.hrProfile,
+      cohortMaxPts: overallCohortMaxPts,
     }, journeyStart[s.email] || 0);
 
     return {

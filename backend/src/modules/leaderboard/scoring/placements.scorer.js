@@ -2,20 +2,27 @@
 // 6-month rolling window placements score.
 // Total = 100 pts = LC(30) + CC(30) + CF(20) + HR(20)
 // Each CP platform: 50% problem-solving + 50% contest
+//
+// Problem-solving uses COHORT-RELATIVE benchmarking (v3):
+//   The student with the highest effectivePoints in the cohort scores full marks
+//   on the problem component. Everyone else is scaled relative to them.
+//   This removes arbitrary fixed benchmarks (450/350/300) entirely.
 
 'use strict';
 
 const { applyWeeklyCap, cfTier, ccTier, lcTier } = require('./udg');
 
-// ─── Benchmarks & Weights ─────────────────────────────────────────────────────
+// ─── Benchmarks & Weights ─────────────────────────────────────────────────────────────
 const WINDOW_DAYS  = 182;   // 26 weeks
 const WINDOW_WEEKS = 26;
 
 const PLATFORM_WEIGHTS = { leetcode: 30, codechef: 30, codeforces: 20 };
 const HR_TOTAL_PTS     = 20;
 
-// Problem-solving benchmarks (EffectivePoints at 100%)
-const BENCHMARKS = { leetcode: 450, codechef: 350, codeforces: 300 };
+// Fallback floor benchmark used ONLY when cohortMax is 0
+// (e.g. no student solved a single problem — prevents division by zero).
+// Set low intentionally so even a few problems give meaningful score.
+const FLOOR_BENCHMARKS = { leetcode: 10, codechef: 8, codeforces: 6 };
 
 // Expected contests in 6 months (for participation score)
 const EXPECTED_CONTESTS = { leetcode: 20, codechef: 18, codeforces: 18 };
@@ -64,16 +71,60 @@ function clamp(v, lo = 0, hi = 1) { return Math.max(lo, Math.min(hi, v)); }
 // ─── Problem-solving score for one CP platform ────────────────────────────────
 
 /**
+ * Compute raw effectivePoints for a student on one platform.
+ * Used in the service's FIRST PASS to find the cohort maximum.
+ *
+ * Returns: { effectivePoints, cappedPts, consistencyFactor, activeWeeks, maxStreak }
+ */
+function computeRawProblemPts(solves, platform, windowStart) {
+  const tagged = solves
+    .filter(s => s.submitted_at && new Date(s.submitted_at).getTime() >= windowStart)
+    .map(s => {
+      let tier;
+      if (platform === 'leetcode') {
+        tier = lcTier(s.difficulty_tag, s.acceptance_rate, s.total_submissions);
+      } else if (platform === 'codeforces') {
+        tier = s.cf_rating > 0 ? cfTier(s.cf_rating) : 3;
+      } else {
+        tier = s.cc_rating > 0 ? ccTier(s.cc_rating) : 3;
+      }
+      const points = [0, 1, 2, 4, 7, 11, 16][tier];
+      return { tier, points, week: isoWeek(s.submitted_at) };
+    })
+    .sort((a, b) => a.week.localeCompare(b.week));
+
+  const cappedPts = applyWeeklyCap(tagged);
+
+  const weekSolveCounts = {};
+  for (const t of tagged) weekSolveCounts[t.week] = (weekSolveCounts[t.week] || 0) + 1;
+  const activeWeeks = Object.values(weekSolveCounts).filter(c => c >= 3).length;
+  const coverage    = clamp(activeWeeks / WINDOW_WEEKS);
+
+  let run = 0, maxStreak = 0, prev = null;
+  for (const w of Array.from(new Set(tagged.map(t => t.week))).sort()) {
+    if (weekSolveCounts[w] >= 3) { run = prev ? run + 1 : 1; maxStreak = Math.max(maxStreak, run); }
+    else run = 0;
+    prev = w;
+  }
+  const streakBonus       = clamp(maxStreak / WINDOW_WEEKS);
+  const consistencyFactor = clamp(0.5 + 0.35 * coverage + 0.15 * streakBonus, 0.5, 1.0);
+  const effectivePoints   = cappedPts * consistencyFactor;
+
+  return { effectivePoints, cappedPts, consistencyFactor, activeWeeks, maxStreak };
+}
+
+/**
  * @param {object[]} solves   - from student_submissions filtered to platform+window
  *   Each: { problem_id, difficulty_tag, cf_rating, cc_rating, acceptance_rate,
  *            total_submissions, submitted_at }
  * @param {string} platform   - 'leetcode' | 'codeforces' | 'codechef'
  * @param {number} windowStart - timestamp ms (6 months ago)
+ * @param {number} cohortMaxPts - highest effectivePoints in the cohort for this platform.
+ *                                Pass 0 to fall back to FLOOR_BENCHMARKS.
  * @returns {{ rawPts, cappedPts, consistencyFactor, score, breakdown }}
  */
-function problemScore(solves, platform, windowStart) {
-  const maxPts    = PLATFORM_WEIGHTS[platform] * 0.5;  // 50% of platform weight
-  const benchmark = BENCHMARKS[platform];
+function problemScore(solves, platform, windowStart, cohortMaxPts = 0) {
+  const maxPts  = PLATFORM_WEIGHTS[platform] * 0.5;  // 50% of platform weight
 
   // Tag each solve with its week + UDG tier
   const tagged = solves
@@ -117,12 +168,20 @@ function problemScore(solves, platform, windowStart) {
   const consistencyFactor = clamp(0.5 + 0.35 * coverage + 0.15 * streakBonus, 0.5, 1.0);
 
   const effectivePoints = cappedPts * consistencyFactor;
-  const ratio           = clamp(effectivePoints / benchmark);
-  const score           = maxPts * Math.pow(ratio, 0.7);
+
+  // ── COHORT-RELATIVE BENCHMARK ───────────────────────────────────────────
+  // benchmark = the highest effectivePoints scored by any student in this cohort.
+  // Falls back to FLOOR_BENCHMARKS when cohortMax = 0 (empty cohort edge case).
+  const benchmark = cohortMaxPts > 0 ? cohortMaxPts : FLOOR_BENCHMARKS[platform];
+
+  const ratio = clamp(effectivePoints / benchmark);
+  const score = maxPts * Math.pow(ratio, 0.7);
 
   return {
     rawPts, cappedPts, consistencyFactor, effectivePoints,
-    activeWeeks, maxStreak, score: +score.toFixed(4),
+    activeWeeks, maxStreak,
+    benchmark,           // expose for tooltip / debug
+    score: +score.toFixed(4),
     breakdown: { rawPts, cappedPts, activeWeeks, maxStreak, consistencyFactor, effectivePoints, benchmark, score }
   };
 }
@@ -255,23 +314,25 @@ function hackerrankScore(hrProfile) {
  *   lcContests, ccContests, cfContests — arrays from *_contest_history
  *   lcRating, ccRating, cfRating  — current ratings
  *   hrProfile                     — row from hackerrank_profiles
+ *   cohortMaxPts                  — { lc, cc, cf } cohort-max effectivePoints (from service first pass)
  * @returns {object} full score object with total + platform breakdowns
  */
 function computePlacementsScore(data) {
   const windowStart = Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  const cmp = data.cohortMaxPts || {};
 
   // LC
-  const lcProb    = problemScore(data.lcSolves    || [], 'leetcode',   windowStart);
+  const lcProb    = problemScore(data.lcSolves    || [], 'leetcode',   windowStart, cmp.lc || 0);
   const lcContest = contestScore(data.lcContests  || [], 'leetcode',   data.lcRating  || 0, windowStart);
   const lcTotal   = lcProb.score + lcContest.score;
 
   // CC
-  const ccProb    = problemScore(data.ccSolves    || [], 'codechef',   windowStart);
+  const ccProb    = problemScore(data.ccSolves    || [], 'codechef',   windowStart, cmp.cc || 0);
   const ccContest = contestScore(data.ccContests  || [], 'codechef',   data.ccRating  || 0, windowStart);
   const ccTotal   = ccProb.score + ccContest.score;
 
   // CF
-  const cfProb    = problemScore(data.cfSolves    || [], 'codeforces', windowStart);
+  const cfProb    = problemScore(data.cfSolves    || [], 'codeforces', windowStart, cmp.cf || 0);
   const cfContest = contestScore(data.cfContests  || [], 'codeforces', data.cfRating  || 0, windowStart);
   const cfTotal   = cfProb.score + cfContest.score;
 
@@ -312,26 +373,17 @@ function computeOverallScore(data, journeyStartMs = 0) {
   const expectedCC = Math.min(Math.round(18 * scale), 100);
   const expectedCF = Math.min(Math.round(18 * scale), 100);
 
-  // Override module-level constants by calling sub-functions directly with patched params
-  const maxPtsLC = 15; // PLATFORM_WEIGHTS.leetcode * 0.5
-  const maxPtsCC = 15; // PLATFORM_WEIGHTS.codechef * 0.5
-  const maxPtsCF = 10; // PLATFORM_WEIGHTS.codeforces * 0.5
+  const cmp = data.cohortMaxPts || {};
 
-  // Reuse sub-scorers — they read WINDOW_WEEKS only for consistency/streak normalization
-  // We pass journeyWeeks as the normalizer via a local override approach:
-  // The problem scorer reads the module-level WINDOW_WEEKS for coverage/streak ratio.
-  // Since we can't patch that without modifying the module, we call the functions
-  // and then post-adjust the breakdown (scores are proportional, not absolute).
-  // For the Overall board we just use the full-data approach:
-  const lcProb    = problemScore(data.lcSolves    || [], 'leetcode',   windowStart);
+  const lcProb    = problemScore(data.lcSolves    || [], 'leetcode',   windowStart, cmp.lc || 0);
   const lcContest = contestScore(data.lcContests  || [], 'leetcode',   data.lcRating  || 0, windowStart, expectedLC);
   const lcTotal   = lcProb.score + lcContest.score;
 
-  const ccProb    = problemScore(data.ccSolves    || [], 'codechef',   windowStart);
+  const ccProb    = problemScore(data.ccSolves    || [], 'codechef',   windowStart, cmp.cc || 0);
   const ccContest = contestScore(data.ccContests  || [], 'codechef',   data.ccRating  || 0, windowStart, expectedCC);
   const ccTotal   = ccProb.score + ccContest.score;
 
-  const cfProb    = problemScore(data.cfSolves    || [], 'codeforces', windowStart);
+  const cfProb    = problemScore(data.cfSolves    || [], 'codeforces', windowStart, cmp.cf || 0);
   const cfContest = contestScore(data.cfContests  || [], 'codeforces', data.cfRating  || 0, windowStart, expectedCF);
   const cfTotal   = cfProb.score + cfContest.score;
 
@@ -347,4 +399,4 @@ function computeOverallScore(data, journeyStartMs = 0) {
   };
 }
 
-module.exports = { computePlacementsScore, computeOverallScore, problemScore, contestScore, hackerrankScore, isoWeek };
+module.exports = { computePlacementsScore, computeOverallScore, problemScore, contestScore, hackerrankScore, isoWeek, computeRawProblemPts };
