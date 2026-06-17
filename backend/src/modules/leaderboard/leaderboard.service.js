@@ -725,10 +725,23 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50, college =
   const yrNum = yr;
   const month = mo - 1; // 0-indexed
 
-  const monthStart   = new Date(yrNum, month, 1).toISOString();
-  const monthEnd     = new Date(yrNum, month + 1, 1).toISOString();
-  const monthStartTs = Math.floor(new Date(yrNum, month, 1).getTime() / 1000);
-  const monthEndTs   = Math.floor(new Date(yrNum, month + 1, 1).getTime() / 1000);
+  // Date range for the month (used for CC contest_date queries)
+  const monthStart = new Date(yrNum, month, 1).toISOString();
+  const monthEnd   = new Date(yrNum, month + 1, 1).toISOString();
+
+  // For weekly_board: week_start is stored as the SUNDAY of each week.
+  // The first week of a month may have its Sunday be the last day of the
+  // prior month (e.g. the week of May 25–31 has Sunday = May 31, which is
+  // the week containing June 1 if June 1 is a Monday).
+  // So we look back 6 days to catch any such overlapping weeks.
+  const wbStart = new Date(yrNum, month, 1);
+  wbStart.setDate(wbStart.getDate() - 6); // 6 days back to catch prior-month Sundays
+  const wbEnd   = new Date(yrNum, month + 1, 1);
+  wbEnd.setDate(wbEnd.getDate() + 7);     // 7 days forward to catch last week's Sunday
+
+  // Unix timestamp range — add ±7 days buffer for IST vs UTC boundary differences
+  const monthStartTs = Math.floor(new Date(yrNum, month, 1).getTime() / 1000) - 86400;
+  const monthEndTs   = Math.floor(new Date(yrNum, month + 1, 1).getTime() / 1000) + 86400;
 
   // Build dynamic WHERE for college/passout-year filter
   const extraConds  = [];
@@ -761,7 +774,7 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50, college =
        WHERE student_email = ANY($1)
          AND week_start >= $2::date
          AND week_start <  $3::date`,
-      [emails, monthStart, monthEnd]
+      [emails, wbStart.toISOString(), wbEnd.toISOString()]
     );
     weeklyRows = weeklyRes.rows;
   } catch (_) {
@@ -846,15 +859,19 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50, college =
         })),
       ];
 
-      // Group by ISO week Monday
+      // Group by ISO week Sunday (matching weekly_board.week_start storage format).
+      // weekly_board stores week_start as the SUNDAY of each Mon-Sun week.
       const weekGroups = {};
       for (const c of allContests) {
         if (!c.ts) continue;
-        const d2     = new Date(c.ts);
-        const day    = d2.getDay();
-        const monday = new Date(d2);
-        monday.setDate(d2.getDate() - (day === 0 ? 6 : day - 1));
-        const wk = monday.toISOString().slice(0, 10);
+        // Shift to IST (UTC+5:30) to get the correct local day
+        const ist  = new Date(c.ts + (5.5 * 60 * 60 * 1000));
+        const dow  = ist.getUTCDay(); // 0=Sun
+        // Days until the coming Sunday (0 if already Sunday)
+        const daysToSunday = dow === 0 ? 0 : 7 - dow;
+        const sunday = new Date(ist.getTime() + daysToSunday * 86400000);
+        sunday.setUTCHours(0, 0, 0, 0);
+        const wk = sunday.toISOString().slice(0, 10);
         if (!weekGroups[wk]) weekGroups[wk] = [];
         weekGroups[wk].push(c);
       }
@@ -872,8 +889,15 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50, college =
 
     const result = computeMonthlyScore({
       weeklyScores: d.weeklyScores,
-      year:  yrNum,   // calendar year (not passout-year filter)
-      month,          // 0-indexed
+      year:  yrNum,
+      month,
+      // Pass the actual Sunday keys fetched from weekly_board so the scorer
+      // uses real data weeks rather than arithmetic-derived Sundays.
+      // If weekly_board is empty (fallback path), weekKeys is undefined and
+      // computeMonthlyScore uses weeksInMonth() to derive them.
+      weekKeys: Object.keys(d.weeklyScores).length > 0
+        ? Object.keys(d.weeklyScores).sort()
+        : undefined,
     });
 
     return {
