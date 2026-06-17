@@ -1,6 +1,9 @@
-import { RefreshCw, Bell } from 'lucide-react'
+import { RefreshCw, Bell, Sun, Moon } from 'lucide-react'
+import { useTheme } from '../context/ThemeContext'
 
 export default function AdminHeader({ title, breadcrumb, onRefresh, extra }) {
+  const { theme, toggle } = useTheme()
+
   return (
     <header className="header">
       <div className="header-left">
@@ -20,6 +23,14 @@ export default function AdminHeader({ title, breadcrumb, onRefresh, extra }) {
             <RefreshCw size={16} />
           </button>
         )}
+        {/* Theme Toggle */}
+        <button
+          className="theme-toggle"
+          onClick={toggle}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+        </button>
         <button className="icon-btn" title="Notifications">
           <Bell size={17} />
         </button>
@@ -30,3 +41,4 @@ export default function AdminHeader({ title, breadcrumb, onRefresh, extra }) {
     </header>
   )
 }
+

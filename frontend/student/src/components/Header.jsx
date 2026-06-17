@@ -1,9 +1,11 @@
-// Header.jsx — top navigation bar (no global search bar)
-import { Bell } from 'lucide-react'
+// Header.jsx — top navigation bar
+import { Bell, Sun, Moon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 
 export default function Header({ title, breadcrumb }) {
   const { user } = useAuth()
+  const { theme, toggle } = useTheme()
 
   const initials = user?.full_name
     ? user.full_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
@@ -22,8 +24,17 @@ export default function Header({ title, breadcrumb }) {
         <h1 className="header-title">{title}</h1>
       </div>
 
-      {/* Right — notifications + avatar */}
+      {/* Right — theme toggle + notifications + avatar */}
       <div className="header-right">
+        {/* Theme Toggle */}
+        <button
+          className="theme-toggle"
+          onClick={toggle}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+        </button>
+
         {/* Notifications */}
         <button className="icon-btn">
           <Bell size={17} />

@@ -56,6 +56,83 @@
   --header-h: 56px;
 }
 
+/* ── Light Theme ─────────────────────────────────────── */
+[data-theme="light"] {
+  --bg: oklch(0.97 0 0);
+  --bg-2: oklch(0.95 0 0);
+  --card: oklch(1 0 0);
+  --card-hover: oklch(0.96 0 0);
+  --sidebar: oklch(1 0 0);
+  --muted: oklch(0.93 0 0);
+  --border: oklch(0.88 0 0);
+  --border-subtle: oklch(0.92 0 0);
+
+  --fg: oklch(0.10 0 0);
+  --fg-muted: oklch(0.40 0 0);
+  --fg-subtle: oklch(0.60 0 0);
+
+  --primary: oklch(0.10 0 0);
+  --primary-fg: oklch(0.97 0 0);
+
+  --success: oklch(0.50 0.17 145);
+  --success-bg: oklch(0.50 0.17 145 / 0.10);
+  --success-border: oklch(0.50 0.17 145 / 0.25);
+
+  --warning: oklch(0.55 0.14 75);
+  --warning-bg: oklch(0.55 0.14 75 / 0.10);
+
+  --danger: oklch(0.52 0.20 25);
+  --danger-bg: oklch(0.52 0.20 25 / 0.10);
+  --danger-border: oklch(0.52 0.20 25 / 0.25);
+
+  --lc: oklch(0.55 0.16 55);
+  --cf: oklch(0.42 0.16 240);
+  --cc: oklch(0.45 0.16 145);
+  --hr: oklch(0.42 0.16 140);
+
+  --chart-1: oklch(0.50 0.14 200);
+  --chart-2: oklch(0.50 0.17 145);
+  --chart-3: oklch(0.55 0.14 75);
+  --chart-4: oklch(0.52 0.20 25);
+  --chart-5: oklch(0.50 0.14 320);
+}
+
+[data-theme="light"] .header {
+  background: oklch(1 0 0 / 0.90);
+}
+
+[data-theme="light"] thead tr {
+  background: oklch(0.94 0 0);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: oklch(0.75 0 0);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.65 0 0);
+}
+
+/* Theme toggle button */
+.theme-toggle {
+  width: 34px;
+  height: 34px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: all 0.13s;
+}
+
+.theme-toggle:hover {
+  background: var(--muted);
+  color: var(--fg);
+}
+
 /* Reset */
 *,
 *::before,
