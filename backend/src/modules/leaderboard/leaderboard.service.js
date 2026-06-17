@@ -725,13 +725,13 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50, college =
   const yrNum = yr;
   const month = mo - 1; // 0-indexed
 
-  const monthStart = new Date(yrNum, month, 1).toISOString();
-  const monthEnd   = new Date(yrNum, month + 1, 1).toISOString();
+  const monthStart   = new Date(yrNum, month, 1).toISOString();
+  const monthEnd     = new Date(yrNum, month + 1, 1).toISOString();
   const monthStartTs = Math.floor(new Date(yrNum, month, 1).getTime() / 1000);
   const monthEndTs   = Math.floor(new Date(yrNum, month + 1, 1).getTime() / 1000);
 
-  // Build dynamic WHERE for college/year
-  const extraConds = [];
+  // Build dynamic WHERE for college/passout-year filter
+  const extraConds  = [];
   const extraParams = [];
   let pidx = 1;
   if (college) { extraConds.push(`LOWER(s.college) = $${pidx++}`); extraParams.push(college.toLowerCase()); }
@@ -752,8 +752,7 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50, college =
   const emails   = students.map(s => s.email);
   if (!emails.length) return { month: `${yr}-${String(mo).padStart(2,'0')}`, page, limit, total: 0, data: [] };
 
-
-  // Try to get weekly_board scores (table may not exist yet — fall back gracefully)
+  // ── Step 1: Try to get pre-computed weekly_board scores ───────────────────
   let weeklyRows = [];
   try {
     const weeklyRes = await query(
@@ -766,12 +765,12 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50, college =
     );
     weeklyRows = weeklyRes.rows;
   } catch (_) {
-    // weekly_board table doesn't exist yet — derive contest scores from raw history
+    // weekly_board table doesn't exist yet — will fall back to raw contest history below
   }
 
-  // If no weekly_board rows, derive weekly contest composites from raw contest history
-  // This ensures monthly works even before weekly_board is populated.
-  const [lcContRes, ccContRes, cfContRes, solvesRes] = await Promise.all([
+  // ── Step 2: Always fetch raw contest history (used as fallback if weekly_board empty) ─
+  // Practice/solves are NOT fetched — monthly is contest-only now.
+  const [lcContRes, ccContRes, cfContRes] = await Promise.all([
     query(
       `SELECT student_email, contest_time, rank_achieved, problems_solved, total_problems,
               finish_time_seconds, rating_after_contest
@@ -795,77 +794,64 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50, college =
          AND timestamp_seconds >= $2 AND timestamp_seconds < $3`,
       [emails, monthStartTs, monthEndTs]
     ),
-    // Solves — only columns that exist
-    query(
-      `SELECT student_email, platform, problem_id, submitted_at
-       FROM student_submissions
-       WHERE student_email = ANY($1)
-         AND status = 'AC'
-         AND submitted_at >= $2
-         AND submitted_at <  $3`,
-      [emails, monthStart, monthEnd]
-    ),
   ]);
 
-  // Group by email
+  // ── Step 3: Group data by student ─────────────────────────────────────────
   const byEmail = {};
   for (const s of students) byEmail[s.email] = {
-    ...s, weeklyScores: {}, solves: [],
+    ...s, weeklyScores: {},
     lcContests: [], ccContests: [], cfContests: [],
   };
 
-  // Populate from weekly_board if available
+  // Populate weeklyScores from weekly_board
   for (const r of weeklyRows) {
     if (byEmail[r.student_email]) {
       const wk = r.week_start instanceof Date
-        ? r.week_start.toISOString().slice(0,10)
-        : String(r.week_start).slice(0,10);
+        ? r.week_start.toISOString().slice(0, 10)
+        : String(r.week_start).slice(0, 10);
       byEmail[r.student_email].weeklyScores[wk] = parseFloat(r.composite);
     }
   }
 
   // Build contest arrays for fallback scoring
-  for (const r of lcContRes.rows)  byEmail[r.student_email]?.lcContests.push(r);
-  for (const r of ccContRes.rows)  byEmail[r.student_email]?.ccContests.push(r);
-  for (const r of cfContRes.rows)  byEmail[r.student_email]?.cfContests.push(r);
-  for (const r of solvesRes.rows)  byEmail[r.student_email]?.solves.push(r);
+  for (const r of lcContRes.rows) byEmail[r.student_email]?.lcContests.push(r);
+  for (const r of ccContRes.rows) byEmail[r.student_email]?.ccContests.push(r);
+  for (const r of cfContRes.rows) byEmail[r.student_email]?.cfContests.push(r);
 
+  // ── Step 4: Score each student ────────────────────────────────────────────
   const scored = students.map(s => {
     const d = byEmail[s.email];
 
-    // If no weekly_board scores yet, derive weekly composites from raw contest history.
-    // Uses the same v2 proxyScore weights: 70% solve ratio, ±15 rating bonus.
+    // Fallback: if weekly_board has no entries for this student this month,
+    // derive per-week composites from raw contest data using v2 proxyScore.
     if (Object.keys(d.weeklyScores).length === 0) {
       const allContests = [
-        // LC: total_problems from DB, fallback 4
         ...d.lcContests.map(c => ({
           ts: c.contest_time * 1000,
-          rc: c.rating_after_contest - (c.prev_rating || c.rating_after_contest),
           ps: c.problems_solved || 0,
-          tp: c.total_problems || 4,
+          tp: c.total_problems  || 4,
+          rc: c.rating_after_contest - (c.prev_rating || c.rating_after_contest),
         })),
-        // CF: total_problems default 5 (typical CF round) — same fix as weekly SQL
         ...d.cfContests.map(c => ({
           ts: c.timestamp_seconds * 1000,
-          rc: c.rating_change || 0,
           ps: c.problems_solved || 0,
           tp: 5,
+          rc: c.rating_change || 0,
         })),
-        // CC: total_problems default 5
         ...d.ccContests.map(c => ({
           ts: new Date(c.contest_date).getTime(),
-          rc: c.rating_change || 0,
           ps: c.problems_solved_count || 0,
           tp: 5,
+          rc: c.rating_change || 0,
         })),
       ];
 
-      // Group contests by their ISO week (Monday)
+      // Group by ISO week Monday
       const weekGroups = {};
       for (const c of allContests) {
         if (!c.ts) continue;
-        const d2  = new Date(c.ts);
-        const day = d2.getDay();
+        const d2     = new Date(c.ts);
+        const day    = d2.getDay();
         const monday = new Date(d2);
         monday.setDate(d2.getDate() - (day === 0 ? 6 : day - 1));
         const wk = monday.toISOString().slice(0, 10);
@@ -874,9 +860,9 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50, college =
       }
 
       for (const [wk, contests] of Object.entries(weekGroups)) {
-        // v2 proxyScore: 5 base + 70×solveRatio + 15×tanh(rc/200) (no speed bonus here)
+        // v2 proxyScore: 5 base + 70×solveRatio + 15×tanh(rc/200)
         const scores = contests.map(c => {
-          const solveRatio  = c.tp > 0 ? Math.min(1, (c.ps || 0) / c.tp) : 0;
+          const solveRatio  = c.tp > 0 ? Math.min(1, c.ps / c.tp) : 0;
           const ratingBonus = 15 * Math.tanh((c.rc || 0) / 200);
           return Math.min(100, Math.max(0, 5 + 70 * solveRatio + ratingBonus));
         });
@@ -886,10 +872,10 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50, college =
 
     const result = computeMonthlyScore({
       weeklyScores: d.weeklyScores,
-      solves:       d.solves,
-      year: yrNum,  // calendar year number (not the passout-year filter string)
-      month,        // 0-indexed month
+      year:  yrNum,   // calendar year (not passout-year filter)
+      month,          // 0-indexed
     });
+
     return {
       student_email:  s.email,
       full_name:      s.full_name,
@@ -898,22 +884,22 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50, college =
       lc_handle:      s.lc_handle,
       cc_handle:      s.cc_handle,
       cf_handle:      s.cf_handle,
-      final_score:    result.monthlyScore || 0,
-      total_score:    result.monthlyScore || 0,
-      contest_score:  result.contestPts   || 0,
-      practice_score: result.practicePts  || 0,
-      problems_solved: d.solves.length,
-      active_weeks:   result.activeWeeks  || 0,
-      eligible:       result.eligible     || false,
-      month_udg:      result.monthUdg     || 0,
+      final_score:    result.monthlyScore  || 0,
+      total_score:    result.monthlyScore  || 0,
+      contest_score:  result.contestPts    || 0,
+      practice_score: 0,  // monthly is contest-only
+      active_weeks:   result.activeWeeks   || 0,
+      eligible:       result.eligible      || false,
     };
-  }); // show ALL verified students (not just active)
+  });
 
+  // Sort by score descending, assign rank
   scored.sort((a, b) => b.final_score - a.final_score);
   scored.forEach((s, i) => { s.rank = i + 1; });
 
-  // Upsert monthly_board (non-fatal if table doesn't exist)
-  const monthDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+  // ── Step 5: Upsert into monthly_board ─────────────────────────────────────
+  // Use yrNum (calendar year) not year (passout-year filter string)
+  const monthDate = `${yrNum}-${String(mo).padStart(2, '0')}-01`;
   await Promise.allSettled(scored.map(s =>
     query(
       `INSERT INTO monthly_board
@@ -923,15 +909,15 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50, college =
          contest_pts = EXCLUDED.contest_pts, practice_pts = EXCLUDED.practice_pts,
          month_udg = EXCLUDED.month_udg, active_weeks = EXCLUDED.active_weeks,
          monthly_score = EXCLUDED.monthly_score, eligible = EXCLUDED.eligible`,
-      [s.email, monthDate, s.contestPts, s.practicePts, s.monthUdg, s.activeWeeks, s.monthlyScore, s.eligible]
+      [s.email, monthDate, s.contest_score, 0, 0, s.active_weeks, s.final_score, s.eligible]
     ).catch(() => {})
   ));
 
   return {
-    month:  `${yr}-${String(mo).padStart(2, '0')}`,
+    month: `${yr}-${String(mo).padStart(2, '0')}`,
     page, limit,
-    total:  scored.length,
-    data:   scored.slice(offset, offset + limit),
+    total: scored.length,
+    data:  scored.slice(offset, offset + limit),
   };
 }
 
