@@ -1,6 +1,12 @@
 // src/modules/leaderboard/scoring/monthly.scorer.js
 // Monthly leaderboard: 0.60×Contest + 0.40×Practice
-// Contest = mean of best (W-1) weekly composite scores (drop-one)
+//
+// Contest = average of ALL weekly composite scores in the month (no drop-one).
+//   Every week counts equally. If a student misses a week they get 0 for it.
+//   This is fairer than drop-one because:
+//     - Students who compete every week are properly rewarded
+//     - Missing a week genuinely affects the score (no free pass)
+//
 // Practice = UDG solve points with MonthCF consistency factor
 
 'use strict';
@@ -62,19 +68,14 @@ function computeMonthlyScore(data) {
   const W = monthWeeks.length; // typically 4 or 5
 
   // ── Contest component (60pts) ─────────────────────────────────────────────
-  // Build list of weekly composite scores (0 for not-attended)
+  // Build list of weekly composite scores (0 for weeks with no contests)
   const composites = monthWeeks.map(w => weeklyScores[w] || 0);
 
-  let contestMonth;
-  if (W < 4) {
-    // Rare 3-week month: no drop
-    contestMonth = composites.reduce((s, v) => s + v, 0) / W;
-  } else {
-    // Drop the single worst week
-    const sorted = [...composites].sort((a, b) => a - b); // ascending
-    const kept   = sorted.slice(1); // drop the lowest
-    contestMonth = kept.reduce((s, v) => s + v, 0) / kept.length;
-  }
+  // ALL weeks count equally — no drop-one rule.
+  // A missed week contributes 0, which genuinely lowers the monthly score.
+  const contestMonth = W > 0
+    ? composites.reduce((s, v) => s + v, 0) / W
+    : 0;
 
   const contestPts = +(0.60 * contestMonth).toFixed(4);
 
@@ -95,7 +96,7 @@ function computeMonthlyScore(data) {
     return { tier, points, week: weekKey(s.submitted_at) };
   });
 
-  const monthUdg   = applyWeeklyCap(tagged);
+  const monthUdg = applyWeeklyCap(tagged);
 
   // Active weeks: weeks with ≥ 3 accepted solves on any platform
   const weekSolveCounts = {};
@@ -104,7 +105,7 @@ function computeMonthlyScore(data) {
   }
   const activeWeeks = Object.values(weekSolveCounts).filter(c => c >= 3).length;
 
-  // Monthly consistency factor: floor 0.6 (higher than placements' 0.5)
+  // Monthly consistency factor: floor 0.6
   const monthCF    = Math.max(0.6, 0.6 + 0.4 * (activeWeeks / W));
   const effective  = monthUdg * monthCF;
   const ratio      = Math.min(1, effective / MONTH_BENCHMARK);
@@ -112,7 +113,7 @@ function computeMonthlyScore(data) {
 
   const monthlyScore = +(contestPts + practicePts).toFixed(4);
 
-  // Eligibility: ≥2 weekly boards attended AND ≥2 active weeks
+  // Eligibility: ≥2 weekly boards attended AND ≥2 active practice weeks
   const weeksAttended = composites.filter(c => c > 0).length;
   const eligible      = weeksAttended >= 2 && activeWeeks >= 2;
 

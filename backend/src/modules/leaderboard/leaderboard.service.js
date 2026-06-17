@@ -833,31 +833,52 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50, college =
   const scored = students.map(s => {
     const d = byEmail[s.email];
 
-    // If no weekly_board scores yet, derive a rough weekly composite from contest history
-    // Group contests by ISO week
+    // If no weekly_board scores yet, derive weekly composites from raw contest history.
+    // Uses the same v2 proxyScore weights: 70% solve ratio, ±15 rating bonus.
     if (Object.keys(d.weeklyScores).length === 0) {
       const allContests = [
-        ...d.lcContests.map(c => ({ ts: c.contest_time * 1000, rc: c.rating_after_contest - (c.prev_rating || c.rating_after_contest), ps: c.problems_solved || 0, tp: c.total_problems || 4 })),
-        ...d.cfContests.map(c => ({ ts: c.timestamp_seconds * 1000, rc: c.rating_change || 0, ps: c.problems_solved || 0, tp: 5 })),
-        ...d.ccContests.map(c => ({ ts: new Date(c.contest_date).getTime(), rc: c.rating_change || 0, ps: c.problems_solved_count || 0, tp: 5 })),
+        // LC: total_problems from DB, fallback 4
+        ...d.lcContests.map(c => ({
+          ts: c.contest_time * 1000,
+          rc: c.rating_after_contest - (c.prev_rating || c.rating_after_contest),
+          ps: c.problems_solved || 0,
+          tp: c.total_problems || 4,
+        })),
+        // CF: total_problems default 5 (typical CF round) — same fix as weekly SQL
+        ...d.cfContests.map(c => ({
+          ts: c.timestamp_seconds * 1000,
+          rc: c.rating_change || 0,
+          ps: c.problems_solved || 0,
+          tp: 5,
+        })),
+        // CC: total_problems default 5
+        ...d.ccContests.map(c => ({
+          ts: new Date(c.contest_date).getTime(),
+          rc: c.rating_change || 0,
+          ps: c.problems_solved_count || 0,
+          tp: 5,
+        })),
       ];
-      // Group by week
+
+      // Group contests by their ISO week (Monday)
       const weekGroups = {};
       for (const c of allContests) {
         if (!c.ts) continue;
-        const d2 = new Date(c.ts);
+        const d2  = new Date(c.ts);
         const day = d2.getDay();
-        const monday = new Date(d2); monday.setDate(d2.getDate() - (day === 0 ? 6 : day - 1));
-        const wk = monday.toISOString().slice(0,10);
+        const monday = new Date(d2);
+        monday.setDate(d2.getDate() - (day === 0 ? 6 : day - 1));
+        const wk = monday.toISOString().slice(0, 10);
         if (!weekGroups[wk]) weekGroups[wk] = [];
         weekGroups[wk].push(c);
       }
+
       for (const [wk, contests] of Object.entries(weekGroups)) {
-        // Rough composite: average of per-contest proxy scores
+        // v2 proxyScore: 5 base + 70×solveRatio + 15×tanh(rc/200) (no speed bonus here)
         const scores = contests.map(c => {
-          const ratingNorm = 30 + 30 * Math.tanh((c.rc || 0) / 150);
-          const solveRatio = c.tp > 0 ? Math.min(1, (c.ps || 0) / c.tp) : 0;
-          return Math.min(100, ratingNorm + 30 * solveRatio);
+          const solveRatio  = c.tp > 0 ? Math.min(1, (c.ps || 0) / c.tp) : 0;
+          const ratingBonus = 15 * Math.tanh((c.rc || 0) / 200);
+          return Math.min(100, Math.max(0, 5 + 70 * solveRatio + ratingBonus));
         });
         d.weeklyScores[wk] = scores.reduce((a, b) => a + b, 0) / scores.length;
       }
