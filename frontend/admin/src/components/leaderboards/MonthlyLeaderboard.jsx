@@ -1,11 +1,9 @@
-// MonthlyLeaderboard.jsx
+// MonthlyLeaderboard.jsx — Admin
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, X } from 'lucide-react'
 import { leaderboardAPI } from '../../api/api'
 import './leaderboard.shared.css'
-
-const BRANCHES = ['All', 'CSE', 'CSE1', 'IT', 'AIML']
 
 function recentMonths() {
   const now = new Date()
@@ -35,22 +33,23 @@ function ScoreBar({ value, max = 100, cls = 'all' }) {
 }
 
 function MonthRow({ row, rank }) {
-  const [tip, setTip]  = useState(false)
-  const [pos, setPos]  = useState({ top: 0, right: 0 })
-  const rowRef         = useRef(null)
-  const tipRef         = useRef(null)
+  const [tip, setTip] = useState(false)
+  const [pos, setPos] = useState({ top: 0, right: 0 })
+  const rowRef        = useRef(null)
+  const tipRef        = useRef(null)
 
-  const contest     = row.contest_score  ?? row.contestPts  ?? 0
-  const practice    = row.practice_score ?? row.practicePts ?? 0
-  const total       = row.final_score    ?? row.monthlyScore ?? 0
-  const activeWeeks = row.active_weeks   ?? row.activeWeeks ?? 0
-  const monthUdg    = row.month_udg      ?? row.monthUdg    ?? 0
+  const contest      = row.contest_score ?? row.contestPts  ?? 0
+  const total        = row.final_score   ?? row.monthlyScore ?? 0
+  const activeWeeks  = row.active_weeks  ?? row.activeWeeks  ?? 0
+  const composites   = row.breakdown?.composites ?? []
+  const weeks        = row.breakdown?.weeks ?? []
+  const W            = row.breakdown?.W ?? 4
 
   function recalcPos() {
     if (!rowRef.current) return
     const rect = rowRef.current.getBoundingClientRect()
     const vpH  = window.innerHeight
-    const tipH = tipRef.current?.offsetHeight || 230
+    const tipH = tipRef.current?.offsetHeight || 240
     const tipW = tipRef.current?.offsetWidth  || 260
     let top    = rect.bottom + 6
     if (rect.bottom + 6 + tipH > vpH) top = rect.top - 6 - tipH
@@ -63,12 +62,7 @@ function MonthRow({ row, rank }) {
   function handleLeave() { setTip(false) }
 
   return (
-    <div
-      ref={rowRef}
-      className="lb-row"
-      onMouseEnter={handleEnter}
-      onMouseLeave={handleLeave}
-    >
+    <div ref={rowRef} className="lb-row" onMouseEnter={handleEnter} onMouseLeave={handleLeave}>
       {/* Rank */}
       <div style={{ width: 28, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
         <RankCell rank={rank} />
@@ -90,21 +84,18 @@ function MonthRow({ row, rank }) {
         </div>
       </div>
 
-      {/* Contest vs Practice split */}
+      {/* Contest + Weeks */}
       <div className="lb-month-cols">
         <div className="lb-month-col contest">
           <div className="lb-col-label" style={{ marginBottom: 3 }}>Contest</div>
           <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--chart-1)', lineHeight: 1 }}>{contest.toFixed(1)}</div>
-          <div style={{ fontSize: '0.60rem', color: 'var(--fg-subtle)' }}>/60</div>
-        </div>
-        <div className="lb-month-col practice">
-          <div className="lb-col-label" style={{ marginBottom: 3 }}>Practice</div>
-          <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--chart-2)', lineHeight: 1 }}>{practice.toFixed(1)}</div>
-          <div style={{ fontSize: '0.60rem', color: 'var(--fg-subtle)' }}>/40</div>
+          <div style={{ fontSize: '0.60rem', color: 'var(--fg-subtle)' }}>/100</div>
         </div>
         <div className="lb-month-col weeks">
           <div className="lb-col-label" style={{ marginBottom: 3 }}>Weeks</div>
-          <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--fg-muted)', lineHeight: 1 }}>{activeWeeks}</div>
+          <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--fg-muted)', lineHeight: 1 }}>
+            {activeWeeks}<span style={{ fontSize: '0.65rem', opacity: 0.5 }}>/4</span>
+          </div>
         </div>
       </div>
 
@@ -121,31 +112,27 @@ function MonthRow({ row, rank }) {
         </div>
       </div>
 
-      {/* Portal Tooltip */}
+      {/* Tooltip */}
       {tip && createPortal(
-        <div
-          ref={tipRef}
-          className="lb-tip lb-tip-portal"
-          style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999 }}
-        >
+        <div ref={tipRef} className="lb-tip lb-tip-portal"
+          style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999 }}>
           <div className="lb-tip-title">Monthly breakdown</div>
           <div className="lb-tip-row">
-            <span>Contest (60%)</span>
-            <span style={{ color: 'var(--chart-1)' }}>{contest.toFixed(2)} / 60</span>
+            <span style={{ fontWeight: 600 }}>Formula</span>
+            <span style={{ color: 'var(--fg-subtle)', fontSize: '0.72rem' }}>
+              (W1+W2+W3+W4) / 4
+            </span>
           </div>
-          {row.breakdown?.W && <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
-            <span>Weeks (drop-one of {row.breakdown.W})</span>
-            <span>{activeWeeks} active</span>
-          </div>}
           <div className="lb-tip-divider" />
-          <div className="lb-tip-row">
-            <span>Practice (40%)</span>
-            <span style={{ color: 'var(--chart-2)' }}>{practice.toFixed(2)} / 40</span>
-          </div>
-          <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
-            <span>UDG points</span>
-            <span>{monthUdg.toFixed(1)}</span>
-          </div>
+          {composites.map((c, i) => (
+            <div key={i} className="lb-tip-row"
+              style={{ opacity: c === 0 ? 0.35 : 1 }}>
+              <span>Week {i + 1}{weeks[i] ? ` · ${weeks[i].slice(5)}` : ''}</span>
+              <span style={{ color: c === 0 ? 'var(--fg-subtle)' : 'var(--chart-1)', fontWeight: 600 }}>
+                {c === 0 ? '—' : c.toFixed(1)}
+              </span>
+            </div>
+          ))}
           <div className="lb-tip-divider" />
           <div className="lb-tip-row">
             <span style={{ fontWeight: 700 }}>Total</span>
@@ -154,7 +141,7 @@ function MonthRow({ row, rank }) {
           <div className="lb-tip-row">
             <span>Eligible</span>
             <span style={{ color: row.eligible ? 'var(--success)' : 'var(--fg-subtle)' }}>
-              {row.eligible ? 'Yes' : 'No — need ≥ 2 contest wks'}
+              {row.eligible ? `Yes (${activeWeeks}/4 weeks)` : `No — need ≥ 2 weeks (has ${activeWeeks})`}
             </span>
           </div>
         </div>,
@@ -166,16 +153,16 @@ function MonthRow({ row, rank }) {
 
 export default function MonthlyLeaderboard() {
   const months = recentMonths()
-  const [selMonth, setSelMonth] = useState(months[0])
-  const [data,    setData]    = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState('')
-  const [page,    setPage]    = useState(1)
-  const [search,  setSearch]  = useState('')
-  const [branch,  setBranch]  = useState('')
-  const [college, setCollege] = useState('')
-  const [year,    setYear]    = useState('')
-  const [filterOpts, setFilterOpts] = useState({ branches: [], colleges: [], years: [] })
+  const [selMonth,    setSelMonth]    = useState(months[0])
+  const [data,        setData]        = useState(null)
+  const [loading,     setLoading]     = useState(true)
+  const [error,       setError]       = useState('')
+  const [page,        setPage]        = useState(1)
+  const [search,      setSearch]      = useState('')
+  const [branch,      setBranch]      = useState('')
+  const [college,     setCollege]     = useState('')
+  const [year,        setYear]        = useState('')
+  const [filterOpts,  setFilterOpts]  = useState({ branches: [], colleges: [], years: [] })
   const searchRef = useRef(null)
 
   useEffect(() => {
@@ -183,6 +170,7 @@ export default function MonthlyLeaderboard() {
       .then(r => setFilterOpts(r.data.data || { branches: [], colleges: [], years: [] }))
       .catch(() => {})
   }, [])
+
   useEffect(() => {
     setLoading(true)
     setError('')
@@ -228,13 +216,12 @@ export default function MonthlyLeaderboard() {
             {isNow && <div className="lb-live-dot" />}
             Monthly Leaderboard
           </div>
-          <div className="lb-card-sub">60% Contest (drop-one week) + 40% Practice (UDG) · Hover for breakdown</div>
+          <div className="lb-card-sub">
+            Contest only · (Week1 + Week2 + Week3 + Week4) / 4 · Hover for per-week breakdown
+          </div>
         </div>
-        <select
-          className="lb-select"
-          value={selMonth}
-          onChange={e => { setSelMonth(e.target.value); setPage(1) }}
-        >
+        <select className="lb-select" value={selMonth}
+          onChange={e => { setSelMonth(e.target.value); setPage(1) }}>
           {months.map((m, i) => (
             <option key={m} value={m}>
               {i === 0 ? `This month · ${fmtMonth(m)}` : fmtMonth(m)}
@@ -247,22 +234,18 @@ export default function MonthlyLeaderboard() {
       <div className="lb-context-bar">
         <span>{fmtMonth(selMonth)}</span>
         <span style={{ color: 'var(--border)' }}>·</span>
-        <span>Practice benchmark: 185 UDG pts/month</span>
+        <span>4 contest weeks · average score / 100</span>
         <span style={{ color: 'var(--border)' }}>·</span>
-        <span>Drop-one when W ≥ 4</span>
+        <span>Eligible: competed ≥ 2 of 4 weeks</span>
       </div>
 
-      {/* Search + filter bar */}
+      {/* Search + filter */}
       <div className="lb-search-bar" style={{ flexWrap: 'wrap', gap: 8 }}>
         <div className="lb-search-input-wrap">
           <Search size={13} />
-          <input
-            ref={searchRef}
-            className="lb-search-input"
+          <input ref={searchRef} className="lb-search-input"
             placeholder="Search name or roll…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+            value={search} onChange={e => setSearch(e.target.value)} />
           {search && <button className="lb-search-clear" onClick={clearSearch}><X size={12} /></button>}
         </div>
         {filterOpts.branches.length > 0 && (
@@ -301,7 +284,6 @@ export default function MonthlyLeaderboard() {
           <div style={{ flex: 1 }}>Student</div>
           <div className="lb-month-cols">
             <div className="lb-month-col contest lb-col-label">Contest</div>
-            <div className="lb-month-col practice lb-col-label">Practice</div>
             <div className="lb-month-col weeks lb-col-label">Weeks</div>
           </div>
           <div style={{ width: 1, flexShrink: 0 }} />
@@ -309,7 +291,7 @@ export default function MonthlyLeaderboard() {
         </div>
       )}
 
-      {/* Body */}
+      {/* Rows */}
       <div style={{ padding: '6px 0' }}>
         {loading ? (
           <div className="loading-center"><div className="spinner" /> Computing monthly scores…</div>
