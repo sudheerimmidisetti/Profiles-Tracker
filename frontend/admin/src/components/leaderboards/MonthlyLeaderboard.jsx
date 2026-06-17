@@ -1,8 +1,9 @@
 // MonthlyLeaderboard.jsx — Admin
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, X } from 'lucide-react'
+import { Search, X, Download } from 'lucide-react'
 import { leaderboardAPI } from '../../api/api'
+import { useExportCSV } from '../../hooks/useExportCSV'
 import './leaderboard.shared.css'
 
 function recentMonths() {
@@ -165,6 +166,35 @@ export default function MonthlyLeaderboard() {
   const [filterOpts,  setFilterOpts]  = useState({ branches: [], colleges: [], years: [] })
   const searchRef = useRef(null)
 
+  // ── CSV Export ────────────────────────────────────────────────────────────
+  const { exporting, exportCSV } = useExportCSV(
+    async () => {
+      const r = await leaderboardAPI.monthly(selMonth, 1, 9999, college, year)
+      return r.data?.data || []
+    },
+    (rows) => ({
+      headers: ['Rank','Name','Roll Number','Branch','College','LC Handle','CC Handle','CF Handle','Contest Score','Week 1','Week 2','Week 3','Week 4','Active Weeks','Eligible'],
+      rows: rows.map((r, i) => [
+        i + 1,
+        r.full_name || '',
+        r.roll_number || '',
+        r.branch || '',
+        r.college || '',
+        r.lc_handle || '',
+        r.cc_handle || '',
+        r.cf_handle || '',
+        (r.contest_score ?? r.final_score ?? 0).toFixed(2),
+        (r.breakdown?.composites?.[0] ?? 0).toFixed(2),
+        (r.breakdown?.composites?.[1] ?? 0).toFixed(2),
+        (r.breakdown?.composites?.[2] ?? 0).toFixed(2),
+        (r.breakdown?.composites?.[3] ?? 0).toFixed(2),
+        r.active_weeks ?? 0,
+        r.eligible ? 'Yes' : 'No',
+      ])
+    }),
+    `monthly_leaderboard_${selMonth}.csv`
+  )
+
   useEffect(() => {
     leaderboardAPI.getFilters()
       .then(r => setFilterOpts(r.data.data || { branches: [], colleges: [], years: [] }))
@@ -220,14 +250,32 @@ export default function MonthlyLeaderboard() {
             Contest only · (Week1 + Week2 + Week3 + Week4) / 4 · Hover for per-week breakdown
           </div>
         </div>
-        <select className="lb-select" value={selMonth}
-          onChange={e => { setSelMonth(e.target.value); setPage(1) }}>
-          {months.map((m, i) => (
-            <option key={m} value={m}>
-              {i === 0 ? `This month · ${fmtMonth(m)}` : fmtMonth(m)}
-            </option>
-          ))}
-        </select>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            onClick={exportCSV}
+            disabled={exporting || loading}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '5px 12px', borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border)', background: 'var(--card)',
+              color: 'var(--fg)', fontSize: '0.75rem', fontWeight: 600,
+              cursor: exporting || loading ? 'not-allowed' : 'pointer',
+              opacity: exporting || loading ? 0.6 : 1,
+              transition: 'all 0.15s',
+            }}
+          >
+            <Download size={13} />
+            {exporting ? 'Exporting…' : 'Export CSV'}
+          </button>
+          <select className="lb-select" value={selMonth}
+            onChange={e => { setSelMonth(e.target.value); setPage(1) }}>
+            {months.map((m, i) => (
+              <option key={m} value={m}>
+                {i === 0 ? `This month · ${fmtMonth(m)}` : fmtMonth(m)}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Context bar */}

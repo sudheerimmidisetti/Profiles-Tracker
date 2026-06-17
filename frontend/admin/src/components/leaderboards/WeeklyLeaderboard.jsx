@@ -1,8 +1,9 @@
 // WeeklyLeaderboard.jsx
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, X, ChevronDown } from 'lucide-react'
+import { Search, X, ChevronDown, Download } from 'lucide-react'
 import { leaderboardAPI } from '../../api/api'
+import { useExportCSV } from '../../hooks/useExportCSV'
 import './leaderboard.shared.css'
 
 function currentWeekStart() {
@@ -192,6 +193,34 @@ export default function WeeklyLeaderboard() {
   const [filterOpts, setFilterOpts] = useState({ branches: [], colleges: [], years: [] })
   const searchRef = useRef(null)
 
+  // ── CSV Export ────────────────────────────────────────────────────────────
+  const { exporting, exportCSV } = useExportCSV(
+    async () => {
+      const r = await leaderboardAPI.weekly(selWk, 1, 9999, college, year)
+      return r.data?.data || []
+    },
+    (rows) => ({
+      headers: ['Rank','Name','Roll Number','Branch','College','LC Handle','CC Handle','CF Handle','LC Score','CC Score','CF Score','Composite','Platforms','Eligible'],
+      rows: rows.map((r, i) => [
+        i + 1,
+        r.full_name || '',
+        r.roll_number || '',
+        r.branch || '',
+        r.college || '',
+        r.lc_handle || '',
+        r.cc_handle || '',
+        r.cf_handle || '',
+        (r.lc_score ?? 0).toFixed(2),
+        (r.cc_score ?? 0).toFixed(2),
+        (r.cf_score ?? 0).toFixed(2),
+        (r.final_score ?? r.composite ?? 0).toFixed(2),
+        r.platforms_attended ?? 0,
+        r.eligible ? 'Yes' : 'No',
+      ])
+    }),
+    `weekly_leaderboard_${selWk}.csv`
+  )
+
   // Load dynamic filter options once
   useEffect(() => {
     leaderboardAPI.getFilters()
@@ -249,17 +278,35 @@ export default function WeeklyLeaderboard() {
           </div>
           <div className="lb-card-sub">Contest performance only · Award requires ≥ 2 platforms</div>
         </div>
-        <select
-          className="lb-select"
-          value={selWk}
-          onChange={e => { setSelWk(e.target.value); setPage(1) }}
-        >
-          {weeks.map((w, i) => (
-            <option key={w} value={w}>
-              {i === 0 ? `This week · ${fmtRange(w)}` : fmtRange(w)}
-            </option>
-          ))}
-        </select>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            onClick={exportCSV}
+            disabled={exporting || loading}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '5px 12px', borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border)', background: 'var(--card)',
+              color: 'var(--fg)', fontSize: '0.75rem', fontWeight: 600,
+              cursor: exporting || loading ? 'not-allowed' : 'pointer',
+              opacity: exporting || loading ? 0.6 : 1,
+              transition: 'all 0.15s',
+            }}
+          >
+            <Download size={13} />
+            {exporting ? 'Exporting…' : 'Export CSV'}
+          </button>
+          <select
+            className="lb-select"
+            value={selWk}
+            onChange={e => { setSelWk(e.target.value); setPage(1) }}
+          >
+            {weeks.map((w, i) => (
+              <option key={w} value={w}>
+                {i === 0 ? `This week · ${fmtRange(w)}` : fmtRange(w)}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Context bar */}

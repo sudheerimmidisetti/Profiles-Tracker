@@ -1,8 +1,9 @@
 // OverallLeaderboard.jsx
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, X } from 'lucide-react'
+import { Search, X, Download } from 'lucide-react'
 import { leaderboardAPI } from '../../api/api'
+import { useExportCSV } from '../../hooks/useExportCSV'
 import './leaderboard.shared.css'
 
 const BRANCHES = ['All', 'CSE', 'CSE1', 'IT', 'AIML']
@@ -177,6 +178,35 @@ export default function OverallLeaderboard() {
   const [filterOpts, setFilterOpts] = useState({ branches: [], colleges: [], years: [] })
   const searchRef = useRef(null)
 
+  // ── CSV Export ────────────────────────────────────────────────────────────
+  const today = new Date().toISOString().slice(0, 10)
+  const { exporting, exportCSV } = useExportCSV(
+    async () => {
+      const r = await leaderboardAPI.overall(1, 9999, college, year, '')
+      return r.data?.data || []
+    },
+    (rows) => ({
+      headers: ['Rank','Name','Roll Number','Branch','College','LC Handle','CC Handle','CF Handle','HR Handle','LC Score','CC Score','CF Score','HR Score','Total Score'],
+      rows: rows.map((r, i) => [
+        i + 1,
+        r.full_name || '',
+        r.roll_number || '',
+        r.branch || '',
+        r.college || '',
+        r.lc_handle || '',
+        r.cc_handle || '',
+        r.cf_handle || '',
+        r.hr_handle || '',
+        (r.lc?.score ?? r.lc_score ?? 0).toFixed(2),
+        (r.cc?.score ?? r.cc_score ?? 0).toFixed(2),
+        (r.cf?.score ?? r.cf_score ?? 0).toFixed(2),
+        (r.hr?.score ?? r.hr_score ?? 0).toFixed(2),
+        (r.final_score ?? r.total_score ?? 0).toFixed(2),
+      ])
+    }),
+    `overall_leaderboard_${today}.csv`
+  )
+
   useEffect(() => {
     leaderboardAPI.getFilters()
       .then(r => setFilterOpts(r.data.data || { branches: [], colleges: [], years: [] }))
@@ -226,7 +256,25 @@ export default function OverallLeaderboard() {
           <div className="lb-card-title">Overall Leaderboard</div>
           <div className="lb-card-sub">All-time · 100 pts · Full journey · Hover any row for breakdown</div>
         </div>
-        {total > 0 && <span className="badge badge-gray">{total} students</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            onClick={exportCSV}
+            disabled={exporting || loading}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '5px 12px', borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border)', background: 'var(--card)',
+              color: 'var(--fg)', fontSize: '0.75rem', fontWeight: 600,
+              cursor: exporting || loading ? 'not-allowed' : 'pointer',
+              opacity: exporting || loading ? 0.6 : 1,
+              transition: 'all 0.15s',
+            }}
+          >
+            <Download size={13} />
+            {exporting ? 'Exporting…' : 'Export CSV'}
+          </button>
+          {total > 0 && <span className="badge badge-gray">{total} students</span>}
+        </div>
       </div>
 
       {/* Search + filter bar */}
