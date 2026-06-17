@@ -232,7 +232,12 @@ function DashboardSection({ student, platformsObj, onUpdateHandle }) {
       {/* Activity heatmap */}
       {calendarJson && (
         <div style={{ marginTop: 24 }}>
-          <ActivityHeatmap calendarJson={calendarJson} />
+          <ActivityHeatmap
+            calendar={calendarJson}
+            color="#f89f1b"
+            platform="leetcode"
+            title="Activity Calendar"
+          />
         </div>
       )}
     </div>

@@ -351,7 +351,7 @@ export default function WeeklyLeaderboard() {
         ) : (
           <div className="lb-rows-list" style={{ display: 'flex', flexDirection: 'column' }}>
             {rows.map((row, i) => (
-              <WeekRow key={row.student_email || row.email} row={row} rank={(page - 1) * 50 + i + 1} />
+              <WeekRow key={row.student_email || row.email} row={row} rank={row.rank ?? (page - 1) * 50 + i + 1} />
             ))}
           </div>
         )}

@@ -121,6 +121,46 @@ function ProblemDonut({ easy, medium, hard, total }) {
   )
 }
 
+// ── Language Donut — N-segment, no gap ────────────────────────────────────────
+// Unlike ProblemDonut (3 fixed Easy/Medium/Hard segments), this renders one arc
+// per language with proper colors, covering full 360° so no grey gap shows.
+function LanguageDonut({ langs }) {
+  const R = 50, CX = 60, CY = 60, STROKE = 12
+  const circumference = 2 * Math.PI * R
+  const total = langs.reduce((s, l) => s + (l.problemsSolved || 0), 0)
+  if (total === 0) return null
+
+  let offset = 0
+  return (
+    <svg viewBox="0 0 120 120" width="120" height="120">
+      {/* Background ring */}
+      <circle cx={CX} cy={CY} r={R} fill="none"
+        stroke="var(--border)" strokeWidth={STROKE} />
+      {langs.map((l, i) => {
+        const len = circumference * (l.problemsSolved / total)
+        const dash = `${len} ${circumference - len}`
+        const off  = -circumference / 4 + offset
+        offset += len
+        if (len === 0) return null
+        return (
+          <circle key={i} cx={CX} cy={CY} r={R} fill="none"
+            stroke={LANG_COLORS[i % LANG_COLORS.length]}
+            strokeWidth={STROKE}
+            strokeDasharray={dash} strokeDashoffset={off}
+            strokeLinecap="butt"
+            style={{ transition: 'stroke-dasharray .6s ease' }}
+          />
+        )
+      })}
+      {/* Centre labels */}
+      <text x={CX} y={CY - 6} textAnchor="middle"
+        fill="var(--fg)" fontSize="15" fontWeight="700">{total}</text>
+      <text x={CX} y={CY + 10} textAnchor="middle"
+        fill="var(--fg-muted)" fontSize="8">solved</text>
+    </svg>
+  )
+}
+
 // ── Language Bar colors (deterministic by index) ──────────────────────────────
 const LANG_COLORS = ['#f89f1b','#1a8cff','#22c55e','#a855f7','#ef4444','#06b6d4','#ec4899','#84cc16']
 
@@ -313,16 +353,11 @@ export default function LeetCodeProfile({ data, onBack, email: emailProp, apiFet
                     Language Stats
                   </p>
                   <div className="lcp-donut-wrap" style={{ width: '100%' }}>
-                    <ProblemDonut
-                      easy={langStats[0]?.problemsSolved || 0}
-                      medium={langStats[1]?.problemsSolved || 0}
-                      hard={langStats.slice(2).reduce((a,b) => a + b.problemsSolved, 0)}
-                      total={langStats.reduce((a,b) => a + b.problemsSolved, 0)}
-                    />
+                    <LanguageDonut langs={langStats} />
                     <div className="lcp-donut-legend">
                       {langStats.slice(0, 5).map((l, i) => (
                         <div key={l.languageName} className="lcp-donut-item">
-                          <div className="lcp-donut-dot" style={{ background: LANG_COLORS[i] }} />
+                          <div className="lcp-donut-dot" style={{ background: LANG_COLORS[i % LANG_COLORS.length] }} />
                           <span>{l.languageName}</span>
                           <strong style={{ marginLeft: 'auto' }}>{l.problemsSolved}</strong>
                         </div>

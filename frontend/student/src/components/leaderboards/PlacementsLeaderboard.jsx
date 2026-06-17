@@ -299,7 +299,7 @@ export default function PlacementsLeaderboard() {
         ) : (
           <div className="lb-rows-list" style={{ display: 'flex', flexDirection: 'column' }}>
             {rows.map((row, i) => (
-              <PlacementRow key={row.student_email || row.email} row={row} rank={(page - 1) * 50 + i + 1} />
+              <PlacementRow key={row.student_email || row.email} row={row} rank={row.rank ?? (page - 1) * 50 + i + 1} />
             ))}
           </div>
         )}
