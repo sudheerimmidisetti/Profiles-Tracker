@@ -632,7 +632,7 @@ async function getWeeklyLeaderboard(weekParam, page = 1, limit = 50, college = '
     ),
     query(
       `SELECT student_email, contest_id, rank_achieved AS rank,
-              problems_solved, 0 AS total_problems,
+              problems_solved, 5 AS total_problems,
               rating_change, timestamp_seconds
        FROM codeforces_contest_history
        WHERE student_email = ANY($1)

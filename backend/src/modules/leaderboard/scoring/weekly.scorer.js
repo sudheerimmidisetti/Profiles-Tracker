@@ -1,30 +1,33 @@
 // src/modules/leaderboard/scoring/weekly.scorer.js
 // Weekly leaderboard — contests held this week only.
 //
-// SCORING PHILOSOPHY (v2 — fair across divisions)
-// ─────────────────────────────────────────────────
-// We have: rank, problems_solved, rating_change, division (CC), total_problems (LC only)
-// We do NOT have: total participant count (not scraped)
+// SCORING PHILOSOPHY (v2 — bugs fixed)
+// ─────────────────────────────────────
+// Bug fixes applied in v2:
+//   1. CF: total_problems was hardcoded 0 in SQL → solveRatio always 0 → pure rating scoring.
+//          Fixed: SQL now uses 5 AS total_problems (typical CF round size).
+//   2. LC/CF proxyScore: rating_change had 60% weight, solve ratio only 30%.
+//          Fixed: solve ratio now 70% primary, rating change ±15pt tiebreaker.
+//   3. CC: max score was 115 (not 100) → CC students had disproportionate
+//          composite weight vs LC/CF. Fixed: cap changed to 100.
+//   4. CC: division floor (60/40/20/0) was given even for 0 problems solved.
+//          Fixed: floor only awarded if problemsSolved ≥ 1.
 //
-// Formula per platform:
+// Formula per platform (post-fix):
+//
+//  LeetCode / Codeforces (proxy path):
+//    score = 5 + 70×solveRatio + 15×tanh(ratingChange/200) + speedBonus
+//    solveRatio = problemsSolved / totalProblems  (CF defaults to 5)
 //
 //  CodeChef:
-//    S_cc = divBase + rankScore × 0.50 + solveScore × 0.50
-//    divBase:   Div1=60, Div2=40, Div3=20, Div4=0
-//    rankScore: 40 × (1 - rank / typicalDivSize)  clamped [0,40]
-//    solveScore: 40 × (problems_solved / typicalDivProblems) clamped [0,40]
-//    The two 50/50 split means rank AND number of problems both matter equally.
-//    A Div3 student who solves 3 can outscore a Div4 student who solves 4
-//    because divBase gives Div3 a +20 head-start AND their rank percentile is
-//    evaluated within Div3's pool (smaller → higher percentile for same rank).
+//    score = divFloor(if solved≥1) + 40×rankPct + 40×solvePct + ±5 ratingBonus
+//    divFloor: Div1=60, Div2=40, Div3=20, Div4=0
+//    Cap: 100 (was 115)
 //
-//  LeetCode / Codeforces (unchanged):
-//    proxyScore uses rating_change + solve ratio + speed bonus (0–100)
+// Composite: 0.35×LC + 0.35×CF + 0.30×CC  (weights unchanged)
 //
-// Composite: 0.35×LC + 0.35×CF + 0.30×CC  (unchanged weights)
-//
-// NOTE: When we eventually scrape real div_participants, ccUnifiedScore() with
-//       the actual count replaces the typicalDivSize constants.
+// NOTE: When log-ratio path is active (participant count available),
+//       it uses rank directly — already fair, no change needed.
 
 'use strict';
 
@@ -56,28 +59,40 @@ const CC_DIV_FLOOR = {
 
 /**
  * CodeChef score — fair across divisions.
- * Score = divFloor + rankComponent + solveComponent   (max ≈ 100)
  *
- * rankComponent  = 40 × max(0, 1 − rank / typicalDivSize)
- * solveComponent = 40 × min(1, solved / typicalDivProblems)
+ * FIX (v2):
+ *   1. Cap changed from 115 → 100 (consistent with LC/CF proxy max).
+ *   2. Division floor now requires ≥ 1 problem solved.
+ *      Previously a Div1 student who solved 0 and placed last still got 60pts
+ *      just for being Div1 — that's unfair vs a Div4 student who solved 4/5.
+ *
+ * Score = divFloor + rankComponent + solveComponent + ratingBonus
+ *   divFloor      = Div1:60, Div2:40, Div3:20, Div4:0  (only if solved ≥ 1)
+ *   rankComponent = 40 × max(0, 1 − rank / typicalDivSize)
+ *   solveComponent= 40 × min(1, solved / typicalDivProblems)
+ *   ratingBonus   = ±5 (tiebreaker only)
  */
 function ccScore(rank, problemsSolved, division, ratingChange) {
   const div         = division || 'Div 4';
-  const floor       = CC_DIV_FLOOR[div]    ?? 0;
   const divSize     = CC_DIV_SIZE[div]     ?? 18000;
   const divProblems = CC_DIV_PROBLEMS[div] ?? 5;
 
-  const rankComponent  = rank > 0
+  // Division floor: only granted if student solved at least 1 problem
+  // Prevents "0 solves in Div1 = 60pts" anomaly
+  const solved = problemsSolved || 0;
+  const floor  = solved >= 1 ? (CC_DIV_FLOOR[div] ?? 0) : 0;
+
+  const rankComponent   = rank > 0
     ? 40 * Math.max(0, 1 - rank / divSize)
     : 0;
 
-  const solveComponent = 40 * Math.min(1, (problemsSolved || 0) / divProblems);
+  const solveComponent  = 40 * Math.min(1, solved / divProblems);
 
-  // Small rating bonus/penalty: ±5 points based on tanh of rating change
-  // Prevents ties when rank+solves are identical
+  // Small rating bonus/penalty: ±5 pts (tiebreaker only, unchanged)
   const ratingBonus = 5 * Math.tanh((ratingChange || 0) / 100);
 
-  return Math.max(0, Math.min(115, floor + rankComponent + solveComponent + ratingBonus));
+  // Cap at 100 (was 115) — keeps CC comparable to LC/CF in composite
+  return Math.max(0, Math.min(100, floor + rankComponent + solveComponent + ratingBonus));
 }
 
 /**
@@ -99,34 +114,46 @@ function logRatioScore(rank, participants, collegeBaseRank) {
 
 /**
  * Proxy score for LC/CF when we don't have live standings.
- * Uses rating change + problems solved ratio + speed bonus.
+ *
+ * FIX (v2): Problems solved is now the primary signal (70 pts max).
+ * Rating change is a tiebreaker only (±15 pts).
+ *
+ * OLD formula: 60% rating change + 30% solves → newbies with high delta
+ *              always outranked students who solved more problems.
+ * NEW formula: 70% solve ratio + 15pt rating adjustment + speed bonus
+ *   → Umar solving 4/6 will always outscore Bhargav solving 1/6
+ *     regardless of rating delta.
+ *
  * Score range: 0–100
  */
 function proxyScore(ratingChange, problemsSolved, totalProblems, finishTimeSeconds) {
-  // Rating change component (0–60): tanh-normalized
-  const ratingNorm = 30 + 30 * Math.tanh((ratingChange || 0) / 150);
-
-  // Problems solved ratio (0–30)
+  // PRIMARY: Problems solved ratio (0–70 pts)
   const solveRatio = totalProblems > 0 ? Math.min(1, (problemsSolved || 0) / totalProblems) : 0;
-  const solveNorm  = 30 * solveRatio;
+  const solveNorm  = 70 * solveRatio;
 
-  // Speed bonus (0–10): inversely proportional to finish time
-  let speedNorm = 0;
-  if (finishTimeSeconds > 0 && finishTimeSeconds < 7200) {
-    speedNorm = 10 * (1 - finishTimeSeconds / 7200) * solveRatio;
+  // SECONDARY: Rating change bonus/penalty (±15 pts)
+  // Reduced divisor (200 vs old 150) → less extreme for newbie jumps
+  const ratingBonus = 15 * Math.tanh((ratingChange || 0) / 200);
+
+  // Speed bonus (0–10 pts): only meaningful if you solved something
+  let speedBonus = 0;
+  if (finishTimeSeconds > 0 && finishTimeSeconds < 7200 && solveRatio > 0) {
+    speedBonus = 10 * (1 - finishTimeSeconds / 7200) * solveRatio;
   }
 
-  return Math.max(0, Math.min(100, ratingNorm + solveNorm + speedNorm));
+  // Base 5 pts for participation (so a student who solved 0 isn't exactly at 0)
+  return Math.max(0, Math.min(100, 5 + solveNorm + ratingBonus + speedBonus));
 }
 
 /**
- * Legacy ccUnifiedScore — kept for when we have actual div_participants.
+ * Legacy ccUnifiedScore — used when we have actual div_participants count.
+ * FIX: Cap changed from 115 → 100 to match ccScore and LC/CF proxy caps.
  */
 function ccUnifiedScore(rank, divParticipants, division) {
   const divFloor = { 'Div 1': 60, 'Div 2': 40, 'Div 3': 20, 'Div 4': 0 };
   const floor    = divFloor[division] ?? 0;
   const p        = divParticipants > 0 ? Math.max(0, 1 - rank / divParticipants) : 0;
-  return Math.min(115, floor + p * 55);
+  return Math.min(100, floor + p * 55);
 }
 
 /**
