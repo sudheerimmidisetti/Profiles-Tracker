@@ -1,32 +1,37 @@
 // src/modules/leaderboard/scoring/weekly.scorer.js
 // Weekly leaderboard — contests held this week only.
 //
-// SCORING PHILOSOPHY (v2 — bugs fixed)
-// ─────────────────────────────────────
-// Bug fixes applied in v2:
-//   1. CF: total_problems was hardcoded 0 in SQL → solveRatio always 0 → pure rating scoring.
-//          Fixed: SQL now uses 5 AS total_problems (typical CF round size).
-//   2. LC/CF proxyScore: rating_change had 60% weight, solve ratio only 30%.
-//          Fixed: solve ratio now 70% primary, rating change ±15pt tiebreaker.
-//   3. CC: max score was 115 (not 100) → CC students had disproportionate
-//          composite weight vs LC/CF. Fixed: cap changed to 100.
-//   4. CC: division floor (60/40/20/0) was given even for 0 problems solved.
-//          Fixed: floor only awarded if problemsSolved ≥ 1.
+// SCORING PHILOSOPHY (v3 — rank-based, no rating change)
+// ────────────────────────────────────────────────────────
+// v3 changes (per explicit requirement):
+//   LC / CF proxy score uses ONLY:
+//     1. Global rank  — rank percentile vs typical contest size (0–15 pts)
+//     2. Problems solved — solve ratio  (0–70 pts)
+//     3. Finish time  — speed bonus     (0–15 pts)
+//   Rating change is REMOVED entirely from LC and CF scoring.
 //
-// Formula per platform (post-fix):
+// Formula per platform (v3):
 //
-//  LeetCode / Codeforces (proxy path):
-//    score = 5 + 70×solveRatio + 15×tanh(ratingChange/200) + speedBonus
-//    solveRatio = problemsSolved / totalProblems  (CF defaults to 5)
+//  LeetCode (proxy path):
+//    score = 5 + 70×solveRatio + 15×speedBonus + 10×rankBonus
+//    solveRatio = solved / totalProblems
+//    speedBonus = (1 − finishTime/7200) × solveRatio  (0 if time ≥ 2h or no solve)
+//    rankBonus  = max(0, 1 − rank / 35000)  (LC typical ~30–35k participants)
+//
+//  Codeforces (proxy path):
+//    score = 5 + 70×solveRatio + 15×speedBonus + 10×rankBonus
+//    solveRatio = solved / 5  (CF stores total_problems = 5)
+//    speedBonus = 0 (CF does not store individual finish time)
+//    rankBonus  = max(0, 1 − rank / 25000)  (CF Div2 typical ~20–25k)
 //
 //  CodeChef:
 //    score = divFloor(if solved≥1) + 40×rankPct + 40×solvePct + ±5 ratingBonus
-//    divFloor: Div1=60, Div2=40, Div3=20, Div4=0
-//    Cap: 100 (was 115)
+//    divFloor: Div1=60, Div2=40, Div3=20, Div4=0  (typical division sizes used for rank%)
+//    Cap: 100
 //
 // Composite: 0.35×LC + 0.35×CF + 0.30×CC  (weights unchanged)
 //
-// NOTE: When log-ratio path is active (participant count available),
+// NOTE: When log-ratio path is active (total_participants + collegeBase available),
 //       it uses rank directly — already fair, no change needed.
 
 'use strict';
@@ -113,36 +118,43 @@ function logRatioScore(rank, participants, collegeBaseRank) {
 }
 
 /**
- * Proxy score for LC/CF when we don't have live standings.
+ * Proxy score for LC/CF — uses ONLY global rank, problems solved, and finish time.
+ * Rating change is NOT used.
  *
- * FIX (v2): Problems solved is now the primary signal (70 pts max).
- * Rating change is a tiebreaker only (±15 pts).
+ * Buckets:
+ *   5  pts  — base participation bonus
+ *   70 pts  — solve ratio  (solved / total)
+ *   15 pts  — speed bonus  (finish time < 2h, scaled by solve ratio)
+ *   10 pts  — rank bonus   (percentile vs typicalParticipants)
+ *   ─────────────────────────────────
+ *   100 pts max
  *
- * OLD formula: 60% rating change + 30% solves → newbies with high delta
- *              always outranked students who solved more problems.
- * NEW formula: 70% solve ratio + 15pt rating adjustment + speed bonus
- *   → Umar solving 4/6 will always outscore Bhargav solving 1/6
- *     regardless of rating delta.
- *
- * Score range: 0–100
+ * @param {number} problemsSolved
+ * @param {number} totalProblems    — 0 treated as unknown (score 0 on solve component)
+ * @param {number} finishTimeSeconds — 0 if not available (CF)
+ * @param {number} rank              — global contest rank (lower = better)
+ * @param {number} typicalParticipants — expected contest size (LC≈35000, CF≈25000)
  */
-function proxyScore(ratingChange, problemsSolved, totalProblems, finishTimeSeconds) {
+function proxyScore(problemsSolved, totalProblems, finishTimeSeconds, rank, typicalParticipants) {
   // PRIMARY: Problems solved ratio (0–70 pts)
   const solveRatio = totalProblems > 0 ? Math.min(1, (problemsSolved || 0) / totalProblems) : 0;
   const solveNorm  = 70 * solveRatio;
 
-  // SECONDARY: Rating change bonus/penalty (±15 pts)
-  // Reduced divisor (200 vs old 150) → less extreme for newbie jumps
-  const ratingBonus = 15 * Math.tanh((ratingChange || 0) / 200);
-
-  // Speed bonus (0–10 pts): only meaningful if you solved something
+  // SECONDARY: Speed bonus (0–15 pts) — only if solved something and finished within 2h
   let speedBonus = 0;
   if (finishTimeSeconds > 0 && finishTimeSeconds < 7200 && solveRatio > 0) {
-    speedBonus = 10 * (1 - finishTimeSeconds / 7200) * solveRatio;
+    speedBonus = 15 * (1 - finishTimeSeconds / 7200) * solveRatio;
   }
 
-  // Base 5 pts for participation (so a student who solved 0 isn't exactly at 0)
-  return Math.max(0, Math.min(100, 5 + solveNorm + ratingBonus + speedBonus));
+  // TERTIARY: Global rank percentile (0–10 pts)
+  // rank=1 → 10pts, rank=typicalSize → 0pts, rank > typicalSize → 0pts
+  let rankBonus = 0;
+  if (rank > 0 && typicalParticipants > 0) {
+    rankBonus = 10 * Math.max(0, 1 - rank / typicalParticipants);
+  }
+
+  // Base 5 pts for participation
+  return Math.max(0, Math.min(100, 5 + solveNorm + speedBonus + rankBonus));
 }
 
 /**
@@ -184,6 +196,8 @@ function computeWeeklyScore(data) {
   const { lcContests = [], cfContests = [], ccContests = [], collegeBase = {} } = data;
 
   // ── LeetCode ───────────────────────────────────────────────────────────────
+  // Typical LC weekly contest: ~30,000–35,000 global participants.
+  const LC_TYPICAL_PARTICIPANTS = 35000;
   let lcScore = 0;
   let lcBest  = null;
   for (const c of lcContests) {
@@ -192,12 +206,21 @@ function computeWeeklyScore(data) {
       s = logRatioScore(c.rank, c.total_participants, collegeBase.lc);
     }
     if (s === null) {
-      s = proxyScore(c.rating_change, c.problems_solved, c.total_problems, c.finish_time_seconds);
+      s = proxyScore(
+        c.problems_solved,
+        c.total_problems,
+        c.finish_time_seconds,
+        c.rank,
+        LC_TYPICAL_PARTICIPANTS
+      );
     }
     if (s > lcScore) { lcScore = s; lcBest = c; }
   }
 
   // ── Codeforces ─────────────────────────────────────────────────────────────
+  // Typical CF Div2/Div3 contest: ~20,000–30,000 participants.
+  // CF does not store individual finish_time_seconds → speedBonus = 0.
+  const CF_TYPICAL_PARTICIPANTS = 25000;
   let cfScore = 0;
   let cfBest  = null;
   for (const c of cfContests) {
@@ -206,7 +229,13 @@ function computeWeeklyScore(data) {
       s = logRatioScore(c.rank, c.total_participants, collegeBase.cf);
     }
     if (s === null) {
-      s = proxyScore(c.rating_change, c.problems_solved, c.total_problems, c.finish_time_seconds);
+      s = proxyScore(
+        c.problems_solved,
+        c.total_problems || 5,
+        0,              // CF has no per-submission finish time stored
+        c.rank,
+        CF_TYPICAL_PARTICIPANTS
+      );
     }
     if (s > cfScore) { cfScore = s; cfBest = c; }
   }
