@@ -890,6 +890,7 @@ async function getMonthlyLeaderboard(monthParam, page = 1, limit = 50, college =
       practice_score: 0,  // monthly is contest-only
       active_weeks:   result.activeWeeks   || 0,
       eligible:       result.eligible      || false,
+      breakdown:      result.breakdown     || null,
     };
   });
 

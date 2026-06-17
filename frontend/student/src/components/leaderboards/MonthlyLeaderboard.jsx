@@ -41,10 +41,12 @@ function MonthRow({ row, rank }) {
   const tipRef         = useRef(null)
 
   const contest     = row.contest_score  ?? row.contestPts  ?? 0
-  const practice    = row.practice_score ?? row.practicePts ?? 0
   const total       = row.final_score    ?? row.monthlyScore ?? 0
   const activeWeeks = row.active_weeks   ?? row.activeWeeks ?? 0
-  const monthUdg    = row.month_udg      ?? row.monthUdg    ?? 0
+
+  // Breakdown composites from API (array of per-week scores)
+  const composites  = row.breakdown?.composites ?? []
+  const W           = row.breakdown?.W ?? 0
 
   function recalcPos() {
     if (!rowRef.current) return
@@ -90,17 +92,12 @@ function MonthRow({ row, rank }) {
         </div>
       </div>
 
-      {/* Contest vs Practice split */}
+      {/* Contest score + weeks */}
       <div className="lb-month-cols">
         <div className="lb-month-col contest">
           <div className="lb-col-label" style={{ marginBottom: 3 }}>Contest</div>
           <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--chart-1)', lineHeight: 1 }}>{contest.toFixed(1)}</div>
-          <div style={{ fontSize: '0.60rem', color: 'var(--fg-subtle)' }}>/60</div>
-        </div>
-        <div className="lb-month-col practice">
-          <div className="lb-col-label" style={{ marginBottom: 3 }}>Practice</div>
-          <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--chart-2)', lineHeight: 1 }}>{practice.toFixed(1)}</div>
-          <div style={{ fontSize: '0.60rem', color: 'var(--fg-subtle)' }}>/40</div>
+          <div style={{ fontSize: '0.60rem', color: 'var(--fg-subtle)' }}>/100</div>
         </div>
         <div className="lb-month-col weeks">
           <div className="lb-col-label" style={{ marginBottom: 3 }}>Weeks</div>
@@ -130,22 +127,21 @@ function MonthRow({ row, rank }) {
         >
           <div className="lb-tip-title">Monthly breakdown</div>
           <div className="lb-tip-row">
-            <span>Contest (60%)</span>
-            <span style={{ color: 'var(--chart-1)' }}>{contest.toFixed(2)} / 60</span>
+            <span>Contest score (100%)</span>
+            <span style={{ color: 'var(--chart-1)' }}>{contest.toFixed(2)} / 100</span>
           </div>
-          {row.breakdown?.W && <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
-            <span>Weeks (drop-one of {row.breakdown.W})</span>
-            <span>{activeWeeks} active</span>
-          </div>}
-          <div className="lb-tip-divider" />
-          <div className="lb-tip-row">
-            <span>Practice (40%)</span>
-            <span style={{ color: 'var(--chart-2)' }}>{practice.toFixed(2)} / 40</span>
-          </div>
-          <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
-            <span>UDG points</span>
-            <span>{monthUdg.toFixed(1)}</span>
-          </div>
+          {W > 0 && (
+            <div className="lb-tip-row" style={{ paddingLeft: 10 }}>
+              <span>Avg of {W} weeks (all count)</span>
+              <span>{activeWeeks} competed</span>
+            </div>
+          )}
+          {composites.length > 0 && composites.map((c, i) => (
+            <div key={i} className="lb-tip-row" style={{ paddingLeft: 10, fontSize: '0.68rem', opacity: c === 0 ? 0.4 : 1 }}>
+              <span>Week {i + 1}</span>
+              <span>{c.toFixed(1)}</span>
+            </div>
+          ))}
           <div className="lb-tip-divider" />
           <div className="lb-tip-row">
             <span style={{ fontWeight: 700 }}>Total</span>
@@ -154,7 +150,7 @@ function MonthRow({ row, rank }) {
           <div className="lb-tip-row">
             <span>Eligible</span>
             <span style={{ color: row.eligible ? 'var(--success)' : 'var(--fg-subtle)' }}>
-              {row.eligible ? 'Yes' : 'No — need ≥ 2 contest wks'}
+              {row.eligible ? 'Yes (≥ 2 weeks)' : 'No — need ≥ 2 contest weeks'}
             </span>
           </div>
         </div>,
@@ -228,7 +224,7 @@ export default function MonthlyLeaderboard() {
             {isNow && <div className="lb-live-dot" />}
             Monthly Leaderboard
           </div>
-          <div className="lb-card-sub">60% Contest (drop-one week) + 40% Practice (UDG) · Hover for breakdown</div>
+          <div className="lb-card-sub">100% Contest · Average of all weeks · Hover for per-week breakdown</div>
         </div>
         <select
           className="lb-select"
@@ -247,9 +243,9 @@ export default function MonthlyLeaderboard() {
       <div className="lb-context-bar">
         <span>{fmtMonth(selMonth)}</span>
         <span style={{ color: 'var(--border)' }}>·</span>
-        <span>Practice benchmark: 185 UDG pts/month</span>
+        <span>Score = average weekly composite across all weeks</span>
         <span style={{ color: 'var(--border)' }}>·</span>
-        <span>Drop-one when W ≥ 4</span>
+        <span>Eligible: ≥ 2 weeks competed</span>
       </div>
 
       {/* Search + filter bar */}
@@ -301,7 +297,6 @@ export default function MonthlyLeaderboard() {
           <div style={{ flex: 1 }}>Student</div>
           <div className="lb-month-cols">
             <div className="lb-month-col contest lb-col-label">Contest</div>
-            <div className="lb-month-col practice lb-col-label">Practice</div>
             <div className="lb-month-col weeks lb-col-label">Weeks</div>
           </div>
           <div style={{ width: 1, flexShrink: 0 }} />
@@ -334,6 +329,11 @@ export default function MonthlyLeaderboard() {
           <span className="lb-page-info">Page {page} of {pages}</span>
           <button className="lb-page-btn" onClick={() => setPage(p => p + 1)} disabled={page === pages}>›</button>
         </div>
+      )}
+    </div>
+  )
+}
+>
       )}
     </div>
   )
