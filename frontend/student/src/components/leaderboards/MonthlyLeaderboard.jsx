@@ -333,8 +333,3 @@ export default function MonthlyLeaderboard() {
     </div>
   )
 }
->
-      )}
-    </div>
-  )
-}
