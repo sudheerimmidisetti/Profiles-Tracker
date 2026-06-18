@@ -12,22 +12,22 @@
 }
 .ahm-header-left { display: flex; flex-direction: column; gap: 4px; }
 .ahm-title {
-  font-size: 0.88rem; font-weight: 700; color: var(--fg, #f9fafb);
+  font-size: 0.88rem; font-weight: 700; color: var(--fg, #e5e7eb);
 }
 .ahm-stats-row {
   display: flex; align-items: center; gap: 6px;
-  font-size: 0.72rem; color: var(--fg-muted, #6b7280); flex-wrap: wrap;
+  font-size: 0.72rem; color: var(--fg-muted, #9ca3af); flex-wrap: wrap;
 }
-.ahm-stat-item strong { color: var(--fg, #f9fafb); font-weight: 700; }
-.ahm-stat-dot { color: rgba(255,255,255,.15); }
+.ahm-stat-item strong { color: var(--fg, #e5e7eb); font-weight: 700; }
+.ahm-stat-dot { color: var(--border, rgba(128,128,128,.3)); }
 
 /* ── Year dropdown ─────────────────────────────────────────────────────────── */
 .ahm-year-select {
   padding: 4px 10px;
   border-radius: 8px;
-  border: 1px solid rgba(255,255,255,.15);
-  background: rgba(255,255,255,.06);
-  color: var(--fg, #f9fafb);
+  border: 1px solid var(--border, rgba(128,128,128,.25));
+  background: var(--surface-2, rgba(128,128,128,.08));
+  color: var(--fg, #e5e7eb);
   font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
@@ -40,21 +40,21 @@
   padding-right: 28px;
   transition: border-color 0.15s;
 }
-.ahm-year-select:hover { border-color: rgba(255,255,255,.3); }
+.ahm-year-select:hover { border-color: var(--fg-subtle, rgba(128,128,128,.45)); }
 .ahm-year-select:focus { border-color: var(--ahm-sel-color, #22c55e); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ahm-sel-color, #22c55e) 15%, transparent); }
-.ahm-year-select option { background: oklch(0.14 0 0); color: #f9fafb; }
+.ahm-year-select option { background: var(--surface, #1f2937); color: var(--fg, #e5e7eb); }
 
 /* Legacy pills (kept for compatibility) */
 .ahm-year-pills {
   display: flex; gap: 4px; flex-wrap: wrap;
 }
 .ahm-year-btn {
-  padding: 4px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.04); color: var(--fg-muted, #6b7280);
+  padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border, rgba(128,128,128,.2));
+  background: var(--surface-2, rgba(128,128,128,.06)); color: var(--fg-muted, #9ca3af);
   font-size: 0.72rem; font-weight: 500; cursor: pointer;
   transition: all 0.15s;
 }
-.ahm-year-btn:hover { color: var(--fg, #f9fafb); border-color: rgba(255,255,255,.25); }
+.ahm-year-btn:hover { color: var(--fg, #e5e7eb); border-color: var(--border-hover, rgba(128,128,128,.4)); }
 .ahm-year-btn.active { font-weight: 700; }
 
 
@@ -84,7 +84,7 @@
 }
 .ahm-dow-label {
   height: 11px; width: 12px;
-  font-size: 0.58rem; color: rgba(255,255,255,.25);
+  font-size: 0.58rem; color: var(--fg-subtle, #6b7280);
   display: flex; align-items: center; justify-content: flex-end;
   line-height: 1;
 }
@@ -98,7 +98,7 @@
 .ahm-month-name {
   height: 18px; line-height: 18px;
   font-size: 0.62rem; font-weight: 600;
-  color: rgba(255,255,255,.35); text-transform: uppercase;
+  color: var(--fg-subtle, #6b7280); text-transform: uppercase;
   letter-spacing: 0.06em; white-space: nowrap;
   padding-left: 2px;
 }
@@ -116,7 +116,7 @@
 /* ── Individual cell ──────────────────────────────────────────────────────── */
 .ahm-cell {
   width: 11px; height: 11px; border-radius: 2.5px;
-  background: rgba(255,255,255,.07);
+  background: var(--border, rgba(128,128,128,.2));
   transition: transform 0.1s, opacity 0.1s;
   flex-shrink: 0;
 }
@@ -158,11 +158,11 @@
   display: flex; align-items: center; gap: 4px;
 }
 .ahm-legend-txt {
-  font-size: 0.65rem; color: rgba(255,255,255,.3);
+  font-size: 0.65rem; color: var(--fg-subtle, #6b7280);
 }
 .ahm-legend-cell {
   width: 10px; height: 10px; border-radius: 2px;
-  background: rgba(255,255,255,.07);
+  background: var(--border, rgba(128,128,128,.2));
   flex-shrink: 0;
 }
 

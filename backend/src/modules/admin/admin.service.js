@@ -94,15 +94,33 @@ async function getStudent(email) {
   const student = stuRes.rows[0];
 
   const ppRes = await query(
-    `SELECT platform_name, username, current_rating, total_solved,
-            global_rank, last_updated
-     FROM platform_profiles
-     WHERE student_email = $1`,
+    `SELECT
+       pp.platform_name,
+       pp.username,
+       pp.current_rating,
+       pp.total_solved,
+       pp.global_rank,
+       pp.last_updated,
+       lp.easy_solved,
+       lp.medium_solved,
+       lp.hard_solved
+     FROM platform_profiles pp
+     LEFT JOIN leetcode_profiles lp
+       ON lp.student_email = pp.student_email
+      AND pp.platform_name = 'leetcode'
+     WHERE pp.student_email = $1`,
     [email]
   );
   const platforms = {};
   for (const r of ppRes.rows) {
-    platforms[r.platform_name] = r;
+    const entry = { ...r };
+    // Remove join artefacts from non-LC platforms
+    if (r.platform_name !== 'leetcode') {
+      delete entry.easy_solved;
+      delete entry.medium_solved;
+      delete entry.hard_solved;
+    }
+    platforms[r.platform_name] = entry;
   }
 
   return { student, platforms };

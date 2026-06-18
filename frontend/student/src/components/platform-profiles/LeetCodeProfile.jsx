@@ -121,6 +121,9 @@ function ProblemDonut({ easy, medium, hard, total }) {
   )
 }
 
+// ── Language Bar colors (deterministic by index) ──────────────────────────────
+const LANG_COLORS = ['#f89f1b','#1a8cff','#22c55e','#a855f7','#ef4444','#06b6d4','#ec4899','#84cc16']
+
 // ── Language Donut — N-segment, no gap ────────────────────────────────────────
 // Unlike ProblemDonut (3 fixed Easy/Medium/Hard segments), this renders one arc
 // per language with proper colors, covering full 360° so no grey gap shows.
@@ -160,9 +163,6 @@ function LanguageDonut({ langs }) {
     </svg>
   )
 }
-
-// ── Language Bar colors (deterministic by index) ──────────────────────────────
-const LANG_COLORS = ['#f89f1b','#1a8cff','#22c55e','#a855f7','#ef4444','#06b6d4','#ec4899','#84cc16']
 
 // ── Badge emoji fallbacks ─────────────────────────────────────────────────────
 function BadgeIcon({ icon, name, size = 40 }) {
