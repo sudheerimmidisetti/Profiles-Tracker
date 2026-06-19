@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { contestsAPI } from '../api/api'
+import Header from '../components/Header'
 import {
-  Trophy, Clock, Users, ExternalLink, ChevronLeft,
+  Clock, Users, ExternalLink, ChevronLeft,
   ChevronRight, X, TrendingUp, TrendingDown, Minus,
-  Calendar, Code2, Zap, Search
+  Calendar, Code2, Zap, Search, Trophy
 } from 'lucide-react'
 import './ContestPage.css'
 
@@ -302,15 +303,9 @@ export default function ContestPage({ isAdmin = false }) {
     : ''
 
   return (
-    <div className="page-wrapper">
-      {/* Header */}
-      <div className="page-header" style={{ marginBottom: 24 }}>
-        <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Trophy size={22} style={{ color: 'var(--chart-5)' }} />
-          Contests
-        </h1>
-        <p className="page-sub">Upcoming and past contests across LeetCode, Codeforces, and CodeChef</p>
-      </div>
+    <>
+      <Header title="Contests" breadcrumb="Overview" />
+      <div className="page">
 
       {/* Filters */}
       <div className="contest-filters">
@@ -414,6 +409,7 @@ export default function ContestPage({ isAdmin = false }) {
           fetchParticipants={fetchParticipants}
         />
       )}
-    </div>
+      </div>
+    </>
   )
 }

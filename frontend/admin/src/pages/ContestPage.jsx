@@ -1,6 +1,7 @@
 // Admin ContestPage — same UI as student version but uses admin-auth API endpoints
 import { useState, useEffect, useCallback } from 'react'
 import { contestsAPI } from '../api/api'
+import AdminHeader from '../components/AdminHeader'
 import {
   Trophy, Clock, Users, ExternalLink, ChevronLeft,
   ChevronRight, X, TrendingUp, TrendingDown, Minus,
@@ -302,13 +303,9 @@ export default function AdminContestPage() {
   )
 
   return (
-    <div className="page-wrapper">
-      <div className="page-header" style={{ marginBottom: 24 }}>
-        <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Trophy size={22} style={{ color: 'var(--chart-5)' }} /> Contests
-        </h1>
-        <p className="page-sub">Cohort contest performance — upcoming events and past results</p>
-      </div>
+    <>
+      <AdminHeader title="Contests" breadcrumb="Overview" />
+      <div className="page">
 
       {/* Filters */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 28 }}>
@@ -391,6 +388,7 @@ export default function AdminContestPage() {
       )}
 
       {selected && <ResultsModal contest={selected} onClose={() => setSelected(null)} />}
-    </div>
+      </div>
+    </>
   )
 }
