@@ -35,30 +35,36 @@
 }
 
 .cf-week-nav {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
   margin-left: auto;
 }
-
-.cf-week-btn {
-  width: 30px; height: 30px; border-radius: 8px;
+.cf-week-chevron {
+  position: absolute;
+  right: 12px;
+  pointer-events: none;
+  color: var(--fg-muted);
+  z-index: 1;
+}
+.cf-week-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 7px 36px 7px 14px;
+  border-radius: 10px;
   border: 1.5px solid var(--border);
   background: var(--surface);
-  color: var(--fg-muted);
+  color: var(--fg);
+  font-size: 0.82rem;
+  font-weight: 600;
   cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: all .15s;
-}
-.cf-week-btn:hover:not(:disabled) { color: var(--fg); border-color: var(--fg-muted); }
-.cf-week-btn:disabled { opacity: .3; cursor: not-allowed; }
-
-.cf-week-label {
-  text-align: center;
+  outline: none;
+  transition: border-color .15s, background .15s;
   min-width: 130px;
 }
-.cf-week-main { font-size: 0.85rem; font-weight: 700; display: block; }
-.cf-week-sub  { font-size: 0.68rem; color: var(--fg-muted); display: block; }
+.cf-week-select:hover  { border-color: var(--fg-muted); }
+.cf-week-select:focus  { border-color: var(--primary); }
+
 
 /* ── Section header ──────────────────────────────────────────────────────── */
 .contest-section { margin-bottom: 32px; }

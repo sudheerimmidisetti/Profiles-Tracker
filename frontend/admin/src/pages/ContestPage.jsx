@@ -3,8 +3,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { contestsAPI } from '../api/api'
 import AdminHeader from '../components/AdminHeader'
 import {
-  Trophy, Clock, Users, ExternalLink, ChevronLeft,
-  ChevronRight, X, TrendingUp, TrendingDown, Minus,
+  Trophy, Clock, Users, ExternalLink, ChevronDown,
+  X, TrendingUp, TrendingDown, Minus,
   Calendar, Code2, Zap, Search
 } from 'lucide-react'
 
@@ -325,23 +325,19 @@ export default function AdminContestPage() {
           ))}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
-          <button onClick={() => setWeekOffset(w => w - 1)} disabled={weekOffset <= -12}
-            style={{ width: 30, height: 30, borderRadius: 8, border: '1.5px solid var(--border)',
-              background: 'var(--surface)', color: 'var(--fg-muted)', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: weekOffset <= -12 ? .3 : 1 }}>
-            <ChevronLeft size={16} />
-          </button>
-          <div style={{ textAlign: 'center', minWidth: 130 }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block' }}>{weekLabel}</span>
-            {weekRange && <span style={{ fontSize: '0.68rem', color: 'var(--fg-muted)', display: 'block' }}>{weekRange}</span>}
-          </div>
-          <button onClick={() => setWeekOffset(w => Math.min(0, w + 1))} disabled={weekOffset >= 0}
-            style={{ width: 30, height: 30, borderRadius: 8, border: '1.5px solid var(--border)',
-              background: 'var(--surface)', color: 'var(--fg-muted)', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: weekOffset >= 0 ? .3 : 1 }}>
-            <ChevronRight size={16} />
-          </button>
+        <div className="cf-week-nav" style={{ marginLeft: 'auto' }}>
+          <ChevronDown size={13} className="cf-week-chevron" />
+          <select
+            className="cf-week-select"
+            value={weekOffset}
+            onChange={e => setWeekOffset(Number(e.target.value))}
+          >
+            <option value={0}>This Week</option>
+            <option value={-1}>Last Week</option>
+            {Array.from({ length: 10 }, (_, i) => i + 2).map(n => (
+              <option key={n} value={-n}>{n} weeks ago</option>
+            ))}
+          </select>
         </div>
       </div>
 

@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { contestsAPI } from '../api/api'
 import Header from '../components/Header'
 import {
-  Clock, Users, ExternalLink, ChevronLeft,
-  ChevronRight, X, TrendingUp, TrendingDown, Minus,
-  Calendar, Code2, Zap, Search, Trophy
+  Clock, Users, ExternalLink,
+  X, TrendingUp, TrendingDown, Minus,
+  Calendar, Code2, Zap, Search, Trophy, ChevronDown
 } from 'lucide-react'
 import './ContestPage.css'
 
@@ -326,26 +326,20 @@ export default function ContestPage({ isAdmin = false }) {
           ))}
         </div>
 
-        {/* Week navigator */}
+        {/* Week dropdown */}
         <div className="cf-week-nav">
-          <button
-            className="cf-week-btn"
-            onClick={() => setWeekOffset(w => w - 1)}
-            disabled={weekOffset <= -12}
+          <ChevronDown size={13} className="cf-week-chevron" />
+          <select
+            className="cf-week-select"
+            value={weekOffset}
+            onChange={e => setWeekOffset(Number(e.target.value))}
           >
-            <ChevronLeft size={16} />
-          </button>
-          <div className="cf-week-label">
-            <span className="cf-week-main">{weekLabel}</span>
-            {weekRange && <span className="cf-week-sub">{weekRange}</span>}
-          </div>
-          <button
-            className="cf-week-btn"
-            onClick={() => setWeekOffset(w => Math.min(0, w + 1))}
-            disabled={weekOffset >= 0}
-          >
-            <ChevronRight size={16} />
-          </button>
+            <option value={0}>This Week</option>
+            <option value={-1}>Last Week</option>
+            {Array.from({ length: 10 }, (_, i) => i + 2).map(n => (
+              <option key={n} value={-n}>{n} weeks ago</option>
+            ))}
+          </select>
         </div>
       </div>
 
