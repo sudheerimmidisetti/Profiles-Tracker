@@ -6,13 +6,16 @@ import {
   X, TrendingUp, TrendingDown, Minus,
   Calendar, Code2, Zap, Search, Trophy, ChevronDown
 } from 'lucide-react'
+import lcLogo from '../assets/leetcode.svg'
+import cfLogo from '../assets/codeforces.svg'
+import ccLogo from '../assets/codechef.svg'
 import './ContestPage.css'
 
 // ── Platform metadata ─────────────────────────────────────────────────────────
 const PLAT = {
-  leetcode:   { label: 'LeetCode',   color: '#f89f1b', dot: '#f89f1b', bg: 'rgba(248,159,27,.12)' },
-  codeforces: { label: 'Codeforces', color: '#1a8cff', dot: '#1a8cff', bg: 'rgba(26,140,255,.12)' },
-  codechef:   { label: 'CodeChef',   color: '#22c55e', dot: '#22c55e', bg: 'rgba(34,197,94,.12)'  },
+  leetcode:   { label: 'LeetCode',   color: '#f89f1b', bg: 'rgba(248,159,27,.12)', logo: lcLogo },
+  codeforces: { label: 'Codeforces', color: '#1a8cff', bg: 'rgba(26,140,255,.12)', logo: cfLogo },
+  codechef:   { label: 'CodeChef',   color: '#22c55e', bg: 'rgba(34,197,94,.12)',  logo: ccLogo },
 }
 
 // ── Format duration ───────────────────────────────────────────────────────────
@@ -74,6 +77,7 @@ function ContestCard({ contest, onClick }) {
     >
       <div className="cc-platform-row">
         <span className="cc-plat-badge" style={{ background: p.bg, color: p.color }}>
+          {p.logo && <img src={p.logo} alt={p.label} className="cc-plat-logo" />}
           {p.label}
         </span>
         {isPast

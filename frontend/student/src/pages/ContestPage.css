@@ -129,6 +129,11 @@
   font-size: 0.68rem; font-weight: 700;
   padding: 3px 9px; border-radius: 6px;
   letter-spacing: .04em;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.cc-plat-logo {
+  width: 13px; height: 13px;
+  object-fit: contain; flex-shrink: 0;
 }
 .cc-status-upcoming {
   font-size: 0.68rem; font-weight: 700;
