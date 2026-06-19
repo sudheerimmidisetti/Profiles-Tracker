@@ -51,5 +51,8 @@ router.get  ('/handle-requests',               ctrl.listHandleRequests);
 router.put  ('/handle-requests/:id/approve',   ctrl.approveHandleRequest);
 router.put  ('/handle-requests/:id/reject',    ctrl.rejectHandleRequest);
 
-module.exports = router;
+// Settings (cron schedule, etc.)
+router.get  ('/settings',                      ctrl.getSettings);
+router.put  ('/settings/cron',                 ctrl.updateCronSchedule);
 
+module.exports = router;

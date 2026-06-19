@@ -126,5 +126,11 @@ export const analyticsAPI = {
   heatmap: () => api.get('/api/analytics/heatmap'),  // combined cross-platform heatmap
 }
 
+// ── Contests ──────────────────────────────────────────
+export const contestsAPI = {
+  list:         (platform = 'all', week = 0) => api.get('/api/contests', { params: { platform, week } }),
+  participants: (platform, contestId)        => api.get(`/api/contests/${platform}/${encodeURIComponent(contestId)}/participants`),
+}
+
 
 export default api

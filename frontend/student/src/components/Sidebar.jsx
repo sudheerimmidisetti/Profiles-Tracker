@@ -14,6 +14,7 @@ const NAV = [
       { to: '/',            label: 'Dashboard',   icon: LayoutDashboard },
       { to: '/leaderboard', label: 'Leaderboard', icon: Trophy },
       { to: '/analytics',   label: 'Analytics',   icon: BarChart2 },
+      { to: '/contests',    label: 'Contests',    icon: Layers },
     ],
   },
   {

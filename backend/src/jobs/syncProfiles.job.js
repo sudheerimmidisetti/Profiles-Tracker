@@ -15,8 +15,12 @@ const codeforcesScraper = require('../scrapers/codeforces.scraper');
 const codechefScraper  = require('../scrapers/codechef.scraper');
 const hackerrankScraper = require('../scrapers/hackerrank.scraper');
 
-// Run every night at 2:00 AM IST
-const CRON_SCHEDULE = process.env.SYNC_CRON || '0 2 * * *';
+// Default cron schedule (env var overrides DB during bootstrapping if DB is not yet ready)
+const DEFAULT_CRON = process.env.SYNC_CRON || '0 20 * * *'; // 8 PM UTC = 1:30 AM IST
+
+// Active task reference — kept so we can destroy + recreate on reschedule
+let _activeTask = null;
+let _currentSchedule = DEFAULT_CRON;
 
 // Distributed lock constants
 const LOCK_KEY = 'cron:sync:nightly:lock';
@@ -626,13 +630,68 @@ async function syncAllStudentsWithLock() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Register and start the cron job
+// Register and start the cron job — loads schedule from DB first
 // ─────────────────────────────────────────────────────────────
-function startSyncJob() {
-  logger.info(`[SyncJob] Scheduled: "${CRON_SCHEDULE}" (${new Date().toLocaleString()})`);
-  // Use locked version for multi-instance safety
-  cron.schedule(CRON_SCHEDULE, syncAllStudentsWithLock, { timezone: 'Asia/Kolkata' });
+async function startSyncJob() {
+  // Try to load saved cron expression from system_settings table
+  try {
+    const res = await query(`SELECT value FROM system_settings WHERE key = 'sync_cron' LIMIT 1`);
+    if (res.rows.length) {
+      _currentSchedule = res.rows[0].value;
+      logger.info(`[SyncJob] Loaded schedule from DB: "${_currentSchedule}"`);
+    }
+  } catch (e) {
+    logger.warn(`[SyncJob] Could not load schedule from DB (table may not exist yet): ${e.message}`);
+    logger.warn(`[SyncJob] Using default: "${DEFAULT_CRON}"`);
+  }
+
+  _scheduleWith(_currentSchedule);
+}
+
+/**
+ * Internal helper — destroy current task and create a new one.
+ */
+function _scheduleWith(cronExpr) {
+  if (_activeTask) {
+    _activeTask.stop();
+    _activeTask = null;
+    logger.info(`[SyncJob] Stopped previous schedule "${_currentSchedule}"`);
+  }
+  _currentSchedule = cronExpr;
+  _activeTask = cron.schedule(cronExpr, syncAllStudentsWithLock, { timezone: 'Asia/Kolkata' });
+  logger.info(`[SyncJob] Scheduled: "${_currentSchedule}" (${new Date().toLocaleString()})`);
+}
+
+/**
+ * Live reschedule — called by admin settings API.
+ * Validates, persists to DB, and restarts the cron task without server restart.
+ */
+async function rescheduleJob(newCronExpr, adminEmail) {
+  if (!cron.validate(newCronExpr)) {
+    throw new Error(`Invalid cron expression: "${newCronExpr}"`);
+  }
+  // Persist to DB
+  await query(
+    `INSERT INTO system_settings (key, value, updated_at, updated_by)
+     VALUES ('sync_cron', $1, NOW(), $2)
+     ON CONFLICT (key) DO UPDATE
+       SET value = EXCLUDED.value,
+           updated_at = NOW(),
+           updated_by = EXCLUDED.updated_by`,
+    [newCronExpr, adminEmail || 'admin']
+  );
+  // Apply immediately
+  _scheduleWith(newCronExpr);
+  logger.info(`[SyncJob] Rescheduled to "${newCronExpr}" by ${adminEmail}`);
+  return { schedule: newCronExpr };
+}
+
+/**
+ * Return current schedule metadata.
+ */
+function getSyncJobStatus() {
+  return { schedule: _currentSchedule, active: !!_activeTask };
 }
 
 // Export syncStudent so other modules can trigger single-student syncs
-module.exports = { startSyncJob, syncAllStudents, syncStudent };
+module.exports = { startSyncJob, syncAllStudents, syncStudent, rescheduleJob, getSyncJobStatus };

@@ -91,6 +91,11 @@ export const adminAPI = {
   listHandleRequests:    (params)                     => api.get('/api/admin/handle-requests', { params }),
   approveHandleRequest:  (id)                         => api.put(`/api/admin/handle-requests/${id}/approve`),
   rejectHandleRequest:   (id, reason)                 => api.put(`/api/admin/handle-requests/${id}/reject`, { reason }),
+  // Settings
+  getSettings:           ()                           => api.get('/api/admin/settings'),
+  updateCronSchedule:    (schedule)                   => api.put('/api/admin/settings/cron', { schedule }),
+  // Contests
+  getContestDetail:      (email, platform, contestId) => api.get(`/api/admin/students/${encodeURIComponent(email)}/contest/detail`, { params: { platform, contestId } }),
 }
 
 
@@ -116,6 +121,12 @@ export const leaderboardAPI = {
 export const analyticsAPI = {
   snapshots: (email) => api.get(`/api/analytics/snapshot/${encodeURIComponent(email)}`),
   summary:   (email) => api.get(`/api/analytics/summary/${encodeURIComponent(email)}`),
+}
+
+// ── Contests (admin-auth) ─────────────────────────────────────────────────────
+export const contestsAPI = {
+  list:         (platform = 'all', week = 0) => api.get('/api/contests/admin', { params: { platform, week } }),
+  participants: (platform, contestId)        => api.get(`/api/contests/admin/${platform}/${encodeURIComponent(contestId)}/participants`),
 }
 
 // Legacy compatibility (for any code still using setAdminSecret)

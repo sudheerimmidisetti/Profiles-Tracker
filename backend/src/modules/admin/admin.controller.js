@@ -1,7 +1,6 @@
-// src/modules/admin/admin.controller.js
 const adminService        = require('./admin.service');
 const analyticsService    = require('../analytics/analytics.service');
-const { syncAllStudents } = require('../../jobs/syncProfiles.job');
+const { syncAllStudents, rescheduleJob, getSyncJobStatus } = require('../../jobs/syncProfiles.job');
 const { query }           = require('../../config/db');
 const logger              = require('../../utils/logger');
 const syncState           = require('../../utils/syncState');
@@ -189,6 +188,38 @@ async function rejectHandleRequest(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// GET /api/admin/settings
+async function getSettings(req, res, next) {
+  try {
+    const jobStatus = getSyncJobStatus();
+    const dbRes = await query(
+      `SELECT key, value, updated_at, updated_by FROM system_settings`
+    );
+    const settings = {};
+    for (const r of dbRes.rows) settings[r.key] = r;
+    res.json({ success: true, data: { settings, jobStatus } });
+  } catch (err) { next(err); }
+}
+
+// PUT /api/admin/settings/cron  body: { schedule: '0 2 * * *' }
+async function updateCronSchedule(req, res, next) {
+  try {
+    const { schedule } = req.body;
+    if (!schedule || typeof schedule !== 'string') {
+      return res.status(400).json({ success: false, message: 'schedule is required' });
+    }
+    const adminEmail = req.user?.email || 'admin';
+    const result = await rescheduleJob(schedule.trim(), adminEmail);
+    res.json({ success: true, message: `Cron rescheduled to "${schedule}"`, data: result });
+  } catch (err) {
+    // rescheduleJob throws if cron expression invalid
+    if (err.message.includes('Invalid cron')) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+    next(err);
+  }
+}
+
 module.exports = {
   listStudents, getStudent, getOverview, getFilters,
   blockStudent, unblockStudent,
@@ -197,5 +228,5 @@ module.exports = {
   getPlatformDetail,
   getContestDetail,
   listHandleRequests, approveHandleRequest, rejectHandleRequest,
+  getSettings, updateCronSchedule,
 };
-
