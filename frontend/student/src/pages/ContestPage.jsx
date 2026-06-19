@@ -142,11 +142,42 @@ function ResultsModal({ contest, onClose, fetchParticipants }) {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    fetchParticipants(contest.platform, contest.contestId)
+    fetchParticipants(contest.platform, contest)
       .then(rows => { if (!cancelled) { setData(rows); setLoading(false) } })
       .catch(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [contest.contestId, contest.platform, fetchParticipants])
+
+  // CSV export
+  const exportCSV = () => {
+    if (!data || data.length === 0) return
+    const headers = ['Cohort Rank','Name','Roll Number','Branch','College','Handle',
+      'Global Rank','Problems Solved','Rating Before','Rating After','Rating Change','Division']
+    const rows = data.map(r => [
+      r.cohortRank ?? '',
+      r.name ?? '',
+      r.rollNumber ?? '',
+      r.branch ?? '',
+      r.college ?? '',
+      r.handle ?? '',
+      r.globalRank ?? '',
+      r.problemsSolved ?? '',
+      r.ratingBefore ?? '',
+      r.ratingAfter ?? '',
+      r.ratingChange != null ? (r.ratingChange >= 0 ? '+' : '') + r.ratingChange : '',
+      r.division ?? '',
+    ])
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))
+      .join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url
+    a.download = `${contest.name.replace(/[^a-z0-9]/gi,'_')}_participants.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const filtered = data
     ? data.filter(r =>
@@ -160,10 +191,10 @@ function ResultsModal({ contest, onClose, fetchParticipants }) {
   return (
     <div className="results-overlay" onClick={onClose}>
       <div className="results-modal" onClick={e => e.stopPropagation()}>
-        {/* Header */}
         <div className="rm-header">
           <div>
             <span className="rm-platform-badge" style={{ background: p.bg, color: p.color }}>
+              {p.logo && <img src={p.logo} alt={p.label} style={{ width: 12, height: 12, objectFit: 'contain' }} />}
               {p.label}
             </span>
             <h2 className="rm-title">{contest.name}</h2>
@@ -172,7 +203,25 @@ function ResultsModal({ contest, onClose, fetchParticipants }) {
               {data && ` · ${data.length} cohort participant${data.length !== 1 ? 's' : ''}`}
             </p>
           </div>
-          <button className="rm-close" onClick={onClose}><X size={16} /></button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            {data && data.length > 0 && (
+              <button
+                onClick={exportCSV}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '6px 13px', borderRadius: 8, cursor: 'pointer',
+                  border: '1.5px solid var(--border)', background: 'var(--surface)',
+                  color: 'var(--fg-muted)', fontSize: '0.75rem', fontWeight: 600,
+                  transition: 'all .15s',
+                }}
+                onMouseOver={e => e.currentTarget.style.color = 'var(--fg)'}
+                onMouseOut={e => e.currentTarget.style.color = 'var(--fg-muted)'}
+              >
+                ↓ Export CSV
+              </button>
+            )}
+            <button className="rm-close" onClick={onClose}><X size={16} /></button>
+          </div>
         </div>
 
         {/* Search */}
@@ -291,7 +340,9 @@ export default function ContestPage({ isAdmin = false }) {
     }
   }
 
-  const fetchParticipants = useCallback(async (plt, cid) => {
+  const fetchParticipants = useCallback(async (plt, contest) => {
+    // Use grouped contestIds if available (CF/CC divisions merged)
+    const cid = contest._contestIds ? contest._contestIds.join(',') : contest.contestId
     const r = await contestsAPI.participants(plt, cid)
     return r.data.data
   }, [])

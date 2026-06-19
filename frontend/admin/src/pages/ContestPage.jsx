@@ -131,11 +131,32 @@ function ResultsModal({ contest, onClose }) {
 
   useEffect(() => {
     let cancelled = false
-    contestsAPI.participants(contest.platform, contest.contestId)
+    const cid = contest._contestIds ? contest._contestIds.join(',') : contest.contestId
+    contestsAPI.participants(contest.platform, cid)
       .then(r => { if (!cancelled) { setData(r.data.data); setLoading(false) } })
       .catch(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [contest.contestId, contest.platform])
+
+  const exportCSV = () => {
+    if (!data || data.length === 0) return
+    const headers = ['Cohort Rank','Name','Roll Number','Branch','College','Handle',
+      'Global Rank','Problems Solved','Rating Before','Rating After','Rating Change','Division']
+    const rows = data.map(r => [
+      r.cohortRank ?? '', r.name ?? '', r.rollNumber ?? '', r.branch ?? '',
+      r.college ?? '', r.handle ?? '', r.globalRank ?? '', r.problemsSolved ?? '',
+      r.ratingBefore ?? '', r.ratingAfter ?? '',
+      r.ratingChange != null ? (r.ratingChange >= 0 ? '+' : '') + r.ratingChange : '',
+      r.division ?? '',
+    ])
+    const csv = [headers, ...rows]
+      .map(row => row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))
+      .join('\n')
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+    a.download = `${contest.name.replace(/[^a-z0-9]/gi,'_')}_participants.csv`
+    a.click()
+  }
 
   const filtered = (data || []).filter(r =>
     !search ||
@@ -173,12 +194,23 @@ function ResultsModal({ contest, onClose }) {
               {data && ` · ${data.length} cohort participant${data.length !== 1 ? 's' : ''}`}
             </p>
           </div>
-          <button onClick={onClose} style={{
-            width: 30, height: 30, borderRadius: 8,
-            border: '1px solid var(--border)', background: 'var(--surface)',
-            color: 'var(--fg-muted)', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}><X size={16} /></button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {data && data.length > 0 && (
+              <button onClick={exportCSV} style={{
+                padding: '6px 13px', borderRadius: 8, cursor: 'pointer',
+                border: '1.5px solid var(--border)', background: 'var(--surface)',
+                color: 'var(--fg-muted)', fontSize: '0.75rem', fontWeight: 600,
+              }}>
+                ↓ Export CSV
+              </button>
+            )}
+            <button onClick={onClose} style={{
+              width: 30, height: 30, borderRadius: 8,
+              border: '1px solid var(--border)', background: 'var(--surface)',
+              color: 'var(--fg-muted)', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}><X size={16} /></button>
+          </div>
         </div>
 
         {/* Search */}

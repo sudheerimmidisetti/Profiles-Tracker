@@ -9,20 +9,20 @@ const { query } = require('../../config/db');
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function weekBounds(offsetWeeks = 0) {
-  // Mon–Sun ISO week, IST = UTC+5:30
+  // Sun–Sat IST week
   const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
   const nowIST = new Date(Date.now() + IST_OFFSET_MS);
-  const dow = (nowIST.getUTCDay() + 6) % 7; // Mon=0 … Sun=6
-  const mon = new Date(nowIST);
-  mon.setUTCDate(nowIST.getUTCDate() - dow + offsetWeeks * 7);
-  mon.setUTCHours(0, 0, 0, 0);
-  const sun = new Date(mon);
-  sun.setUTCDate(mon.getUTCDate() + 6);
-  sun.setUTCHours(23, 59, 59, 999);
+  const dow = nowIST.getUTCDay(); // 0=Sun … 6=Sat
+  const sun = new Date(nowIST);
+  sun.setUTCDate(nowIST.getUTCDate() - dow + offsetWeeks * 7);
+  sun.setUTCHours(0, 0, 0, 0);
+  const sat = new Date(sun);
+  sat.setUTCDate(sun.getUTCDate() + 6);
+  sat.setUTCHours(23, 59, 59, 999);
   // Convert back to UTC for DB comparisons
   return {
-    start: new Date(mon - IST_OFFSET_MS),
-    end:   new Date(sun - IST_OFFSET_MS),
+    start: new Date(sun - IST_OFFSET_MS),
+    end:   new Date(sat - IST_OFFSET_MS),
   };
 }
 
@@ -50,13 +50,15 @@ async function fetchUpcomingLeetcode() {
   } catch { return []; }
 }
 
-async function fetchUpcomingCodeforces() {
+async function fetchUpcomingCodeforces(start, end) {
   try {
     const r = await axios.get('https://codeforces.com/api/contest.list?gym=false', { timeout: 8000 });
-    const now = Date.now() / 1000;
     return (r.data?.result || [])
-      .filter(c => c.phase === 'BEFORE' && c.startTimeSeconds)
-      .slice(0, 10)
+      .filter(c => {
+        if (c.phase !== 'BEFORE' || !c.startTimeSeconds) return false;
+        const st = c.startTimeSeconds * 1000;
+        return st >= start.getTime() && st <= end.getTime();
+      })
       .map(c => ({
         platform:    'codeforces',
         contestId:   String(c.id),
@@ -70,22 +72,27 @@ async function fetchUpcomingCodeforces() {
   } catch { return []; }
 }
 
-async function fetchUpcomingCodechef() {
+async function fetchUpcomingCodechef(start, end) {
   try {
     const r = await axios.get(
       'https://www.codechef.com/api/list/contests/future',
       { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 8000 }
     );
-    return (r.data?.future_contests || []).slice(0, 10).map(c => ({
-      platform:    'codechef',
-      contestId:   c.contest_code,
-      name:        c.contest_name,
-      startTime:   c.contest_start_date_iso || c.contest_start_date,
-      durationMin: null,
-      url:         `https://www.codechef.com/${c.contest_code}`,
-      status:      'upcoming',
-      participants: 0,
-    }));
+    return (r.data?.future_contests || [])
+      .filter(c => {
+        const st = new Date(c.contest_start_date_iso || c.contest_start_date).getTime();
+        return st >= start.getTime() && st <= end.getTime();
+      })
+      .map(c => ({
+        platform:    'codechef',
+        contestId:   c.contest_code,
+        name:        c.contest_name,
+        startTime:   c.contest_start_date_iso || c.contest_start_date,
+        durationMin: null,
+        url:         `https://www.codechef.com/${c.contest_code}`,
+        status:      'upcoming',
+        participants: 0,
+      }));
   } catch { return []; }
 }
 
@@ -167,6 +174,17 @@ async function fetchPastCodechef(startUTC, endUTC) {
   }));
 }
 
+// ── Strip division suffix from contest name ───────────────────────────────────
+// e.g. "Codeforces Round 987 (Div. 2)" → "Codeforces Round 987"
+// e.g. "Starters 243 Division 1" → "Starters 243"
+function baseContestName(name = '') {
+  return name
+    .replace(/\s*\(Div\.?\s*\d+[^)]*\)/gi, '')
+    .replace(/\s*Division\s*\d+/gi, '')
+    .replace(/\s*Div\.?\s*\d+/gi, '')
+    .trim();
+}
+
 // ─── Public API: list contests ────────────────────────────────────────────────
 
 /**
@@ -189,19 +207,62 @@ async function listContests({ platform = 'all', weekOffset = 0 } = {}) {
     ccFilter ? fetchPastCodechef(start, end)    : [],
   ]);
 
-  // Upcoming — only fetch for current week
+  // ── Group CF past by base name (collapse Div 1/2/3/4 of same round) ─────────
+  const cfGrouped = [];
+  const cfSeen = new Map();
+  for (const c of cfPast) {
+    const base = baseContestName(c.name);
+    if (cfSeen.has(base)) {
+      // Merge: accumulate participants, keep earliest startTime, collect contestIds
+      const existing = cfSeen.get(base);
+      existing.participants += c.participants;
+      existing._contestIds.push(c.contestId);
+      if (c.startTime && (!existing.startTime || c.startTime < existing.startTime)) {
+        existing.startTime = c.startTime;
+      }
+    } else {
+      const entry = { ...c, name: base, _contestIds: [c.contestId] };
+      cfSeen.set(base, entry);
+      cfGrouped.push(entry);
+    }
+  }
+
+  // ── Group CC past by base name too ──────────────────────────────────────────
+  const ccGrouped = [];
+  const ccSeen = new Map();
+  for (const c of ccPast) {
+    const base = baseContestName(c.name);
+    if (ccSeen.has(base)) {
+      const existing = ccSeen.get(base);
+      existing.participants += c.participants;
+      existing._contestIds.push(c.contestId);
+    } else {
+      const entry = { ...c, name: base, _contestIds: [c.contestId] };
+      ccSeen.set(base, entry);
+      ccGrouped.push(entry);
+    }
+  }
+
+  // Upcoming — only fetch for current week, filtered to Sun–Sat range
   let upcoming = [];
   if (isCurrentWeek) {
     const [lcUp, cfUp, ccUp] = await Promise.all([
-      lcFilter ? fetchUpcomingLeetcode()   : [],
-      cfFilter ? fetchUpcomingCodeforces() : [],
-      ccFilter ? fetchUpcomingCodechef()   : [],
+      lcFilter ? fetchUpcomingLeetcode()            : [],
+      cfFilter ? fetchUpcomingCodeforces(start, end) : [],
+      ccFilter ? fetchUpcomingCodechef(start, end)   : [],
     ]);
-    upcoming = [...lcUp, ...cfUp, ...ccUp]
+
+    // Also filter LC to this week
+    const lcUpFiltered = lcUp.filter(c => {
+      const st = new Date(c.startTime).getTime();
+      return st >= start.getTime() && st <= end.getTime();
+    });
+
+    upcoming = [...lcUpFiltered, ...cfUp, ...ccUp]
       .sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
   }
 
-  const past = [...lcPast, ...cfPast, ...ccPast]
+  const past = [...lcPast, ...cfGrouped, ...ccGrouped]
     .sort((a, b) => new Date(b.startTime || 0) - new Date(a.startTime || 0));
 
   return { upcoming, past, week: { start: start.toISOString(), end: end.toISOString() } };
@@ -210,6 +271,8 @@ async function listContests({ platform = 'all', weekOffset = 0 } = {}) {
 // ─── Contest participants ─────────────────────────────────────────────────────
 
 async function getContestParticipants(platform, contestId) {
+  // contestId may be a comma-separated list for grouped contests
+  const ids = String(contestId).split(',').map(s => s.trim()).filter(Boolean);
   if (platform === 'leetcode') {
     const res = await query(
       `SELECT
@@ -255,6 +318,7 @@ async function getContestParticipants(platform, contestId) {
   }
 
   if (platform === 'codeforces') {
+    const intIds = ids.map(id => parseInt(id, 10)).filter(n => !isNaN(n));
     const res = await query(
       `SELECT
          ch.student_email,
@@ -273,10 +337,10 @@ async function getContestParticipants(platform, contestId) {
        JOIN students s           ON s.email = ch.student_email
        JOIN platform_profiles pp ON pp.student_email = ch.student_email
                                  AND pp.platform_name = 'codeforces'
-       WHERE ch.contest_id = $1
+       WHERE ch.contest_id = ANY($1)
          AND s.is_blocklisted = FALSE
        ORDER BY ch.rank_achieved ASC NULLS LAST`,
-      [parseInt(contestId, 10)]
+      [intIds]
     );
     return res.rows.map((r, i) => ({
       cohortRank:      i + 1,
@@ -306,6 +370,7 @@ async function getContestParticipants(platform, contestId) {
          s.full_name,
          s.roll_number,
          s.branch,
+         s.college,
          pp.username,
          ch.rank_achieved,
          ch.rating_after_contest,
@@ -317,10 +382,10 @@ async function getContestParticipants(platform, contestId) {
        JOIN students s           ON s.email = ch.student_email
        JOIN platform_profiles pp ON pp.student_email = ch.student_email
                                  AND pp.platform_name = 'codechef'
-       WHERE ch.contest_code = $1
+       WHERE ch.contest_code = ANY($1)
          AND s.is_blocklisted = FALSE
        ORDER BY ch.rank_achieved ASC NULLS LAST`,
-      [contestId]
+      [ids]
     );
     return res.rows.map((r, i) => ({
       cohortRank:      i + 1,
@@ -328,6 +393,7 @@ async function getContestParticipants(platform, contestId) {
       name:            r.full_name,
       rollNumber:      r.roll_number,
       branch:          r.branch,
+      college:         r.college,
       handle:          r.username,
       globalRank:      r.rank_achieved,
       problemsSolved:  r.problems_solved_count,
