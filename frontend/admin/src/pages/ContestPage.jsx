@@ -3,9 +3,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { contestsAPI, cohortsAPI } from '../api/api'
 import AdminHeader from '../components/AdminHeader'
 import {
-  Trophy, Clock, Users, ExternalLink, ChevronDown,
+  Trophy, Clock, Users, ExternalLink, ChevronDown, ChevronLeft, ChevronRight,
   X, TrendingUp, TrendingDown, Minus,
-  Calendar, Code2, Zap, Search, UsersRound
+  Calendar, Code2, Zap, Search, UsersRound, CalendarDays, LayoutGrid, Bell
 } from 'lucide-react'
 import lcLogo from '../assets/leetcode.svg'
 import cfLogo from '../assets/codeforces.svg'
@@ -16,6 +16,226 @@ const PLAT = {
   leetcode:   { label: 'LeetCode',   color: '#f89f1b', bg: 'rgba(248,159,27,.12)', logo: lcLogo },
   codeforces: { label: 'Codeforces', color: '#1a8cff', bg: 'rgba(26,140,255,.12)', logo: cfLogo },
   codechef:   { label: 'CodeChef',   color: '#22c55e', bg: 'rgba(34,197,94,.12)',  logo: ccLogo },
+}
+
+const MONTHS = ['January','February','March','April','May','June',
+  'July','August','September','October','November','December']
+const DAYS_ABBR = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+
+function fmtCalTime(iso) {
+  return new Date(iso).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true,
+  }) + ' IST'
+}
+function fmtCalDateTime(iso) {
+  return new Date(iso).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric',
+    month: 'short', hour: '2-digit', minute: '2-digit', hour12: true,
+  }) + ' IST'
+}
+
+// ── .ics download ─────────────────────────────────────────────────────────────
+function downloadICS(contest) {
+  const p = PLAT[contest.platform] || {}
+  const start = new Date(contest.startTime)
+  const end   = contest.durationMin
+    ? new Date(start.getTime() + contest.durationMin * 60000)
+    : new Date(start.getTime() + 90 * 60000)
+  const pad = n => String(n).padStart(2,'0')
+  const toICS = d =>
+    `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}T` +
+    `${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`
+  const ics = [
+    'BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//ACET CPTrack//Admin//EN',
+    'CALSCALE:GREGORIAN','METHOD:PUBLISH','BEGIN:VEVENT',
+    `UID:${contest.platform}-${contest.contestId}@acet-admin`,
+    `DTSTART:${toICS(start)}`,`DTEND:${toICS(end)}`,
+    `SUMMARY:${contest.name} (${p.label||contest.platform})`,
+    `DESCRIPTION:${contest.url}`,`URL:${contest.url}`,
+    'END:VEVENT','END:VCALENDAR',
+  ].join('\r\n')
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }))
+  a.download = `${contest.name.replace(/[^a-z0-9]/gi,'_')}.ics`
+  a.click(); URL.revokeObjectURL(a.href)
+}
+
+// ── Admin Contest Calendar Component ──────────────────────────────────────────
+function AdminContestCalendar() {
+  const [contests,    setContests]    = useState([])
+  const [loading,     setLoading]     = useState(true)
+  const [platFilter,  setPlatFilter]  = useState('all')
+  const [panelItem,   setPanelItem]   = useState(null)
+  const today = new Date()
+  const [calYear,  setCalYear]  = useState(today.getFullYear())
+  const [calMonth, setCalMonth] = useState(today.getMonth())
+
+  useEffect(() => {
+    setLoading(true)
+    contestsAPI.calendar(6)
+      .then(r => setContests(r.data.data || []))
+      .catch(() => setContests([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const filtered = platFilter === 'all' ? contests : contests.filter(c => c.platform === platFilter)
+
+  const byDate = {}
+  for (const c of filtered) {
+    const d = new Date(c.startTime).toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' })
+    if (!byDate[d]) byDate[d] = []
+    byDate[d].push(c)
+  }
+
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate()
+  const firstDow    = new Date(calYear, calMonth, 1).getDay()
+  const cells = []
+  for (let i = 0; i < firstDow; i++) cells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+  while (cells.length % 7 !== 0) cells.push(null)
+
+  const prevMonth = () => { if (calMonth === 0) { setCalYear(y=>y-1); setCalMonth(11) } else setCalMonth(m=>m-1) }
+  const nextMonth = () => { if (calMonth === 11) { setCalYear(y=>y+1); setCalMonth(0) } else setCalMonth(m=>m+1) }
+  const todayStr = today.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' })
+
+  return (
+    <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start' }}>
+      {/* Calendar */}
+      <div style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, overflow: 'hidden' }}>
+        {/* Topbar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button onClick={prevMonth} style={{ width: 28, height: 28, borderRadius: 7, border: '1.5px solid var(--border)', background: 'var(--bg)', color: 'var(--fg-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ChevronLeft size={13}/></button>
+            <span style={{ fontWeight: 700, fontSize: '0.9rem', minWidth: 150, textAlign: 'center' }}>{MONTHS[calMonth]} {calYear}</span>
+            <button onClick={nextMonth} style={{ width: 28, height: 28, borderRadius: 7, border: '1.5px solid var(--border)', background: 'var(--bg)', color: 'var(--fg-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ChevronRight size={13}/></button>
+          </div>
+          {/* Platform filter pills */}
+          <div style={{ display: 'flex', gap: 5 }}>
+            {['all','leetcode','codeforces','codechef'].map(k => (
+              <button key={k} onClick={() => setPlatFilter(k)} style={{
+                padding: '4px 11px', borderRadius: 20, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600,
+                border: `1.5px solid ${platFilter===k && k!=='all' ? PLAT[k]?.color : platFilter===k ? 'var(--primary)' : 'var(--border)'}`,
+                background: platFilter===k && k!=='all' ? PLAT[k]?.bg : platFilter===k ? 'rgba(99,102,241,.1)' : 'var(--bg)',
+                color: platFilter===k && k!=='all' ? PLAT[k]?.color : platFilter===k ? 'var(--primary)' : 'var(--fg-muted)',
+              }}>
+                {k==='all' ? 'All' : PLAT[k].label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* Day headers */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', borderBottom: '1px solid var(--border)' }}>
+          {DAYS_ABBR.map(d => <div key={d} style={{ padding: '8px 0', textAlign: 'center', fontSize: '0.63rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--fg-muted)' }}>{d}</div>)}
+        </div>
+        {/* Grid */}
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center' }}><div className="spinner" style={{ width: 22, height: 22, margin: '0 auto' }} /></div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)' }}>
+            {cells.map((d, i) => {
+              if (!d) return <div key={`e${i}`} style={{ minHeight: 80, borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }} />
+              const ds = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+              const dayC = byDate[ds] || []
+              const isToday = ds === todayStr
+              const isPast  = ds < todayStr
+              return (
+                <div key={d} style={{
+                  minHeight: 80, padding: 5, borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)',
+                  background: isToday ? 'rgba(99,102,241,.05)' : 'transparent',
+                  opacity: isPast ? .55 : 1,
+                }}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    width: 22, height: 22, borderRadius: '50%', fontSize: '0.75rem', fontWeight: isToday ? 800 : 600,
+                    background: isToday ? 'var(--primary)' : 'transparent',
+                    color: isToday ? '#fff' : 'var(--fg-muted)',
+                  }}>{d}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 2 }}>
+                    {dayC.slice(0,3).map((c,ci) => {
+                      const p = PLAT[c.platform] || {}
+                      return (
+                        <button key={ci} onClick={() => setPanelItem(c)} style={{
+                          display: 'flex', alignItems: 'center', gap: 3,
+                          padding: '2px 5px', borderRadius: 4,
+                          background: p.bg, color: p.color, border: `1px solid ${p.color}33`,
+                          fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', textAlign: 'left',
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        }}>
+                          {p.logo && <img src={p.logo} alt="" style={{ width: 9, height: 9, flexShrink: 0 }} />}
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtCalTime(c.startTime)}</span>
+                        </button>
+                      )
+                    })}
+                    {dayC.length > 3 && <span style={{ fontSize: '0.58rem', color: 'var(--fg-muted)', paddingLeft: 5 }}>+{dayC.length-3}</span>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Right panel */}
+      <div style={{ width: 260, flexShrink: 0 }}>
+        {panelItem ? (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 6,
+                background: PLAT[panelItem.platform]?.bg, color: PLAT[panelItem.platform]?.color,
+                fontSize: '0.68rem', fontWeight: 700,
+              }}>
+                {PLAT[panelItem.platform]?.logo && <img src={PLAT[panelItem.platform].logo} alt="" style={{ width: 11, height: 11 }} />}
+                {PLAT[panelItem.platform]?.label || panelItem.platform}
+              </span>
+              <button onClick={() => setPanelItem(null)} style={{ width: 24, height: 24, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--fg-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={12}/></button>
+            </div>
+            <div style={{ fontWeight: 800, fontSize: '0.9rem', lineHeight: 1.35 }}>{panelItem.name}</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--fg-muted)', display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <span>🕐 {fmtCalDateTime(panelItem.startTime)}</span>
+              {panelItem.durationMin && <span>⏱ {panelItem.durationMin} min</span>}
+            </div>
+            <a href={panelItem.url} target="_blank" rel="noopener" style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              padding: '8px', borderRadius: 9, background: 'var(--primary)', color: '#fff',
+              fontWeight: 700, fontSize: '0.8rem', textDecoration: 'none',
+            }}><ExternalLink size={12}/> Open Contest</a>
+            <button onClick={() => downloadICS(panelItem)} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              padding: '8px', borderRadius: 9, border: '1.5px solid var(--border)',
+              background: 'var(--bg)', color: 'var(--fg-muted)', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer',
+            }}><Bell size={12}/> Add to Calendar (.ics)</button>
+          </div>
+        ) : (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden' }}>
+            <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--fg-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <CalendarDays size={12}/> Upcoming
+            </div>
+            {filtered.filter(c => new Date(c.startTime) > new Date()).slice(0,8).map((c,i) => {
+              const p = PLAT[c.platform] || {}
+              return (
+                <button key={i} onClick={() => setPanelItem(c)} style={{
+                  display: 'flex', alignItems: 'center', gap: 9, padding: '9px 14px',
+                  borderBottom: '1px solid var(--border)', background: 'transparent',
+                  border: 'none', borderBottomColor: 'var(--border)', borderBottomStyle: 'solid', borderBottomWidth: 1,
+                  cursor: 'pointer', textAlign: 'left', width: '100%',
+                }}>
+                  <div style={{ width: 7, height: 7, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--fg-muted)', marginTop: 2 }}>{fmtCalDateTime(c.startTime)}</div>
+                  </div>
+                </button>
+              )
+            })}
+            {!loading && filtered.filter(c => new Date(c.startTime) > new Date()).length === 0 && (
+              <div style={{ padding: 16, fontSize: '0.75rem', color: 'var(--fg-muted)' }}>No upcoming contests.</div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function fmtDuration(mins) {
@@ -322,6 +542,7 @@ export default function AdminContestPage() {
   const [selected,   setSelected]   = useState(null)
   const [cohorts,    setCohorts]    = useState([])
   const [cohortId,   setCohortId]   = useState('')
+  const [view,       setView]       = useState('grid')   // 'grid' | 'calendar'
 
   useEffect(() => {
     cohortsAPI.list().then(r => setCohorts(r.data.data || [])).catch(() => {})
@@ -364,6 +585,31 @@ export default function AdminContestPage() {
     <>
       <AdminHeader title="Contests" breadcrumb="Overview" />
       <div className="page">
+
+      {/* ── View Toggle Row ────────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+        {[
+          { id: 'grid',     label: 'Grid',     Icon: LayoutGrid },
+          { id: 'calendar', label: 'Calendar', Icon: CalendarDays },
+        ].map(({ id, label, Icon }) => (
+          <button key={id} onClick={() => setView(id)} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '6px 14px', borderRadius: 20, cursor: 'pointer',
+            border: `1.5px solid ${view === id ? 'var(--primary)' : 'var(--border)'}`,
+            background: view === id ? 'rgba(99,102,241,.1)' : 'var(--surface)',
+            color: view === id ? 'var(--primary)' : 'var(--fg-muted)',
+            fontSize: '0.78rem', fontWeight: 600, transition: 'all .15s',
+          }}>
+            <Icon size={13}/> {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Calendar view ──────────────────────────────────────────── */}
+      {view === 'calendar' && <AdminContestCalendar />}
+
+      {/* ── Grid view ──────────────────────────────────────────────── */}
+      {view === 'grid' && <>
 
       {/* Filters */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 28 }}>
@@ -482,6 +728,9 @@ export default function AdminContestPage() {
         cohortName={cohorts.find(c => String(c.id) === String(cohortId))?.name}
         onClose={() => setSelected(null)}
       />}
+
+      </> /* end grid view */}
+
       </div>
     </>
   )
