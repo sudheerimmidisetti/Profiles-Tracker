@@ -5,7 +5,7 @@ import AdminHeader from '../components/AdminHeader'
 import {
   Trophy, Clock, Users, ExternalLink, ChevronDown,
   X, TrendingUp, TrendingDown, Minus,
-  Calendar, Code2, Zap, Search
+  Calendar, Code2, Zap, Search, UsersRound
 } from 'lucide-react'
 import lcLogo from '../assets/leetcode.svg'
 import cfLogo from '../assets/codeforces.svg'
@@ -123,20 +123,12 @@ function ContestCard({ contest, onClick }) {
 }
 
 // ── Results Modal ─────────────────────────────────────────────────────────────
-function ResultsModal({ contest, onClose }) {
-  const [data,      setData]      = useState(null)
-  const [loading,   setLoading]   = useState(true)
-  const [search,    setSearch]    = useState('')
-  const [cohorts,   setCohorts]   = useState([])
-  const [cohortId,  setCohortId]  = useState('')   // '' = no filter
+function ResultsModal({ contest, cohortId, cohortName, onClose }) {
+  const [data,    setData]    = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [search,  setSearch]  = useState('')
   const p = PLAT[contest.platform] || PLAT.leetcode
 
-  // Load cohort list once
-  useEffect(() => {
-    cohortsAPI.list().then(r => setCohorts(r.data.data || [])).catch(() => {})
-  }, [])
-
-  // Reload participants when cohort changes
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -204,24 +196,17 @@ function ResultsModal({ contest, onClose }) {
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            {/* Cohort filter */}
-            {cohorts.length > 0 && (
-              <select
-                value={cohortId}
-                onChange={e => { setCohortId(e.target.value); setData(null); }}
-                style={{
-                  padding: '5px 10px', borderRadius: 8, cursor: 'pointer',
-                  border: `1.5px solid ${cohortId ? 'var(--primary)' : 'var(--border)'}`,
-                  background: cohortId ? 'rgba(99,102,241,.08)' : 'var(--surface)',
-                  color: cohortId ? 'var(--primary)' : 'var(--fg-muted)',
-                  fontSize: '0.75rem', fontWeight: 600, outline: 'none',
-                }}
-              >
-                <option value=''>All Students</option>
-                {cohorts.map(c => (
-                  <option key={c.id} value={c.id}>{c.name} ({c.member_count})</option>
-                ))}
-              </select>
+            {/* Cohort applied indicator */}
+            {cohortId && cohortName && (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '4px 10px', borderRadius: 20,
+                background: 'rgba(99,102,241,.12)', color: 'var(--primary)',
+                fontSize: '0.72rem', fontWeight: 700,
+                border: '1.5px solid rgba(99,102,241,.25)',
+              }}>
+                <UsersRound size={11}/> {cohortName}
+              </span>
             )}
             {data && data.length > 0 && (
               <button onClick={exportCSV} style={{
@@ -335,6 +320,12 @@ export default function AdminContestPage() {
   const [data,       setData]       = useState(null)
   const [loading,    setLoading]    = useState(true)
   const [selected,   setSelected]   = useState(null)
+  const [cohorts,    setCohorts]    = useState([])
+  const [cohortId,   setCohortId]   = useState('')
+
+  useEffect(() => {
+    cohortsAPI.list().then(r => setCohorts(r.data.data || [])).catch(() => {})
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -391,6 +382,41 @@ export default function AdminContestPage() {
             </button>
           ))}
         </div>
+
+        {/* ── Cohort filter ────────────────────────────────── */}
+        {cohorts.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <UsersRound size={14} style={{ color: cohortId ? 'var(--primary)' : 'var(--fg-muted)', flexShrink: 0 }} />
+            <select
+              value={cohortId}
+              onChange={e => setCohortId(e.target.value)}
+              style={{
+                padding: '6px 12px', borderRadius: 20, cursor: 'pointer',
+                border: `1.5px solid ${cohortId ? 'var(--primary)' : 'var(--border)'}`,
+                background: cohortId ? 'rgba(99,102,241,.08)' : 'var(--surface)',
+                color: cohortId ? 'var(--primary)' : 'var(--fg-muted)',
+                fontSize: '0.78rem', fontWeight: 600, outline: 'none',
+              }}
+            >
+              <option value=''>All Students</option>
+              {cohorts.map(c => (
+                <option key={c.id} value={c.id}>{c.name} ({c.member_count})</option>
+              ))}
+            </select>
+            {cohortId && (
+              <button
+                onClick={() => setCohortId('')}
+                title="Clear cohort filter"
+                style={{
+                  width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                  border: '1px solid var(--border)', background: 'var(--surface)',
+                  color: 'var(--fg-muted)', cursor: 'pointer', fontSize: 14,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >×</button>
+            )}
+          </div>
+        )}
 
         <div className="cf-week-nav" style={{ marginLeft: 'auto' }}>
           <ChevronDown size={13} className="cf-week-chevron" />
@@ -450,7 +476,12 @@ export default function AdminContestPage() {
         </div>
       )}
 
-      {selected && <ResultsModal contest={selected} onClose={() => setSelected(null)} />}
+      {selected && <ResultsModal
+        contest={selected}
+        cohortId={cohortId || undefined}
+        cohortName={cohorts.find(c => String(c.id) === String(cohortId))?.name}
+        onClose={() => setSelected(null)}
+      />}
       </div>
     </>
   )
