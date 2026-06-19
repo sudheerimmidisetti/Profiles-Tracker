@@ -1,6 +1,5 @@
-// PublicContestPage.jsx — no auth required, read-only contest view
+// PublicContestPage.jsx — no auth required, read-only — LIGHT MODE
 import { useState, useEffect, useCallback } from 'react'
-import { Link } from 'react-router-dom'
 import { contestsAPI } from '../api/api'
 import { Share2, ExternalLink, Clock, Trophy, ChevronDown, Code2 } from 'lucide-react'
 import lcLogo from '../assets/leetcode.svg'
@@ -8,10 +7,151 @@ import cfLogo from '../assets/codeforces.svg'
 import ccLogo from '../assets/codechef.svg'
 
 const PLAT = {
-  leetcode:   { label: 'LeetCode',   color: '#f89f1b', bg: 'rgba(248,159,27,.13)', logo: lcLogo },
-  codeforces: { label: 'Codeforces', color: '#1a8cff', bg: 'rgba(26,140,255,.13)', logo: cfLogo },
-  codechef:   { label: 'CodeChef',   color: '#22c55e', bg: 'rgba(34,197,94,.13)',  logo: ccLogo },
+  leetcode:   { label: 'LeetCode',   color: '#d97706', bg: '#fffbeb', border: '#fde68a', logo: lcLogo },
+  codeforces: { label: 'Codeforces', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', logo: cfLogo },
+  codechef:   { label: 'CodeChef',   color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0', logo: ccLogo },
 }
+
+const CSS = `
+  .pub-con-root {
+    min-height: 100vh;
+    background: #f8fafc;
+    color: #0f172a;
+    font-family: 'Inter', 'Outfit', system-ui, sans-serif;
+  }
+  .pub-con-root, .pub-con-root * {
+    --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0;
+    --fg: #0f172a; --fg-muted: #64748b; --primary: #6366f1;
+  }
+  .pub-con-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 40px; height: 64px;
+    background: #fff; border-bottom: 1px solid #e2e8f0;
+    position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .pub-con-brand { display: flex; align-items: center; gap: 12px; }
+  .pub-con-logo {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: linear-gradient(135deg, #6366f1, #a855f7);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: 900; color: #fff; letter-spacing: -.04em; flex-shrink: 0;
+  }
+  .pub-con-name { font-size: 0.95rem; font-weight: 700; color: #0f172a; letter-spacing: -.02em; }
+  .pub-con-sub  { font-size: 0.67rem; color: #94a3b8; margin-top: 1px; }
+  .pub-con-share {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 15px; border-radius: 9px;
+    border: 1.5px solid #e2e8f0; background: #f8fafc; color: #475569;
+    font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: all .15s;
+  }
+  .pub-con-share:hover { border-color: #6366f1; color: #6366f1; background: #eef2ff; }
+  .pub-con-share.copied { border-color: #22c55e; color: #16a34a; background: #f0fdf4; }
+
+  .pub-con-body { max-width: 900px; margin: 0 auto; padding: 40px 28px 80px; }
+
+  .pub-con-page-title { font-size: 1.5rem; font-weight: 900; letter-spacing: -.03em; color: #0f172a; margin: 0 0 4px; }
+  .pub-con-page-sub   { color: #94a3b8; font-size: 0.82rem; margin: 0 0 28px; }
+
+  /* Filter bar */
+  .pub-con-filters {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 10px 14px; border-radius: 14px;
+    background: #fff; border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    margin-bottom: 28px;
+  }
+  .pub-con-plat-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 20px; cursor: pointer;
+    font-size: 0.78rem; font-weight: 500;
+    border: 1.5px solid #e2e8f0; background: #f8fafc; color: #64748b;
+    transition: all .15s;
+  }
+  .pub-con-plat-pill.active-all  { border-color: #c7d2fe; background: #eef2ff; color: #6366f1; font-weight: 700; }
+  .pub-con-plat-pill.active-lc   { border-color: #fde68a; background: #fffbeb; color: #d97706; font-weight: 700; }
+  .pub-con-plat-pill.active-cf   { border-color: #bfdbfe; background: #eff6ff; color: #2563eb; font-weight: 700; }
+  .pub-con-plat-pill.active-cc   { border-color: #bbf7d0; background: #f0fdf4; color: #16a34a; font-weight: 700; }
+  .pub-con-plat-pill:hover:not([class*=active]) { border-color: #cbd5e1; color: #334155; background: #f1f5f9; }
+  .pub-con-divider { width: 1px; height: 20px; background: #e2e8f0; flex-shrink: 0; }
+  .pub-con-week-select {
+    padding: 7px 12px; border-radius: 10px; flex-shrink: 0;
+    border: 1.5px solid #e2e8f0; background: #f8fafc; color: #475569;
+    font-size: 0.78rem; font-weight: 600; cursor: pointer; outline: none;
+  }
+  .pub-con-week-select:focus { border-color: #6366f1; }
+
+  /* Section label */
+  .pub-con-section-label {
+    display: flex; align-items: center; gap: 7px; margin-bottom: 12px;
+  }
+  .pub-con-section-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .pub-con-section-text {
+    font-size: 0.68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .1em;
+  }
+
+  /* Contest card */
+  .pub-con-card {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 14px;
+    overflow: hidden; transition: box-shadow .15s, border-color .15s;
+    margin-bottom: 8px;
+  }
+  .pub-con-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.07); border-color: #cbd5e1; }
+  .pub-con-card-row {
+    padding: 14px 18px; display: flex; align-items: center; gap: 12px;
+  }
+  .pub-con-plat-icon {
+    width: 38px; height: 38px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .pub-con-plat-label {
+    font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 3px;
+  }
+  .pub-con-contest-name {
+    font-weight: 700; font-size: 0.9rem; letter-spacing: -.02em; color: #0f172a;
+  }
+  .pub-con-time {
+    font-size: 0.7rem; color: #94a3b8;
+    display: flex; align-items: center; gap: 5px; margin-top: 4px;
+  }
+  .pub-con-status-past {
+    padding: 3px 9px; border-radius: 20px; font-size: 0.65rem; font-weight: 700; white-space: nowrap; flex-shrink: 0;
+    background: #f1f5f9; border: 1px solid #e2e8f0; color: #94a3b8;
+  }
+  .pub-con-status-up {
+    padding: 3px 9px; border-radius: 20px; font-size: 0.65rem; font-weight: 700; white-space: nowrap; flex-shrink: 0;
+    background: #f0fdf4; border: 1px solid #bbf7d0; color: #16a34a;
+  }
+  .pub-con-results-btn {
+    display: flex; align-items: center; gap: 5px;
+    padding: 6px 13px; border-radius: 9px; flex-shrink: 0;
+    border: 1.5px solid #e2e8f0; background: #f8fafc; color: #64748b;
+    font-size: 0.73rem; font-weight: 600; cursor: pointer; transition: all .15s;
+  }
+  .pub-con-results-btn:hover, .pub-con-results-btn.open {
+    border-color: #c7d2fe; background: #eef2ff; color: #6366f1;
+  }
+  .pub-con-register-btn {
+    display: flex; align-items: center; gap: 5px;
+    padding: 6px 13px; border-radius: 9px; flex-shrink: 0;
+    border: 1.5px solid #bbf7d0; background: #f0fdf4; color: #16a34a;
+    font-size: 0.73rem; font-weight: 600; text-decoration: none; transition: all .15s;
+  }
+  .pub-con-register-btn:hover { background: #dcfce7; }
+
+  /* Table */
+  .pub-con-table-wrap { border-top: 1px solid #f1f5f9; padding: 0 18px 16px; overflow-x: auto; }
+  .pub-con-table { width: 100%; border-collapse: collapse; font-size: 0.76rem; margin-top: 12px; }
+  .pub-con-table th {
+    padding: 6px 10px; text-align: left; font-weight: 700;
+    font-size: 0.62rem; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: .07em;
+    border-bottom: 1px solid #f1f5f9; white-space: nowrap;
+  }
+  .pub-con-table td { padding: 8px 10px; border-bottom: 1px solid #f8fafc; }
+  .pub-con-table tr:last-child td { border-bottom: none; }
+`
 
 function fmtDate(iso) {
   if (!iso) return ''
@@ -22,11 +162,15 @@ function fmtDate(iso) {
 }
 
 function ContestCard({ contest }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen]               = useState(false)
   const [participants, setParticipants] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const p = PLAT[contest.platform] || {}
+  const [loading, setLoading]          = useState(false)
+  const p   = PLAT[contest.platform] || {}
   const isPast = contest.status === 'past'
+
+  const platActiveClass = {
+    leetcode: 'active-lc', codeforces: 'active-cf', codechef: 'active-cc',
+  }[contest.platform] || ''
 
   async function loadParticipants() {
     if (!isPast || participants) { setOpen(v => !v); return }
@@ -40,138 +184,67 @@ function ContestCard({ contest }) {
   }
 
   return (
-    <div style={{
-      background: '#0f0f1c', border: '1px solid rgba(255,255,255,0.07)',
-      borderRadius: 14, overflow: 'hidden', transition: 'border-color .15s',
-    }}>
-      <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        {/* Platform icon */}
-        <div style={{
-          width: 38, height: 38, borderRadius: 10, background: p.bg,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-        }}>
+    <div className="pub-con-card">
+      <div className="pub-con-card-row">
+        <div className="pub-con-plat-icon" style={{ background: p.bg }}>
           {p.logo && <img src={p.logo} alt={p.label} style={{ width: 20, height: 20, objectFit: 'contain' }}/>}
         </div>
-
-        {/* Info */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontSize: '0.62rem', fontWeight: 700, color: p.color,
-            textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 3,
-          }}>{p.label}</div>
-          <div style={{ fontWeight: 700, fontSize: '0.88rem', letterSpacing: '-.02em', color: '#f1f5f9' }}>
-            {contest.name}
-          </div>
-          <div style={{ fontSize: '0.7rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
-            <Clock size={9}/> {fmtDate(contest.startTime)}
-          </div>
+          <div className="pub-con-plat-label" style={{ color: p.color }}>{p.label}</div>
+          <div className="pub-con-contest-name">{contest.name}</div>
+          <div className="pub-con-time"><Clock size={9}/> {fmtDate(contest.startTime)}</div>
         </div>
-
-        {/* Status chip */}
-        <div style={{
-          padding: '3px 9px', borderRadius: 20,
-          fontSize: '0.65rem', fontWeight: 700, whiteSpace: 'nowrap',
-          background: isPast ? 'rgba(100,116,139,0.1)' : 'rgba(34,197,94,0.1)',
-          color: isPast ? '#64748b' : '#22c55e',
-          border: `1px solid ${isPast ? 'rgba(100,116,139,0.15)' : 'rgba(34,197,94,0.2)'}`,
-        }}>
+        <div className={isPast ? 'pub-con-status-past' : 'pub-con-status-up'}>
           {isPast ? 'Past' : 'Upcoming'}
         </div>
-
-        {/* Action button */}
         {isPast ? (
-          <button onClick={loadParticipants} style={{
-            display: 'flex', alignItems: 'center', gap: 5,
-            padding: '6px 12px', borderRadius: 8, flexShrink: 0,
-            border: '1px solid rgba(255,255,255,0.1)',
-            background: open ? 'rgba(99,102,241,0.1)' : 'rgba(255,255,255,0.04)',
-            color: open ? '#a5b4fc' : '#94a3b8',
-            fontSize: '0.73rem', fontWeight: 600, cursor: 'pointer', transition: 'all .15s',
-          }}>
+          <button onClick={loadParticipants} className={`pub-con-results-btn${open ? ' open' : ''}`}>
             <Trophy size={11}/> Results
             <ChevronDown size={11} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: '.15s' }}/>
           </button>
         ) : (
-          <a href={contest.url} target="_blank" rel="noopener" style={{
-            display: 'flex', alignItems: 'center', gap: 5,
-            padding: '6px 12px', borderRadius: 8, flexShrink: 0,
-            background: 'rgba(99,102,241,0.1)',
-            border: '1px solid rgba(99,102,241,0.22)',
-            color: '#a5b4fc',
-            fontSize: '0.73rem', fontWeight: 600, textDecoration: 'none',
-          }}>
+          <a href={contest.url} target="_blank" rel="noopener" className="pub-con-register-btn">
             <ExternalLink size={11}/> Register
           </a>
         )}
       </div>
 
-      {/* Participants dropdown */}
       {open && isPast && (
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '0 18px 16px' }}>
+        <div className="pub-con-table-wrap">
           {loading ? (
-            <div style={{ padding: '16px 0', textAlign: 'center', color: '#64748b', fontSize: '0.8rem' }}>Loading…</div>
+            <div style={{ padding: '16px 0', textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem' }}>Loading…</div>
           ) : !participants || participants.length === 0 ? (
-            <div style={{ padding: '14px 0', color: '#64748b', fontSize: '0.8rem' }}>No participants tracked.</div>
+            <div style={{ padding: '14px 0', color: '#94a3b8', fontSize: '0.8rem' }}>No participants tracked.</div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem', marginTop: 12 }}>
-                <thead>
-                  <tr>
-                    {['#','Name','Roll','Branch','Handle','Global Rank','Solved','Δ Rating'].map(h => (
-                      <th key={h} style={{
-                        padding: '6px 10px', textAlign: 'left', fontWeight: 700,
-                        fontSize: '0.62rem', color: '#475569',
-                        textTransform: 'uppercase', letterSpacing: '.07em',
-                        borderBottom: '1px solid rgba(255,255,255,0.06)',
-                        whiteSpace: 'nowrap',
-                      }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {participants.slice(0, 25).map((r, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                      <td style={{ padding: '7px 10px', fontWeight: 700, color: '#475569' }}>{r.cohortRank}</td>
-                      <td style={{ padding: '7px 10px', fontWeight: 600, color: '#e2e8f0' }}>{r.name}</td>
-                      <td style={{ padding: '7px 10px', color: '#64748b' }}>{r.rollNumber}</td>
-                      <td style={{ padding: '7px 10px', color: '#64748b' }}>{r.branch}</td>
-                      <td style={{ padding: '7px 10px', color: '#818cf8', fontWeight: 600 }}>{r.handle}</td>
-                      <td style={{ padding: '7px 10px', fontWeight: 600, color: '#e2e8f0' }}>{r.globalRank ?? '—'}</td>
-                      <td style={{ padding: '7px 10px', color: '#e2e8f0' }}>{r.problemsSolved ?? '—'}</td>
-                      <td style={{
-                        padding: '7px 10px', fontWeight: 700,
-                        color: r.ratingChange == null ? '#475569' : r.ratingChange >= 0 ? '#22c55e' : '#ef4444',
-                      }}>
-                        {r.ratingChange != null ? (r.ratingChange >= 0 ? '+' : '') + r.ratingChange : '—'}
-                      </td>
-                    </tr>
+            <table className="pub-con-table">
+              <thead>
+                <tr>
+                  {['#','Name','Roll','Branch','Handle','Global Rank','Solved','Δ Rating'].map(h => (
+                    <th key={h}>{h}</th>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </tr>
+              </thead>
+              <tbody>
+                {participants.slice(0, 25).map((r, i) => (
+                  <tr key={i}>
+                    <td style={{ fontWeight: 700, color: '#94a3b8' }}>{r.cohortRank}</td>
+                    <td style={{ fontWeight: 600, color: '#0f172a' }}>{r.name}</td>
+                    <td style={{ color: '#64748b' }}>{r.rollNumber}</td>
+                    <td style={{ color: '#64748b' }}>{r.branch}</td>
+                    <td style={{ color: '#6366f1', fontWeight: 600 }}>{r.handle}</td>
+                    <td style={{ fontWeight: 600 }}>{r.globalRank ?? '—'}</td>
+                    <td>{r.problemsSolved ?? '—'}</td>
+                    <td style={{ fontWeight: 700, color: r.ratingChange == null ? '#94a3b8' : r.ratingChange >= 0 ? '#16a34a' : '#dc2626' }}>
+                      {r.ratingChange != null ? (r.ratingChange >= 0 ? '+' : '') + r.ratingChange : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       )}
     </div>
-  )
-}
-
-/* ── Platform filter pill component ─────────────────────────────── */
-function PlatPill({ id, active, onClick }) {
-  const p = PLAT[id]
-  return (
-    <button onClick={onClick} style={{
-      display: 'inline-flex', alignItems: 'center', gap: 6,
-      padding: '7px 15px', borderRadius: 24, cursor: 'pointer',
-      border: `1.5px solid ${active ? (p ? p.color + '50' : 'rgba(99,102,241,0.5)') : 'rgba(255,255,255,0.08)'}`,
-      background: active ? (p ? p.bg : 'rgba(99,102,241,0.1)') : 'rgba(255,255,255,0.03)',
-      color: active ? (p ? p.color : '#a5b4fc') : '#64748b',
-      fontSize: '0.78rem', fontWeight: active ? 700 : 500,
-      transition: 'all .15s',
-    }}>
-      {p?.logo && <img src={p.logo} alt="" style={{ width: 13, height: 13, objectFit: 'contain' }}/>}
-      {id === 'all' ? 'All Platforms' : p?.label}
-    </button>
   )
 }
 
@@ -210,117 +283,51 @@ export default function PublicContestPage() {
     { v: -4, l: '4 Weeks Ago' },
   ]
 
-  const SectionLabel = ({ color, text }) => (
-    <div style={{
-      display: 'inline-flex', alignItems: 'center', gap: 6,
-      marginBottom: 12,
-    }}>
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, display: 'inline-block', boxShadow: `0 0 5px ${color}` }}/>
-      <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', color }}>{text}</span>
-    </div>
-  )
+  const platActiveClass = { all: 'active-all', leetcode: 'active-lc', codeforces: 'active-cf', codechef: 'active-cc' }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#080810', color: '#e2e8f0', fontFamily: "'Inter','Outfit',system-ui,sans-serif" }}>
+    <div className="pub-con-root">
+      <style>{CSS}</style>
 
-      {/* ── Header ──────────────────────────────────────────── */}
-      <header style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 32px', height: 60,
-        background: 'rgba(10,10,22,0.85)',
-        backdropFilter: 'blur(20px)',
-        borderBottom: '1px solid rgba(255,255,255,0.07)',
-        position: 'sticky', top: 0, zIndex: 100,
-      }}>
-        {/* Brand */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: 9,
-            background: 'linear-gradient(135deg,#6366f1 0%,#a855f7 100%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '0.78rem', fontWeight: 900, color: '#fff', letterSpacing: '-.04em',
-            flexShrink: 0,
-          }}>CP</div>
+      {/* Header */}
+      <header className="pub-con-header">
+        <div className="pub-con-brand">
+          <div className="pub-con-logo">CP</div>
           <div>
-            <div style={{ fontSize: '0.88rem', fontWeight: 700, lineHeight: 1.2, letterSpacing: '-.02em', color: '#f1f5f9' }}>
-              ACET Coding Tracker
-            </div>
-            <div style={{ fontSize: '0.65rem', color: '#64748b', lineHeight: 1, marginTop: 2 }}>
-              Contest Results — Public View
-            </div>
+            <div className="pub-con-name">ACET Coding Tracker</div>
+            <div className="pub-con-sub">Contest Results — Public View</div>
           </div>
         </div>
-
-        {/* Actions */}
-        <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
-          <button onClick={copyLink} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            padding: '6px 13px', borderRadius: 8,
-            border: '1px solid rgba(255,255,255,0.1)',
-            background: copied ? 'rgba(34,197,94,0.12)' : 'rgba(255,255,255,0.04)',
-            color: copied ? '#22c55e' : '#94a3b8',
-            fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
-            transition: 'all .15s',
-          }}>
-            <Share2 size={13}/>
-            {copied ? '✓ Copied!' : 'Share'}
-          </button>
-          <Link to="/login" style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            padding: '6px 13px', borderRadius: 8,
-            background: '#6366f1', color: '#fff',
-            fontSize: '0.75rem', fontWeight: 600, textDecoration: 'none',
-          }}>
-            <ExternalLink size={13}/> Login
-          </Link>
-        </div>
+        <button onClick={copyLink} className={`pub-con-share${copied ? ' copied' : ''}`}>
+          <Share2 size={13}/>
+          {copied ? '✓ Copied!' : 'Share'}
+        </button>
       </header>
 
-      {/* ── Body ────────────────────────────────────────────── */}
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '36px 24px 80px' }}>
+      {/* Body */}
+      <div className="pub-con-body">
+        <h1 className="pub-con-page-title">Contest Results</h1>
+        <p className="pub-con-page-sub">Competitive programming contest performance of registered students.</p>
 
-        {/* Page title */}
-        <div style={{ marginBottom: 28 }}>
-          <h1 style={{
-            fontSize: '1.5rem', fontWeight: 900, letterSpacing: '-.04em',
-            background: 'linear-gradient(135deg,#f1f5f9 30%,#818cf8)',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-            margin: '0 0 4px',
-          }}>Contest Results</h1>
-          <p style={{ color: '#475569', fontSize: '0.82rem', margin: 0 }}>
-            This week's competitive programming contests from registered students.
-          </p>
-        </div>
-
-        {/* ── Filter bar ────────────────────────────────────── */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          marginBottom: 28, flexWrap: 'wrap',
-          padding: '12px 16px',
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.07)',
-          borderRadius: 14,
-        }}>
-          {/* Platform pills */}
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>
-            {['all','leetcode','codeforces','codechef'].map(k => (
-              <PlatPill key={k} id={k} active={platform === k} onClick={() => setPlatform(k)}/>
-            ))}
-          </div>
-
-          {/* Divider */}
-          <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.08)', flexShrink: 0 }}/>
-
-          {/* Week select */}
+        {/* Filter bar */}
+        <div className="pub-con-filters">
+          {['all', 'leetcode', 'codeforces', 'codechef'].map(k => (
+            <button
+              key={k}
+              className={`pub-con-plat-pill${platform === k ? ' ' + platActiveClass[k] : ''}`}
+              onClick={() => setPlatform(k)}
+            >
+              {PLAT[k]?.logo && (
+                <img src={PLAT[k].logo} alt="" style={{ width: 13, height: 13, objectFit: 'contain' }}/>
+              )}
+              {k === 'all' ? 'All Platforms' : PLAT[k]?.label}
+            </button>
+          ))}
+          <div className="pub-con-divider"/>
           <select
             value={week}
             onChange={e => setWeek(Number(e.target.value))}
-            style={{
-              padding: '7px 12px', borderRadius: 10, flexShrink: 0,
-              border: '1px solid rgba(255,255,255,0.1)',
-              background: '#0f0f1c', color: '#94a3b8',
-              fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', outline: 'none',
-            }}
+            className="pub-con-week-select"
           >
             {weekOptions.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
           </select>
@@ -328,31 +335,31 @@ export default function PublicContestPage() {
 
         {/* Content */}
         {loading ? (
-          <div style={{ padding: 60, textAlign: 'center' }}>
-            <div className="spinner" style={{ width: 24, height: 24, margin: '0 auto' }}/>
-          </div>
+          <div style={{ padding: '60px 0', textAlign: 'center', color: '#94a3b8' }}>Loading…</div>
         ) : (
           <>
             {upcoming.length > 0 && (
               <div style={{ marginBottom: 32 }}>
-                <SectionLabel color="#22c55e" text={`Upcoming — ${weekLabel}`}/>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {upcoming.map((c, i) => <ContestCard key={i} contest={c}/>)}
+                <div className="pub-con-section-label">
+                  <div className="pub-con-section-dot" style={{ background: '#22c55e', boxShadow: '0 0 5px #22c55e88' }}/>
+                  <span className="pub-con-section-text" style={{ color: '#16a34a' }}>Upcoming — {weekLabel}</span>
                 </div>
+                {upcoming.map((c, i) => <ContestCard key={i} contest={c}/>)}
               </div>
             )}
             {past.length > 0 && (
               <div>
-                <SectionLabel color="#475569" text={`Past — ${weekLabel}`}/>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {past.map((c, i) => <ContestCard key={i} contest={c}/>)}
+                <div className="pub-con-section-label">
+                  <div className="pub-con-section-dot" style={{ background: '#cbd5e1' }}/>
+                  <span className="pub-con-section-text" style={{ color: '#94a3b8' }}>Past — {weekLabel}</span>
                 </div>
+                {past.map((c, i) => <ContestCard key={i} contest={c}/>)}
               </div>
             )}
             {upcoming.length === 0 && past.length === 0 && (
               <div style={{ padding: '64px 0', textAlign: 'center' }}>
-                <Code2 size={36} style={{ color: '#1e293b', marginBottom: 12 }}/>
-                <div style={{ color: '#475569', fontSize: '0.88rem' }}>No contests found for this period.</div>
+                <Code2 size={36} style={{ color: '#e2e8f0', marginBottom: 12 }}/>
+                <div style={{ color: '#94a3b8', fontSize: '0.88rem' }}>No contests found for this period.</div>
               </div>
             )}
           </>
