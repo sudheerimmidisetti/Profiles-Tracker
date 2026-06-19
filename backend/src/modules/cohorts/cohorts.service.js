@@ -44,7 +44,7 @@ async function getCohortMembers(cohortId) {
            ARRAY_AGG(pp.platform_name) FILTER (WHERE pp.platform_name IS NOT NULL) AS platforms
     FROM cohort_members cm
     JOIN students s ON s.email = cm.student_email
-    LEFT JOIN platform_profiles pp ON pp.student_email = s.email AND pp.is_verified = TRUE
+    LEFT JOIN platform_profiles pp ON pp.student_email = s.email
     WHERE cm.cohort_id = $1
     GROUP BY s.email, s.full_name, s.roll_number, s.branch, cm.added_at
     ORDER BY s.roll_number
@@ -55,18 +55,26 @@ async function getCohortMembers(cohortId) {
 // ─── Get eligible students (verified handlers, not blocklisted) ───────────────
 
 async function getEligibleStudents(search = '') {
-  const like = `%${search.toLowerCase()}%`;
+  const trimmed = (search || '').trim();
+  const like = `%${trimmed.toLowerCase()}%`;
+  const params = trimmed
+    ? [like]
+    : [];
+  const whereSearch = trimmed
+    ? 'AND (LOWER(s.full_name) LIKE $1 OR LOWER(s.roll_number) LIKE $1)'
+    : '';
   const res = await query(`
     SELECT s.email, s.full_name, s.roll_number, s.branch,
            ARRAY_AGG(pp.platform_name) FILTER (WHERE pp.platform_name IS NOT NULL) AS platforms
     FROM students s
-    JOIN platform_profiles pp ON pp.student_email = s.email AND pp.is_verified = TRUE
+    LEFT JOIN platform_profiles pp ON pp.student_email = s.email
     WHERE s.is_blocklisted = FALSE
-      AND ($1 = '%%' OR LOWER(s.full_name) LIKE $1 OR LOWER(s.roll_number) LIKE $1)
+      AND s.is_verified = TRUE
+      ${whereSearch}
     GROUP BY s.email, s.full_name, s.roll_number, s.branch
     ORDER BY s.roll_number
     LIMIT 100
-  `, [like]);
+  `, params);
   return res.rows;
 }
 
@@ -75,18 +83,19 @@ async function getEligibleStudents(search = '') {
 async function addMembersByRollNumbers(cohortId, rollNumbers) {
   if (!rollNumbers.length) return { added: 0, notFound: [], alreadyIn: [] };
 
-  // Resolve rolls to emails (only verified students)
+  // Resolve rolls to emails — only verified, non-blocklisted students
   const res = await query(`
     SELECT s.email, s.roll_number
     FROM students s
-    JOIN platform_profiles pp ON pp.student_email = s.email AND pp.is_verified = TRUE
-    WHERE s.roll_number = ANY($1) AND s.is_blocklisted = FALSE
+    WHERE UPPER(s.roll_number) = ANY($1)
+      AND s.is_verified = TRUE
+      AND s.is_blocklisted = FALSE
     GROUP BY s.email, s.roll_number
-  `, [rollNumbers]);
+  `, [rollNumbers.map(r => r.toUpperCase())]);
 
   const found = res.rows;
-  const foundRolls = found.map(r => r.roll_number);
-  const notFound = rollNumbers.filter(r => !foundRolls.includes(r));
+  const foundRolls = found.map(r => r.roll_number.toUpperCase());
+  const notFound = rollNumbers.filter(r => !foundRolls.includes(r.toUpperCase()));
 
   if (!found.length) return { added: 0, notFound, alreadyIn: [] };
 
