@@ -270,9 +270,10 @@ async function listContests({ platform = 'all', weekOffset = 0 } = {}) {
 
 // ─── Contest participants ─────────────────────────────────────────────────────
 
-async function getContestParticipants(platform, contestId) {
+async function getContestParticipants(platform, contestId, cohortId = null) {
   // contestId may be a comma-separated list for grouped contests
   const ids = String(contestId).split(',').map(s => s.trim()).filter(Boolean);
+  // cohortId is injected inline into each query via JS template literals
   if (platform === 'leetcode') {
     const res = await query(
       `SELECT
@@ -292,6 +293,7 @@ async function getContestParticipants(platform, contestId) {
        JOIN students s           ON s.email = ch.student_email
        JOIN platform_profiles pp ON pp.student_email = ch.student_email
                                  AND pp.platform_name = 'leetcode'
+       ${cohortId ? 'JOIN cohort_members cm ON cm.student_email = ch.student_email AND cm.cohort_id = ' + cohortId : ''}
        WHERE LOWER(REPLACE(ch.contest_title, ' ', '-')) = LOWER($1)
          AND s.is_blocklisted = FALSE
        ORDER BY ch.rank_achieved ASC NULLS LAST`,
@@ -337,6 +339,7 @@ async function getContestParticipants(platform, contestId) {
        JOIN students s           ON s.email = ch.student_email
        JOIN platform_profiles pp ON pp.student_email = ch.student_email
                                  AND pp.platform_name = 'codeforces'
+       ${cohortId ? 'JOIN cohort_members cm ON cm.student_email = ch.student_email AND cm.cohort_id = ' + cohortId : ''}
        WHERE ch.contest_id = ANY($1)
          AND s.is_blocklisted = FALSE
        ORDER BY ch.rank_achieved ASC NULLS LAST`,
@@ -382,6 +385,7 @@ async function getContestParticipants(platform, contestId) {
        JOIN students s           ON s.email = ch.student_email
        JOIN platform_profiles pp ON pp.student_email = ch.student_email
                                  AND pp.platform_name = 'codechef'
+       ${cohortId ? 'JOIN cohort_members cm ON cm.student_email = ch.student_email AND cm.cohort_id = ' + cohortId : ''}
        WHERE ch.contest_code = ANY($1)
          AND s.is_blocklisted = FALSE
        ORDER BY ch.rank_achieved ASC NULLS LAST`,
@@ -413,4 +417,86 @@ async function getContestParticipants(platform, contestId) {
   throw new Error(`Unknown platform: ${platform}`);
 }
 
-module.exports = { listContests, getContestParticipants };
+module.exports = { listContests, getContestParticipants, fetchContestCalendar, getAllStudentEmails };
+
+// ─── Contest Calendar: upcoming contests for next N weeks ─────────────────────
+
+async function fetchContestCalendar(weeks = 4) {
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+  const nowIST = new Date(Date.now() + IST_OFFSET_MS);
+  const dow = nowIST.getUTCDay();
+  const weekStart = new Date(nowIST);
+  weekStart.setUTCDate(nowIST.getUTCDate() - dow);
+  weekStart.setUTCHours(0, 0, 0, 0);
+  const start = new Date(weekStart - IST_OFFSET_MS);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekStart.getUTCDate() + weeks * 7);
+  weekEnd.setUTCHours(23, 59, 59, 999);
+  const end = new Date(weekEnd - IST_OFFSET_MS);
+
+  const [lcRaw, cfRaw, ccRaw] = await Promise.allSettled([
+    axios.post('https://leetcode.com/graphql',
+      { query: '{ upcomingContests { title titleSlug startTime duration } }' },
+      { headers: { 'Content-Type': 'application/json', Origin: 'https://leetcode.com' }, timeout: 8000 }
+    ),
+    axios.get('https://codeforces.com/api/contest.list?gym=false', { timeout: 8000 }),
+    axios.get('https://www.codechef.com/api/list/contests/future',
+      { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 8000 }
+    ),
+  ]);
+
+  const contests = [];
+  const nowMs = Date.now();
+
+  if (lcRaw.status === 'fulfilled') {
+    for (const c of lcRaw.value.data?.data?.upcomingContests || []) {
+      const st = c.startTime * 1000;
+      if (st >= start.getTime() && st <= end.getTime()) {
+        contests.push({
+          platform: 'leetcode', contestId: c.titleSlug, name: c.title,
+          startTime: new Date(st).toISOString(), durationMin: Math.round(c.duration / 60),
+          url: `https://leetcode.com/contest/${c.titleSlug}/`,
+          status: st > nowMs ? 'upcoming' : 'past',
+        });
+      }
+    }
+  }
+
+  if (cfRaw.status === 'fulfilled') {
+    for (const c of cfRaw.value.data?.result || []) {
+      if (!c.startTimeSeconds) continue;
+      const st = c.startTimeSeconds * 1000;
+      if (st < start.getTime() || st > end.getTime()) continue;
+      if (c.phase !== 'BEFORE' && c.phase !== 'CODING') continue;
+      contests.push({
+        platform: 'codeforces', contestId: String(c.id), name: baseContestName(c.name),
+        startTime: new Date(st).toISOString(), durationMin: Math.round(c.durationSeconds / 60),
+        url: `https://codeforces.com/contest/${c.id}`,
+        status: st > nowMs ? 'upcoming' : 'ongoing',
+      });
+    }
+  }
+
+  if (ccRaw.status === 'fulfilled') {
+    for (const c of ccRaw.value.data?.future_contests || []) {
+      const st = new Date(c.contest_start_date_iso || c.contest_start_date).getTime();
+      if (isNaN(st) || st < start.getTime() || st > end.getTime()) continue;
+      contests.push({
+        platform: 'codechef', contestId: c.contest_code, name: c.contest_name,
+        startTime: new Date(st).toISOString(), durationMin: null,
+        url: `https://www.codechef.com/${c.contest_code}`,
+        status: st > nowMs ? 'upcoming' : 'ongoing',
+      });
+    }
+  }
+
+  contests.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+  return contests;
+}
+
+async function getAllStudentEmails() {
+  const res = await query(
+    `SELECT DISTINCT s.email FROM students s WHERE s.is_blocklisted = FALSE AND s.email IS NOT NULL`
+  );
+  return res.rows.map(r => r.email);
+}

@@ -12,6 +12,7 @@ import AdminTeamPage        from './pages/AdminTeamPage'
 import HandleRequestsPage   from './pages/HandleRequestsPage'
 import SettingsPage         from './pages/SettingsPage'
 import ContestPage          from './pages/ContestPage'
+import CohortsPage          from './pages/CohortsPage'
 
 function ProtectedRoute({ children }) {
   const { loggedIn } = useAdminAuth()
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="/team"             element={<AdminTeamPage />} />
             <Route path="/handle-requests" element={<HandleRequestsPage />} />
             <Route path="/contests"         element={<ContestPage />} />
+            <Route path="/cohorts"           element={<CohortsPage />} />
             <Route path="/settings"         element={<SettingsPage />} />
           </Route>
 

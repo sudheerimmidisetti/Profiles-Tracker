@@ -69,4 +69,49 @@ async function sendOTPEmail(email, otp) {
   logger.info(`✅  OTP email sent to ${email}`);
 }
 
-module.exports = { sendOTPEmail };
+/**
+ * Send contest reminder to a list of student emails.
+ */
+async function sendContestReminderEmail(emails, contest) {
+  if (!emails.length) return;
+  const platName = { leetcode: 'LeetCode', codeforces: 'Codeforces', codechef: 'CodeChef' }[contest.platform] || contest.platform;
+  const startIST = new Date(contest.startTime).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric',
+    month: 'short', hour: '2-digit', minute: '2-digit'
+  });
+
+  if (!transporter) {
+    logger.info(`📢  Contest reminder (SMTP off): ${contest.name} at ${startIST} → ${emails.length} students`);
+    return;
+  }
+
+  const subject = `🔔 Contest Starting Soon: ${contest.name}`;
+  const html = `
+    <div style="font-family:Inter,Arial,sans-serif;max-width:540px;margin:auto;background:#0f172a;padding:40px;border-radius:16px;">
+      <h2 style="color:#818cf8;margin:0 0 4px">ACET Coding Tracker</h2>
+      <p style="color:#94a3b8;font-size:13px;margin:0 0 28px">Contest Reminder — 1 hour to go</p>
+      <div style="background:#1e293b;border-radius:14px;padding:24px;margin-bottom:20px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin-bottom:8px">${platName}</div>
+        <h3 style="font-size:20px;font-weight:800;color:#f1f5f9;margin:0 0 12px">${contest.name}</h3>
+        <div style="color:#94a3b8;font-size:14px;margin-bottom:6px">🕐 ${startIST} IST</div>
+        ${contest.durationMin ? `<div style="color:#94a3b8;font-size:14px">⏱ ${contest.durationMin} minutes</div>` : ''}
+      </div>
+      <a href="${contest.url}" style="display:inline-block;background:#6366f1;color:#fff;font-weight:700;padding:12px 28px;border-radius:10px;text-decoration:none;font-size:14px">Open Contest →</a>
+      <p style="color:#475569;font-size:12px;margin-top:28px">You're receiving this because you're registered on the ACET Coding Tracker platform.</p>
+    </div>
+  `;
+
+  // Batch send (BCC all to avoid exposing addresses)
+  try {
+    await transporter.sendMail({
+      from:    `"CPTrack — ACET" <${process.env.FROM_EMAIL || SMTP_USER}>`,
+      bcc:     emails.join(','),
+      subject, html,
+    });
+    logger.info(`✅  Contest reminder sent: ${contest.name} → ${emails.length} students`);
+  } catch (e) {
+    logger.error(`❌  Contest reminder failed: ${e.message}`);
+  }
+}
+
+module.exports = { sendOTPEmail, sendContestReminderEmail };

@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, Users, Trophy, BarChart2,
-  Code2, ShieldOff, LogOut, Database, UserCog, RefreshCw, Settings
+  Code2, ShieldOff, LogOut, Database, UserCog, RefreshCw, Settings, UsersRound
 } from 'lucide-react'
 import { useAdminAuth } from '../context/AdminAuthContext'
 import { adminAPI } from '../api/api'
@@ -47,6 +47,7 @@ export default function AdminSidebar() {
         { to: '/leaderboard', label: 'Leaderboard',    icon: Trophy },
         { to: '/analytics',   label: 'Analytics',      icon: BarChart2 },
         { to: '/contests',    label: 'Contests',       icon: Code2 },
+        { to: '/cohorts',     label: 'Cohorts',        icon: UsersRound },
       ],
     },
     {

@@ -126,7 +126,19 @@ export const analyticsAPI = {
 // ── Contests (admin-auth) ─────────────────────────────────────────────────────
 export const contestsAPI = {
   list:         (platform = 'all', week = 0) => api.get('/api/contests/admin', { params: { platform, week } }),
-  participants: (platform, contestId)        => api.get(`/api/contests/admin/${platform}/${encodeURIComponent(contestId)}/participants`),
+  participants: (platform, contestId, cohort) => api.get(`/api/contests/admin/${platform}/${encodeURIComponent(contestId)}/participants`, { params: cohort ? { cohort } : {} }),
+  calendar:     (weeks = 4)                  => api.get('/api/contests/calendar', { params: { weeks } }),
+}
+
+// ── Cohorts (admin-auth) ──────────────────────────────────────────────────────
+export const cohortsAPI = {
+  list:              ()              => api.get('/api/cohorts'),
+  create:            (data)          => api.post('/api/cohorts', data),
+  delete:            (id)            => api.delete(`/api/cohorts/${id}`),
+  members:           (id)            => api.get(`/api/cohorts/${id}/members`),
+  addMembers:        (id, rollNumbers) => api.post(`/api/cohorts/${id}/members`, { rollNumbers }),
+  removeMember:      (id, email)     => api.delete(`/api/cohorts/${id}/members/${encodeURIComponent(email)}`),
+  eligibleStudents:  (search = '')   => api.get('/api/cohorts/eligible-students', { params: { search } }),
 }
 
 // Legacy compatibility (for any code still using setAdminSecret)

@@ -4,7 +4,7 @@ const app    = require('./app');
 const logger = require('./utils/logger');
 const { pool } = require('./config/db');
 const redis  = require('./config/redis');
-const { startSyncJob } = require('./jobs/syncProfiles.job');
+const { startSyncJob, startReminderJob } = require('./jobs/syncProfiles.job');
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
@@ -40,8 +40,9 @@ async function startServer() {
       logger.info('    PUT   /api/admin/unblocklist/:email');
     });
 
-    // 4. Start nightly sync cron job
+    // 4. Start nightly sync cron + hourly contest reminder
     startSyncJob();
+    startReminderJob();
   } catch (err) {
     logger.error('❌  Failed to start server', { message: err.message, stack: err.stack });
     process.exit(1);

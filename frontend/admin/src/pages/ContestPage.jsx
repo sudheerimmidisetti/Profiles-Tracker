@@ -1,6 +1,6 @@
 // Admin ContestPage — same UI as student version but uses admin-auth API endpoints
 import { useState, useEffect, useCallback } from 'react'
-import { contestsAPI } from '../api/api'
+import { contestsAPI, cohortsAPI } from '../api/api'
 import AdminHeader from '../components/AdminHeader'
 import {
   Trophy, Clock, Users, ExternalLink, ChevronDown,
@@ -124,19 +124,28 @@ function ContestCard({ contest, onClick }) {
 
 // ── Results Modal ─────────────────────────────────────────────────────────────
 function ResultsModal({ contest, onClose }) {
-  const [data,    setData]    = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [search,  setSearch]  = useState('')
+  const [data,      setData]      = useState(null)
+  const [loading,   setLoading]   = useState(true)
+  const [search,    setSearch]    = useState('')
+  const [cohorts,   setCohorts]   = useState([])
+  const [cohortId,  setCohortId]  = useState('')   // '' = no filter
   const p = PLAT[contest.platform] || PLAT.leetcode
 
+  // Load cohort list once
+  useEffect(() => {
+    cohortsAPI.list().then(r => setCohorts(r.data.data || [])).catch(() => {})
+  }, [])
+
+  // Reload participants when cohort changes
   useEffect(() => {
     let cancelled = false
+    setLoading(true)
     const cid = contest._contestIds ? contest._contestIds.join(',') : contest.contestId
-    contestsAPI.participants(contest.platform, cid)
+    contestsAPI.participants(contest.platform, cid, cohortId || undefined)
       .then(r => { if (!cancelled) { setData(r.data.data); setLoading(false) } })
       .catch(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [contest.contestId, contest.platform])
+  }, [contest.contestId, contest.platform, cohortId])
 
   const exportCSV = () => {
     if (!data || data.length === 0) return
@@ -194,7 +203,26 @@ function ResultsModal({ contest, onClose }) {
               {data && ` · ${data.length} cohort participant${data.length !== 1 ? 's' : ''}`}
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            {/* Cohort filter */}
+            {cohorts.length > 0 && (
+              <select
+                value={cohortId}
+                onChange={e => { setCohortId(e.target.value); setData(null); }}
+                style={{
+                  padding: '5px 10px', borderRadius: 8, cursor: 'pointer',
+                  border: `1.5px solid ${cohortId ? 'var(--primary)' : 'var(--border)'}`,
+                  background: cohortId ? 'rgba(99,102,241,.08)' : 'var(--surface)',
+                  color: cohortId ? 'var(--primary)' : 'var(--fg-muted)',
+                  fontSize: '0.75rem', fontWeight: 600, outline: 'none',
+                }}
+              >
+                <option value=''>All Students</option>
+                {cohorts.map(c => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.member_count})</option>
+                ))}
+              </select>
+            )}
             {data && data.length > 0 && (
               <button onClick={exportCSV} style={{
                 padding: '6px 13px', borderRadius: 8, cursor: 'pointer',

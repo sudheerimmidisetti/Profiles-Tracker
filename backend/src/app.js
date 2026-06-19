@@ -13,6 +13,7 @@ const analyticsRoutes   = require('./modules/analytics/analytics.routes');
 const adminRoutes       = require('./modules/admin/admin.routes');
 const contestRoutes     = require('./modules/contest/contest.routes');
 const contestsRoutes    = require('./modules/contests/contests.routes');
+const cohortsRoutes     = require('./modules/cohorts/cohorts.routes');
 const errorHandler      = require('./middleware/errorHandler');
 
 const app = express();
@@ -76,6 +77,7 @@ app.use('/api/analytics',   analyticsRoutes);
 app.use('/api/admin',       adminRoutes);
 app.use('/api/contest',     contestRoutes);
 app.use('/api/contests',    contestsRoutes);
+app.use('/api/cohorts',     cohortsRoutes);
 
 // 404 handler
 app.use((req, res) => {

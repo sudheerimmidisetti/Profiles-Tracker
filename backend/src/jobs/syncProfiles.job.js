@@ -695,3 +695,56 @@ function getSyncJobStatus() {
 
 // Export syncStudent so other modules can trigger single-student syncs
 module.exports = { startSyncJob, syncAllStudents, syncStudent, rescheduleJob, getSyncJobStatus };
+
+// ─── Contest Reminder Job (hourly) ────────────────────────────────────────────
+const { fetchContestCalendar, getAllStudentEmails } = require('../modules/contests/contests.service');
+const { sendContestReminderEmail } = require('../utils/mailer');
+
+const REMINDED_KEY_PREFIX = 'reminder:sent:'; // Redis key to avoid duplicate sends
+
+let _reminderTask = null;
+
+async function runContestReminderCheck() {
+  try {
+    const now = Date.now();
+    const contests = await fetchContestCalendar(2); // check next 2 weeks
+    const upcoming = contests.filter(c => c.status === 'upcoming');
+
+    for (const contest of upcoming) {
+      const startMs = new Date(contest.startTime).getTime();
+      const minutesUntilStart = (startMs - now) / 60000;
+
+      // Send if 50–70 minutes away (check runs hourly, give 20-min window)
+      if (minutesUntilStart >= 50 && minutesUntilStart <= 70) {
+        const redisKey = `${REMINDED_KEY_PREFIX}${contest.platform}:${contest.contestId}`;
+        const alreadySent = await redis.exists(redisKey).catch(() => false);
+        if (alreadySent) continue;
+
+        const emails = await getAllStudentEmails();
+        await sendContestReminderEmail(emails, contest);
+
+        // Mark as sent for 2h (TTL) to prevent duplicate sends
+        await redis.set(redisKey, '1', 'EX', 7200).catch(() => {});
+        logger.info(`[ReminderJob] Sent reminder for "${contest.name}" to ${emails.length} students`);
+      }
+    }
+  } catch (err) {
+    logger.error(`[ReminderJob] Error: ${err.message}`);
+  }
+}
+
+function startReminderJob() {
+  if (_reminderTask) return;
+  _reminderTask = cron.schedule('0 * * * *', runContestReminderCheck, { timezone: 'UTC' });
+  logger.info('[ReminderJob] Started — checks every hour for upcoming contests');
+}
+
+// Export updated module
+module.exports = {
+  startSyncJob,
+  syncAllStudents,
+  syncStudent,
+  rescheduleJob,
+  getSyncJobStatus,
+  startReminderJob,
+};

@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, Link } from 'react-router-dom'
 import {
   LayoutDashboard, Trophy, BarChart2, User, Settings,
   Code2, Flame, ChefHat, Award, Layers,
-  ShieldCheck, LogOut, Menu, X, ChevronDown
+  ShieldCheck, LogOut, Menu, X, ChevronDown, CalendarDays, Globe
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
@@ -11,10 +11,11 @@ const NAV = [
   {
     title: 'OVERVIEW',
     items: [
-      { to: '/',            label: 'Dashboard',   icon: LayoutDashboard },
-      { to: '/leaderboard', label: 'Leaderboard', icon: Trophy },
-      { to: '/analytics',   label: 'Analytics',   icon: BarChart2 },
-      { to: '/contests',    label: 'Contests',    icon: Layers },
+      { to: '/',                 label: 'Dashboard',   icon: LayoutDashboard },
+      { to: '/leaderboard',      label: 'Leaderboard', icon: Trophy },
+      { to: '/analytics',        label: 'Analytics',   icon: BarChart2 },
+      { to: '/contests',         label: 'Contests',    icon: Layers },
+      { to: '/contest-calendar', label: 'Calendar',    icon: CalendarDays },
     ],
   },
   {
@@ -101,6 +102,27 @@ export default function Sidebar() {
             </div>
           ))}
         </nav>
+
+        {/* Public share links */}
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
+          <p className="nav-group-title" style={{ marginBottom: 6 }}>PUBLIC LINKS</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <Link to="/public/leaderboard" target="_blank" style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '6px 8px', borderRadius: 8, fontSize: '0.78rem',
+              color: 'var(--fg-muted)', textDecoration: 'none', transition: 'color .12s',
+            }}>
+              <Globe size={13}/> Leaderboard
+            </Link>
+            <Link to="/public/contests" target="_blank" style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '6px 8px', borderRadius: 8, fontSize: '0.78rem',
+              color: 'var(--fg-muted)', textDecoration: 'none', transition: 'color .12s',
+            }}>
+              <Globe size={13}/> Contests
+            </Link>
+          </div>
+        </div>
 
         {/* User */}
         <div className="sidebar-footer">

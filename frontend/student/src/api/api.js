@@ -129,7 +129,12 @@ export const analyticsAPI = {
 // ── Contests ──────────────────────────────────────────
 export const contestsAPI = {
   list:         (platform = 'all', week = 0) => api.get('/api/contests', { params: { platform, week } }),
-  participants: (platform, contestId)        => api.get(`/api/contests/${platform}/${encodeURIComponent(contestId)}/participants`),
+  participants: (platform, contestId, cohort) => api.get(`/api/contests/${platform}/${encodeURIComponent(contestId)}/participants`, { params: cohort ? { cohort } : {} }),
+  // Public (no auth)
+  publicList:         (platform = 'all', week = 0) => api.get('/api/contests/public', { params: { platform, week } }),
+  publicParticipants: (platform, contestId)        => api.get(`/api/contests/public/${platform}/${encodeURIComponent(contestId)}/participants`),
+  // Calendar (no auth)
+  calendar: (weeks = 4) => api.get('/api/contests/calendar', { params: { weeks } }),
 }
 
 
