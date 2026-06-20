@@ -15,12 +15,12 @@ const CC_STAR_BANDS = [
   { min: 1800, label: '4★', color: '#3498db' },
   { min: 1600, label: '3★', color: '#1abc9c' },
   { min: 1400, label: '2★', color: '#2ecc71' },
-  { min:    1, label: '1★', color: '#95a5a6' },
+  { min:    1, label: '1★', color: '#374151' },
 ]
 function ccStarInfo(rating) {
   const r = Number(rating) || 0
   for (const b of CC_STAR_BANDS) if (r >= b.min) return b
-  return { label: 'Unrated', color: '#606060' }
+  return { label: 'Unrated', color: '#374151' }
 }
 
 // ── Codeforces: rating → rank title ──────────────────────────────────────────
@@ -37,10 +37,15 @@ const CF_RANKS = [
   { min:    1, label: 'Newbie',         color: '#808080' },
 ]
 function cfRankInfo(rating, storedRank) {
-  if (storedRank) return { label: storedRank.replace(/\b\w/g, c => c.toUpperCase()), color: '#808080' }
+  // Always derive color from the numeric rating bands (never hardcode grey)
   const r = Number(rating) || 0
-  for (const b of CF_RANKS) if (r >= b.min) return b
-  return { label: 'Unrated', color: '#606060' }
+  for (const b of CF_RANKS) if (r >= b.min) return {
+    label: storedRank
+      ? storedRank.replace(/\b\w/g, c => c.toUpperCase())
+      : b.label,
+    color: b.color
+  }
+  return { label: storedRank || 'Unrated', color: '#374151' }
 }
 
 export default function PlatformCard({ platform, data }) {

@@ -5,9 +5,6 @@ const ctrl = require('./profile.controller');
 
 const router = Router();
 
-// ── Public (no auth) ─────────────────────────────────────────────────────────
-router.get('/public/:rollNumber', ctrl.getPublicProfile); // GET /api/profile/public/:rollNumber
-
 // ── Authenticated ─────────────────────────────────────────────────────────────
 router.use(authenticate);
 router.get('/me',       ctrl.getMe);          // GET  /api/profile/me

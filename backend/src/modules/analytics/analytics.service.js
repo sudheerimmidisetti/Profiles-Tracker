@@ -73,6 +73,29 @@ async function getSummary(email) {
     logger.warn(`[Analytics] leetcode_profiles enrichment skipped for ${email}: ${lcErr.message}`);
   }
 
+  // Enrich Codeforces with current_rank (needed for tier badge in PlatformCard)
+  try {
+    const cfRes = await query(
+      `SELECT current_rank FROM codeforces_profiles WHERE student_email = $1`,
+      [email]
+    );
+    if (cfRes.rows.length && platforms.codeforces) {
+      platforms.codeforces.current_rank = cfRes.rows[0].current_rank;
+    }
+  } catch (_) {}
+
+  // Enrich HackerRank with badges + total_points (needed for badge chips)
+  try {
+    const hrRes = await query(
+      `SELECT badges, total_points FROM hackerrank_profiles WHERE student_email = $1`,
+      [email]
+    );
+    if (hrRes.rows.length && platforms.hackerrank) {
+      platforms.hackerrank.badges       = hrRes.rows[0].badges;
+      platforms.hackerrank.total_points = hrRes.rows[0].total_points;
+    }
+  } catch (_) {}
+
   return { student: studentRes.rows[0], platforms, aggregate: { totalSolved } };
 }
 
