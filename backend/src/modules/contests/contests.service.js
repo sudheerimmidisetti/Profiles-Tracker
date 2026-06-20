@@ -73,27 +73,44 @@ async function fetchUpcomingCodeforces(start, end) {
 }
 
 async function fetchUpcomingCodechef(start, end) {
+  // Try multiple CodeChef endpoints — the /future endpoint sometimes returns empty
+  const CC_HEADERS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', timeout: 10000 };
+  let raw = [];
+
+  // Endpoint 1: official future contests
   try {
-    const r = await axios.get(
-      'https://www.codechef.com/api/list/contests/future',
-      { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 8000 }
-    );
-    return (r.data?.future_contests || [])
-      .filter(c => {
-        const st = new Date(c.contest_start_date_iso || c.contest_start_date).getTime();
-        return st >= start.getTime() && st <= end.getTime();
-      })
-      .map(c => ({
-        platform:    'codechef',
-        contestId:   c.contest_code,
-        name:        c.contest_name,
-        startTime:   c.contest_start_date_iso || c.contest_start_date,
-        durationMin: null,
-        url:         `https://www.codechef.com/${c.contest_code}`,
-        status:      'upcoming',
-        participants: 0,
-      }));
-  } catch { return []; }
+    const r = await axios.get('https://www.codechef.com/api/list/contests/future', { headers: CC_HEADERS });
+    const list = r.data?.future_contests || [];
+    if (list.length) raw = list;
+  } catch (_) {}
+
+  // Endpoint 2: broader contests API with category=future (different key structure)
+  if (!raw.length) {
+    try {
+      const r = await axios.get('https://www.codechef.com/api/list/contests/all?sort_by=START&sorting_order=asc&offset=0&mode=all', { headers: CC_HEADERS });
+      const all = [
+        ...(r.data?.future_contests || []),
+        ...(r.data?.present_contests || []),
+      ];
+      if (all.length) raw = all;
+    } catch (_) {}
+  }
+
+  return raw
+    .filter(c => {
+      const st = new Date(c.contest_start_date_iso || c.contest_start_date).getTime();
+      return !isNaN(st) && st >= start.getTime() && st <= end.getTime();
+    })
+    .map(c => ({
+      platform:    'codechef',
+      contestId:   c.contest_code,
+      name:        c.contest_name,
+      startTime:   c.contest_start_date_iso || c.contest_start_date,
+      durationMin: c.contest_duration ? Math.round(Number(c.contest_duration)) : null,
+      url:         `https://www.codechef.com/${c.contest_code}`,
+      status:      'upcoming',
+      participants: 0,
+    }));
 }
 
 // ─── Past contests from DB ────────────────────────────────────────────────────
@@ -468,8 +485,9 @@ async function fetchContestCalendar(weeks = 4) {
       const st = c.startTimeSeconds * 1000;
       if (st < start.getTime() || st > end.getTime()) continue;
       if (c.phase !== 'BEFORE' && c.phase !== 'CODING') continue;
+      // Use FULL name in calendar (not stripped) so "Codeforces Round 987 (Div. 2)" shows correctly
       contests.push({
-        platform: 'codeforces', contestId: String(c.id), name: baseContestName(c.name),
+        platform: 'codeforces', contestId: String(c.id), name: c.name,
         startTime: new Date(st).toISOString(), durationMin: Math.round(c.durationSeconds / 60),
         url: `https://codeforces.com/contest/${c.id}`,
         status: st > nowMs ? 'upcoming' : 'ongoing',
@@ -478,12 +496,18 @@ async function fetchContestCalendar(weeks = 4) {
   }
 
   if (ccRaw.status === 'fulfilled') {
-    for (const c of ccRaw.value.data?.future_contests || []) {
+    // CodeChef may return contests under future_contests or present_contests
+    const ccContests = [
+      ...(ccRaw.value.data?.future_contests || []),
+      ...(ccRaw.value.data?.present_contests || []),
+    ];
+    for (const c of ccContests) {
       const st = new Date(c.contest_start_date_iso || c.contest_start_date).getTime();
       if (isNaN(st) || st < start.getTime() || st > end.getTime()) continue;
       contests.push({
         platform: 'codechef', contestId: c.contest_code, name: c.contest_name,
-        startTime: new Date(st).toISOString(), durationMin: null,
+        startTime: new Date(st).toISOString(),
+        durationMin: c.contest_duration ? Math.round(Number(c.contest_duration)) : null,
         url: `https://www.codechef.com/${c.contest_code}`,
         status: st > nowMs ? 'upcoming' : 'ongoing',
       });
