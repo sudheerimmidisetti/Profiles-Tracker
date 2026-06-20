@@ -73,11 +73,9 @@ module.exports = { getMyProfile, updateSettings, getPublicProfile };
  * Returns student info + aggregated platform stats (no email/phone)
  */
 async function getPublicProfile(rollNumber) {
-  const { query } = require('../../config/db');
-
-  // Student row
+  // Student row — include is_verified for verified badge display
   const sRes = await query(
-    `SELECT full_name, roll_number, college, branch, passout_year
+    `SELECT full_name, roll_number, college, branch, passout_year, is_verified
      FROM students WHERE UPPER(roll_number) = UPPER($1) AND is_blocklisted = FALSE`,
     [rollNumber]
   );
@@ -94,8 +92,7 @@ async function getPublicProfile(rollNumber) {
             pp.username,
             pp.current_rating,
             pp.global_rank,
-            pp.total_solved,
-            pp.is_verified
+            pp.total_solved
      FROM platform_profiles pp
      JOIN students s ON s.email = pp.student_email
      WHERE UPPER(s.roll_number) = UPPER($1)`,
@@ -106,14 +103,15 @@ async function getPublicProfile(rollNumber) {
   let totalSolved = 0;
   for (const p of ppRes.rows) {
     platforms[p.platform_name] = {
-      username:      p.username,
+      username:       p.username,
       current_rating: p.current_rating ? Math.round(Number(p.current_rating)) : null,
-      global_rank:   p.global_rank,
-      total_solved:  p.total_solved ? Number(p.total_solved) : 0,
-      is_verified:   p.is_verified,
+      global_rank:    p.global_rank,
+      total_solved:   p.total_solved ? Number(p.total_solved) : 0,
+      is_verified:    student.is_verified, // inherit from student-level verification
     };
     totalSolved += Number(p.total_solved) || 0;
   }
 
   return { student, platforms, totalSolved };
 }
+
