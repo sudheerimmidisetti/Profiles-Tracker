@@ -6,7 +6,8 @@ import Header          from '../components/Header'
 import KPICards        from '../components/KPICards'
 import PlatformCard    from '../components/PlatformCard'
 import ActivityHeatmap from '../components/ActivityHeatmap'
-import { Share2, ExternalLink } from 'lucide-react'
+import { Share2, ExternalLink, ShieldCheck } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 // ── Branch / College expansion maps ───────────────────────────────────────────
 const BRANCH_MAP = {
