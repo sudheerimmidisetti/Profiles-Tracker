@@ -12,6 +12,16 @@ async function getMe(req, res, next) {
   }
 }
 
+// GET /api/profile/public/:rollNumber
+async function getPublicProfile(req, res, next) {
+  try {
+    const data = await profileService.getPublicProfile(req.params.rollNumber);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // PUT /api/profile/settings
 async function updateSettings(req, res, next) {
   try {
@@ -24,4 +34,5 @@ async function updateSettings(req, res, next) {
   }
 }
 
-module.exports = { getMe, updateSettings };
+module.exports = { getMe, updateSettings, getPublicProfile };
+

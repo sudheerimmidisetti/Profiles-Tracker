@@ -5,9 +5,11 @@ const ctrl = require('./profile.controller');
 
 const router = Router();
 
-// All profile routes require authentication
-router.use(authenticate);
+// ── Public (no auth) ─────────────────────────────────────────────────────────
+router.get('/public/:rollNumber', ctrl.getPublicProfile); // GET /api/profile/public/:rollNumber
 
+// ── Authenticated ─────────────────────────────────────────────────────────────
+router.use(authenticate);
 router.get('/me',       ctrl.getMe);          // GET  /api/profile/me
 router.put('/settings', ctrl.updateSettings); // PUT  /api/profile/settings
 

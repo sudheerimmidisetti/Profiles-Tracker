@@ -3,6 +3,8 @@ import axios from 'axios'
 const BASE = import.meta.env.VITE_API_URL || ''
 
 const api = axios.create({ baseURL: BASE, timeout: 12000 })
+// Public (no-auth) API instance
+const publicApi = axios.create({ baseURL: BASE, timeout: 12000 })
 
 // ── Auth helpers ──────────────────────────────────────
 export const getTokens = () => ({
@@ -79,8 +81,9 @@ export const authAPI = {
 
 // ── Profile ───────────────────────────────────────────
 export const profileAPI = {
-  getMe:   ()      => api.get('/api/profile/me'),
-  update:  (data)  => api.put('/api/profile/settings', data),
+  getMe:      ()           => api.get('/api/profile/me'),
+  update:     (data)       => api.put('/api/profile/settings', data),
+  getPublic:  (rollNumber) => publicApi.get(`/api/profile/public/${rollNumber}`),
 }
 
 // ── Handlers ─────────────────────────────────────────

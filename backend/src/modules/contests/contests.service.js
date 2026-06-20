@@ -73,26 +73,31 @@ async function fetchUpcomingCodeforces(start, end) {
 }
 
 async function fetchUpcomingCodechef(start, end) {
-  // Try multiple CodeChef endpoints — the /future endpoint sometimes returns empty
-  const CC_HEADERS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', timeout: 10000 };
+  const CC_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    timeout: 10000,
+  };
   let raw = [];
 
-  // Endpoint 1: official future contests
+  // Primary: /all endpoint (confirmed working on server)
   try {
-    const r = await axios.get('https://www.codechef.com/api/list/contests/future', { headers: CC_HEADERS });
-    const list = r.data?.future_contests || [];
+    const r = await axios.get(
+      'https://www.codechef.com/api/list/contests/all?sort_by=START&sorting_order=asc&offset=0&mode=all',
+      { headers: CC_HEADERS }
+    );
+    const list = [
+      ...(r.data?.future_contests  || []),
+      ...(r.data?.present_contests || []),
+    ];
     if (list.length) raw = list;
   } catch (_) {}
 
-  // Endpoint 2: broader contests API with category=future (different key structure)
+  // Fallback: /future (sometimes works)
   if (!raw.length) {
     try {
-      const r = await axios.get('https://www.codechef.com/api/list/contests/all?sort_by=START&sorting_order=asc&offset=0&mode=all', { headers: CC_HEADERS });
-      const all = [
-        ...(r.data?.future_contests || []),
-        ...(r.data?.present_contests || []),
-      ];
-      if (all.length) raw = all;
+      const r = await axios.get('https://www.codechef.com/api/list/contests/future', { headers: CC_HEADERS });
+      const list = [...(r.data?.future_contests || []), ...(r.data?.present_contests || [])];
+      if (list.length) raw = list;
     } catch (_) {}
   }
 
@@ -112,6 +117,7 @@ async function fetchUpcomingCodechef(start, end) {
       participants: 0,
     }));
 }
+
 
 // ─── Past contests from DB ────────────────────────────────────────────────────
 
@@ -457,8 +463,9 @@ async function fetchContestCalendar(weeks = 4) {
       { headers: { 'Content-Type': 'application/json', Origin: 'https://leetcode.com' }, timeout: 8000 }
     ),
     axios.get('https://codeforces.com/api/contest.list?gym=false', { timeout: 8000 }),
-    axios.get('https://www.codechef.com/api/list/contests/future',
-      { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 8000 }
+    // Use /all endpoint — /future returns 0 results due to server-side filtering bug
+    axios.get('https://www.codechef.com/api/list/contests/all?sort_by=START&sorting_order=asc&offset=0&mode=all',
+      { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }, timeout: 10000 }
     ),
   ]);
 

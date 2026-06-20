@@ -12,6 +12,7 @@ import ContestPage                from './pages/ContestPage'
 import ContestCalendarPage        from './pages/ContestCalendarPage'
 import PublicLeaderboardPage      from './pages/PublicLeaderboardPage'
 import PublicContestPage          from './pages/PublicContestPage'
+import PublicProfilePage          from './pages/PublicProfilePage'
 
 export default function App() {
   return (
@@ -22,8 +23,9 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
 
           {/* Public — no auth needed, shareable links */}
-          <Route path="/public/leaderboard" element={<PublicLeaderboardPage />} />
-          <Route path="/public/contests"    element={<PublicContestPage />} />
+          <Route path="/public/leaderboard"        element={<PublicLeaderboardPage />} />
+          <Route path="/public/contests"           element={<PublicContestPage />} />
+          <Route path="/public/profile/:rollNumber" element={<PublicProfilePage />} />
 
           {/* Protected — all wrapped in AppLayout */}
           <Route element={<AppLayout />}>
