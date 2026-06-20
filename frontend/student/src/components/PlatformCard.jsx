@@ -76,13 +76,13 @@ export default function PlatformCard({ platform, data }) {
     const rank = cfRankInfo(data.current_rating, data.current_rank)
     chips = [
       { label: 'Solved', value: data.total_solved ?? '—' },
-      { label: rank.label, value: null, color: rank.color, isBadge: true },
+      { label: 'Title',  value: rank.label, color: rank.color },
     ]
   } else if (platform === 'codechef') {
     const star = ccStarInfo(data.current_rating)
     chips = [
       { label: 'Solved', value: data.total_solved ?? '—' },
-      { label: star.label, value: null, color: star.color, isBadge: true },
+      { label: 'Stars',  value: star.label, color: star.color },
     ]
   } else {
     // HackerRank — show badges count + total stars
@@ -147,14 +147,8 @@ export default function PlatformCard({ platform, data }) {
       <div className="platform-stats">
         {chips.map((c, i) => (
           <div key={i} className="pstat">
-            {c.isBadge ? (
-              <div className="pstat-val" style={{ color: c.color, fontSize: '0.95rem' }}>{c.label}</div>
-            ) : (
-              <>
-                <div className="pstat-val" style={c.color ? { color: c.color } : {}}>{c.value}</div>
-                <div className="pstat-label">{c.label}</div>
-              </>
-            )}
+            <div className="pstat-val" style={c.color ? { color: c.color } : {}}>{c.value}</div>
+            <div className="pstat-label">{c.label}</div>
           </div>
         ))}
       </div>
